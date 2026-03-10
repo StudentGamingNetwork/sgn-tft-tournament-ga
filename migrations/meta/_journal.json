@@ -8,6 +8,27 @@
       "when": 1771175641332,
       "tag": "0000_daffy_owl",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1771250307135,
+      "tag": "0001_minor_wilson_fisk",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1771408236441,
+      "tag": "0002_massive_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771514625922,
+      "tag": "0003_free_bishop",
+      "breakpoints": true
     }
   ]
 }

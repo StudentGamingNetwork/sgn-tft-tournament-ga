@@ -1,0 +1,149 @@
+# Script de Simulation de Tournoi TFT
+
+Ce script permet de simuler un tournoi TFT complet de manière interactive, étape par étape, afin de visualiser l'évolution sur l'interface.
+
+## Installation
+
+Avant la première utilisation, installez `tsx` :
+
+```bash
+pnpm add -D tsx
+```
+
+## Utilisation
+
+Lancez le script avec la commande :
+
+```bash
+pnpm run simulate
+```
+
+## Workflow de simulation
+
+Le script vous guide à travers les différentes étapes d'un tournoi :
+
+### 1️⃣ Créer un nouveau tournoi
+
+- Crée un tournoi avec ses 5 phases
+- Configure automatiquement les brackets (common, master, amateur, challenger)
+
+### 2️⃣ Générer et ajouter 128 joueurs
+
+- Génère 128 joueurs fictifs avec des rangs aléatoires
+- Les inscrit automatiquement au tournoi
+
+### 3️⃣ Démarrer la Phase 1
+
+- Répartit les 128 joueurs dans des lobbies de 8
+- Crée le premier jeu pour chaque lobby
+- Utilise la matrice de seeding de Phase 1
+
+### 4️⃣ Soumettre les résultats d'un jeu
+
+- Permet de saisir manuellement les placements (1-8) pour chaque joueur
+- Ou appuyez sur Entrée pour générer des résultats aléatoires
+
+### 5️⃣ Voir le leaderboard actuel
+
+- Affiche le classement des joueurs de la phase en cours
+- Montre les points cumulés et le nombre de jeux joués
+
+### 6️⃣ Passer à la phase suivante
+
+- Vérifie que tous les jeux sont terminés
+- Applique les règles de qualification :
+  - **Phase 2** : Les 96 derniers de la Phase 1
+  - **Phase 3** : Split Master/Amateur basé sur le cumulatif Phase 1+2
+    - Master : Top 32 de P1 + Top 32 de P2
+    - Amateur : Rangs 33-64 de P2
+  - **Phase 4** : Basé sur les résultats de Phase 3
+  - **Phase 5** : Finales (Challenger, Master, Amateur)
+
+### 7️⃣ Voir tous les jeux de la phase
+
+- Liste tous les jeux avec leur statut
+- Indique lesquels ont des résultats
+
+### 8️⃣ Soumettre tous les résultats d'un jeu (aléatoire)
+
+- Trouve le prochain jeu sans résultats
+- Génère automatiquement des placements aléatoires
+- Parfait pour accélérer la simulation
+
+### 9️⃣ Terminer tous les jeux de la phase (automatique)
+
+- Complète automatiquement tous les jeux restants avec des résultats aléatoires
+- Très utile pour passer rapidement à la phase suivante
+
+### 0️⃣ Informations sur le tournoi
+
+- Affiche un récapitulatif complet : phases, brackets, jeux terminés, joueurs inscrits
+
+## Structure du tournoi
+
+Le tournoi suit la structure officielle :
+
+- **Phase 1** : 128 joueurs, 1 bracket (common), 6 jeux
+- **Phase 2** : 96 joueurs (96 derniers de P1), 1 bracket (common), 6 jeux
+- **Phase 3** : 128 joueurs, 2 brackets, 6 jeux, **RESET des points**
+  - Master : 64 joueurs (32 meilleurs P1 + 32 meilleurs P2)
+  - Amateur : 64 joueurs (rangs 33-96 P2)
+- **Phase 4** : 96 joueurs, 2 brackets, 6 jeux
+  - Master : 32 joueurs (Top 32 P3 Master)
+  - Amateur : 64 joueurs (Top 32 P3 Amateur + rangs 33-64 P3 Master) **RESET**
+- **Phase 5** : 24 joueurs, 3 brackets, 6 jeux
+  - Challenger : 8 joueurs (Top 8 P4 Master)
+  - Master : 8 joueurs (rangs 9-16 P4 Master)
+  - Amateur : 8 joueurs (Top 8 P4 Amateur)
+
+## Conseils d'utilisation
+
+### Pour tester rapidement
+
+1. Créez le tournoi (option 1)
+2. Générez les joueurs (option 2)
+3. Démarrez la Phase 1 (option 3)
+4. Complétez automatiquement la phase (option 9)
+5. Vérifiez le leaderboard (option 5)
+6. Passez à la phase suivante (option 6)
+7. Répétez pour les phases suivantes
+
+### Pour tester de manière détaillée
+
+- Utilisez l'option 4 ou 8 pour soumettre les résultats jeu par jeu
+- Consultez régulièrement le leaderboard (option 5)
+- Vérifiez les jeux en cours (option 7)
+
+### Pendant la simulation
+
+- Gardez l'application web ouverte sur `http://localhost:3000/admin`
+- Actualisez la page après chaque action pour voir les changements
+- Naviguez dans les différentes phases pour voir l'évolution
+
+## Notes techniques
+
+- Le script utilise `readline` pour l'interaction en ligne de commande
+- Les couleurs dans le terminal facilitent la lecture
+- Appuyez sur `Ctrl+C` pour quitter à tout moment
+- La base de données est modifiée en temps réel
+- Toutes les actions sont persistées immédiatement
+
+## Dépannage
+
+### Erreur "Game not found"
+
+- Assurez-vous d'avoir démarré la phase avant de soumettre des résultats
+
+### Erreur "Players not assigned"
+
+- Vérifiez que les joueurs ont bien été générés et inscrits
+
+### Impossible de passer à la phase suivante
+
+- Tous les jeux de la phase actuelle doivent avoir des résultats
+- Utilisez l'option 9 pour terminer automatiquement tous les jeux
+
+### Erreur de connexion à la base de données
+
+- Vérifiez que votre `DATABASE_URL` est correctement configurée dans `.env`
+- Assurez-vous que les migrations sont à jour : `pnpm run db:migrate`

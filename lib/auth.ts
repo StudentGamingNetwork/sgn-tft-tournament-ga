@@ -16,6 +16,8 @@ export const auth = betterAuth({
                     clientId: env.KEYCLOAK_CLIENT_ID,
                     clientSecret: env.KEYCLOAK_CLIENT_SECRET,
                     issuer: env.KEYCLOAK_ISSUER_URL,
+                    redirectURI: "http://localhost:3000/api/auth/callback/keycloak",
+                    pkce: true,
                 }),
             ]
 

@@ -97,6 +97,19 @@ export const accountRelations = relations(account, ({ one }) => ({
 
 export const statusEnum = pgEnum("status", ["upcoming", "ongoing", "completed"]);
 export const bracketEnum = pgEnum("bracket_type", ["common", "amateur", "master", "challenger"]);
+export const tierEnum = pgEnum("tier", [
+    "CHALLENGER",
+    "GRANDMASTER",
+    "MASTER",
+    "DIAMOND",
+    "EMERALD",
+    "PLATINUM",
+    "GOLD",
+    "SILVER",
+    "BRONZE",
+    "IRON",
+    "UNRANKED"
+]);
 
 export const tournament = pgTable("tournament", {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -127,6 +140,9 @@ export const player = pgTable("player", {
     name: text("name").notNull(),
     riot_id: text("riot_id").notNull().unique(),
     discord_tag: text("discord_tag"),
+    tier: tierEnum("tier"),
+    division: text("division"), // "I", "II", "III", "IV" - null for Challenger/Grandmaster
+    league_points: integer("league_points"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
         .defaultNow()
@@ -188,7 +204,7 @@ export const lobbyPlayer = pgTable("lobby_player", {
         .defaultNow()
         .$onUpdate(() => /* @__PURE__ */ new Date())
         .notNull(),
-}, (table) => [unique("unique_game_player").on(table.game_id, table.player_id)]);
+}, (table) => [unique("unique_game_player_lobby").on(table.game_id, table.player_id)]);
 
 export const results = pgTable("results", {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -197,9 +213,135 @@ export const results = pgTable("results", {
     player_id: uuid("player_id")
         .references(() => player.id, { onDelete: "cascade" }),
     placement: integer("placement").notNull(),
+    points: integer("points").notNull(), // Calculated based on placement
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
         .defaultNow()
         .$onUpdate(() => /* @__PURE__ */ new Date())
         .notNull(),
-}, (table) => [check("placement_valid", sql`${table.placement} >= 1 AND ${table.placement} <= 8`), unique("unique_game_player").on(table.game_id, table.player_id)]);
+}, (table) => [check("placement_valid", sql`${table.placement} >= 1 AND ${table.placement} <= 8`), unique("unique_game_player_result").on(table.game_id, table.player_id)]);
+
+export const lobbyRotationMatrix = pgTable("lobby_rotation_matrix", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    phase_id: uuid("phase_id")
+        .references(() => phase.id, { onDelete: "cascade" }),
+    game_number: integer("game_number").notNull(),
+    lobby_index: integer("lobby_index").notNull(), // 0-based lobby index (0 = Lobby A, 1 = Lobby B, etc.)
+    seed_assignments: text("seed_assignments").notNull(), // JSON array of seed numbers for this lobby
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+        .defaultNow()
+        .$onUpdate(() => /* @__PURE__ */ new Date())
+        .notNull(),
+}, (table) => [unique("unique_phase_game_lobby").on(table.phase_id, table.game_number, table.lobby_index)]);
+
+export const registrationStatusEnum = pgEnum("registration_status", ["registered", "confirmed", "cancelled"]);
+
+export const tournamentRegistration = pgTable("tournament_registration", {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tournament_id: uuid("tournament_id")
+        .references(() => tournament.id, { onDelete: "cascade" })
+        .notNull(),
+    player_id: uuid("player_id")
+        .references(() => player.id, { onDelete: "cascade" })
+        .notNull(),
+    status: registrationStatusEnum("status").notNull().default("registered"),
+    registered_at: timestamp("registered_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+        .defaultNow()
+        .$onUpdate(() => /* @__PURE__ */ new Date())
+        .notNull(),
+}, (table) => [unique("unique_tournament_player").on(table.tournament_id, table.player_id)]);
+
+
+export const tournamentRelations = relations(tournament, ({ many }) => ({
+    phases: many(phase),
+    registrations: many(tournamentRegistration),
+}));
+
+
+export const phaseRelations = relations(phase, ({ one, many }) => ({
+    tournament: one(tournament, {
+        fields: [phase.tournament_id],
+        references: [tournament.id],
+    }),
+    brackets: many(bracket),
+    games: many(game),
+    rotationMatrices: many(lobbyRotationMatrix),
+}));
+
+export const bracketRelations = relations(bracket, ({ one, many }) => ({
+    phase: one(phase, {
+        fields: [bracket.phase_id],
+        references: [phase.id],
+    }),
+    games: many(game),
+}));
+
+export const gameRelations = relations(game, ({ one, many }) => ({
+    phase: one(phase, {
+        fields: [game.phase_id],
+        references: [phase.id],
+    }),
+    bracket: one(bracket, {
+        fields: [game.bracket_id],
+        references: [bracket.id],
+    }),
+    lobbyPlayers: many(lobbyPlayer),
+    results: many(results),
+}));
+
+export const playerRelations = relations(player, ({ one, many }) => ({
+    team: one(team, {
+        fields: [player.team_id],
+        references: [team.id],
+    }),
+    lobbyPlayers: many(lobbyPlayer),
+    results: many(results),
+    tournamentRegistrations: many(tournamentRegistration),
+}));
+
+export const teamRelations = relations(team, ({ many }) => ({
+    players: many(player),
+}));
+
+export const resultsRelations = relations(results, ({ one }) => ({
+    game: one(game, {
+        fields: [results.game_id],
+        references: [game.id],
+    }),
+    player: one(player, {
+        fields: [results.player_id],
+        references: [player.id],
+    }),
+}));
+
+export const lobbyPlayerRelations = relations(lobbyPlayer, ({ one }) => ({
+    game: one(game, {
+        fields: [lobbyPlayer.game_id],
+        references: [game.id],
+    }),
+    player: one(player, {
+        fields: [lobbyPlayer.player_id],
+        references: [player.id],
+    }),
+}));
+
+export const lobbyRotationMatrixRelations = relations(lobbyRotationMatrix, ({ one }) => ({
+    phase: one(phase, {
+        fields: [lobbyRotationMatrix.phase_id],
+        references: [phase.id],
+    }),
+}));
+
+export const tournamentRegistrationRelations = relations(tournamentRegistration, ({ one }) => ({
+    tournament: one(tournament, {
+        fields: [tournamentRegistration.tournament_id],
+        references: [tournament.id],
+    }),
+    player: one(player, {
+        fields: [tournamentRegistration.player_id],
+        references: [player.id],
+    }),
+}));
