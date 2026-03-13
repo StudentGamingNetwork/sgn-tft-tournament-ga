@@ -14,7 +14,7 @@ import {
     TrendingUp,
     Play,
 } from "lucide-react";
-import { getPhaseDetails, startPhase1Action, getTournamentPlayers, type PhaseDetails } from "@/app/actions/tournaments";
+import { getPhaseDetails, startPhase1Action, getTournamentPlayers, getTournamentPhases, type PhaseDetails, startPhase2Action, startPhase3Action, startPhase4Action, startPhase5Action } from "@/app/actions/tournaments";
 import { OverviewTab } from "./OverviewTab";
 import { GamesTab } from "./GamesTab";
 
@@ -77,11 +77,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
     const handleStartPhase = async () => {
         if (!phaseDetails) return;
 
-        // Vérifier que c'est la Phase 1
-        if (phaseDetails.phase.order_index !== 1) {
-            alert("Seule la Phase 1 peut être démarrée via ce bouton. Les autres phases nécessitent les résultats des phases précédentes.");
-            return;
-        }
+        const orderIndex = phaseDetails.phase.order_index;
 
         // Vérifier qu'il n'y a pas déjà de games
         if (phaseDetails.games.length > 0) {
@@ -89,33 +85,165 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
             return;
         }
 
-        // Demander confirmation
-        const confirmedPlayers = await getTournamentPlayers(tournamentId);
-        const confirmedCount = confirmedPlayers.filter(p => p.registration.status === "confirmed").length;
-
-        if (confirmedCount === 0) {
-            alert("Aucun joueur confirmé. Veuillez confirmer les joueurs dans l'onglet Joueurs avant de démarrer la phase.");
-            return;
-        }
-
-        const lobbyCount = Math.floor(confirmedCount / 8);
-        const message = `Démarrer la Phase 1 avec ${confirmedCount} joueurs confirmés ?\n\n` +
-            `Cela créera ${lobbyCount} lobby(s) de 8 joueurs pour le Game 1.\n` +
-            `Les joueurs seront automatiquement répartis selon leur classement.`;
-
-        if (!confirm(message)) {
-            return;
-        }
-
         setIsStartingPhase(true);
         try {
-            const result = await startPhase1Action(phaseId, tournamentId);
-            if (result.success) {
-                alert(`Phase 1 démarrée avec succès ! ${result.lobbyCount} lobby(s) créé(s).`);
+            let result: { success: boolean; error?: string; [key: string]: any };
+
+            if (orderIndex === 1) {
+                // Phase 1
+                const confirmedPlayers = await getTournamentPlayers(tournamentId);
+                const confirmedCount = confirmedPlayers.filter(p => p.registration.status === "confirmed").length;
+
+                if (confirmedCount === 0) {
+                    alert("Aucun joueur confirmé. Veuillez confirmer les joueurs dans l'onglet Joueurs avant de démarrer la phase.");
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                const lobbyCount = Math.floor(confirmedCount / 8);
+                const message = `Démarrer la Phase 1 avec ${confirmedCount} joueurs confirmés ?\n\n` +
+                    `Cela créera ${lobbyCount} lobby(s) de 8 joueurs pour le Game 1.\n` +
+                    `Les joueurs seront automatiquement répartis selon leur classement.`;
+
+                if (!confirm(message)) {
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                result = await startPhase1Action(phaseId, tournamentId);
+                if (result.success) {
+                    alert(`Phase 1 démarrée avec succès ! ${result.lobbyCount} lobby(s) créé(s).`);
+                }
+            } else if (orderIndex === 2) {
+                // Phase 2 - Nécessite la Phase 1
+                const phases = await getTournamentPhases(tournamentId);
+                const phase1 = phases.find((p: any) => p.order_index === 1);
+                
+                if (!phase1) {
+                    alert("Phase 1 introuvable !");
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                const message = `Démarrer la Phase 2 ?\n\n` +
+                    `Les 96 derniers joueurs de la Phase 1 continueront.\n` +
+                    `Les 32 premiers seront qualifiés directement pour le bracket Master de la Phase 3.`;
+
+                if (!confirm(message)) {
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                result = await startPhase2Action(phase1.id, phaseId);
+                if (result.success && result.stats) {
+                    alert(`Phase 2 démarrée avec succès !\n\n` +
+                        `✅ ${result.stats.qualifiedCount} joueurs continueront en Phase 2\n` +
+                        `🎯 ${result.stats.eliminatedCount} joueurs qualifiés pour P3 Master\n` +
+                        `🎮 ${result.stats.lobbyCount} lobbies créés`);
+                }
+            } else if (orderIndex === 3) {
+                // Phase 3 - Nécessite Phases 1 et 2
+                const phases = await getTournamentPhases(tournamentId);
+                const phase1 = phases.find((p: any) => p.order_index === 1);
+                const phase2 = phases.find((p: any) => p.order_index === 2);
+                
+                if (!phase1 || !phase2) {
+                    alert("Phases 1 ou 2 introuvables !");
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                const message = `Démarrer la Phase 3 ?\n\n` +
+                    `RESET des points - Nouveau départ pour tous !\n\n` +
+                    `🏅 Bracket MASTER (64 joueurs):\n` +
+                    `   - Top 32 de la Phase 1\n` +
+                    `   - Top 32 de la Phase 2\n\n` +
+                    `🥈 Bracket AMATEUR (64 joueurs):\n` +
+                    `   - 64 derniers de la Phase 2`;
+
+                if (!confirm(message)) {
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                result = await startPhase3Action(phase1.id, phase2.id, phaseId);
+                if (result.success && result.stats) {
+                    alert(`Phase 3 démarrée avec succès !\n\n` +
+                        `🏅 Bracket Master: ${result.stats.masterCount} joueurs\n` +
+                        `🥈 Bracket Amateur: ${result.stats.amateurCount} joueurs\n\n` +
+                        `Les points ont été réinitialisés !`);
+                }
+            } else if (orderIndex === 4) {
+                // Phase 4 - Nécessite Phase 3
+                const phases = await getTournamentPhases(tournamentId);
+                const phase3 = phases.find((p: any) => p.order_index === 3);
+                
+                if (!phase3) {
+                    alert("Phase 3 introuvable !");
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                const message = `Démarrer la Phase 4 ?\n\n` +
+                    `🏅 Bracket MASTER (32 joueurs):\n` +
+                    `   - Top 32 du bracket Master P3\n\n` +
+                    `🥈 Bracket AMATEUR (64 joueurs - RESET):\n` +
+                    `   - Top 32 du bracket Amateur P3\n` +
+                    `   - Rangs 33-64 du bracket Master P3 (relégués)`;
+
+                if (!confirm(message)) {
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                result = await startPhase4Action(phase3.id, phaseId);
+                if (result.success && result.stats) {
+                    alert(`Phase 4 démarrée avec succès !\n\n` +
+                        `🏅 Bracket Master: ${result.stats.masterCount} joueurs\n` +
+                        `🥈 Bracket Amateur: ${result.stats.amateurCount} joueurs (points réinitialisés)`);
+                }
+            } else if (orderIndex === 5) {
+                // Phase 5 - Finales - Nécessite Phase 4
+                const phases = await getTournamentPhases(tournamentId);
+                const phase4 = phases.find((p: any) => p.order_index === 4);
+                
+                if (!phase4) {
+                    alert("Phase 4 introuvable !");
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                const message = `Démarrer la Phase 5 - FINALES ?\n\n` +
+                    `🏆 Bracket CHALLENGER (8 joueurs):\n` +
+                    `   - Top 8 du bracket Master P4\n\n` +
+                    `🏅 Bracket MASTER (8 joueurs):\n` +
+                    `   - Rangs 9-16 du bracket Master P4\n\n` +
+                    `🥈 Bracket AMATEUR (8 joueurs):\n` +
+                    `   - Top 8 du bracket Amateur P4`;
+
+                if (!confirm(message)) {
+                    setIsStartingPhase(false);
+                    return;
+                }
+
+                result = await startPhase5Action(phase4.id, phaseId);
+                if (result.success && result.stats) {
+                    alert(`Phase 5 - FINALES démarrée avec succès !\n\n` +
+                        `🏆 Challenger: ${result.stats.challengerCount} joueurs\n` +
+                        `🏅 Master: ${result.stats.masterCount} joueurs\n` +
+                        `🥈 Amateur: ${result.stats.amateurCount} joueurs`);
+                }
+            } else {
+                alert("Phase non prise en charge.");
+                setIsStartingPhase(false);
+                return;
+            }
+
+            if (!result.success) {
+                alert(`Erreur : ${result.error}`);
+            } else {
                 // Recharger les détails de la phase
                 await loadPhaseDetails();
-            } else {
-                alert(`Erreur : ${result.error}`);
             }
         } catch (error) {
             console.error("Error starting phase:", error);
@@ -153,17 +281,16 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                         </div>
                     </div>
                 </div>
-                {/* Bouton démarrer la phase (Phase 1 uniquement) */}
-                {phase.order_index === 1 && games.length === 0 && (
+                {/* Bouton démarrer la phase */}
+                {games.length === 0 && (
                     <Button
                         color="primary"
                         size="lg"
                         startContent={<Play size={20} />}
                         onPress={handleStartPhase}
                         isLoading={isStartingPhase}
-                        className="font-semibold"
                     >
-                        {isStartingPhase ? "Démarrage..." : "Démarrer la Phase 1"}
+                        Démarrer {phase.name}
                     </Button>
                 )}
             </div>
@@ -259,7 +386,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
 
             {/* Tab Content */}
             <div className="flex flex-col gap-4">
-                {selectedTab === "overview" && <OverviewTab participants={participants} />}
+                {selectedTab === "overview" && <OverviewTab participants={participants} games={games} phaseOrderIndex={phase.order_index} />}
                 {selectedTab === "games" && <GamesTab games={games} onResultsSubmitted={loadPhaseDetails} />}
             </div>
         </div>

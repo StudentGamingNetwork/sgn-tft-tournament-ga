@@ -12,7 +12,11 @@ import * as readline from "readline";
 import { createDbConnection } from "@/utils/dbConnection";
 import {
   createStandardTournament,
-  startPhase3WithSplit,
+  startPhase2FromPhase1,
+  startPhase3FromPhase1And2,
+  startPhase4FromPhase3,
+  continuePhase4MasterBracket,
+  startPhase5FromPhase4,
 } from "@/lib/services/tournament-service";
 import { createPlayer } from "@/lib/services/player-service";
 import { submitGameResults } from "@/lib/services/game-service";
@@ -106,12 +110,14 @@ async function displayMenu() {
 
   log("Actions disponibles:", "bright");
   log("1️⃣  - Créer un nouveau tournoi", "blue");
-  log("🆔 - Sélectionner un tournoi existant", "blue");
+  log("S - Sélectionner un tournoi existant", "blue");
   log("2️⃣  - Générer et ajouter 128 joueurs", "blue");
   log("3️⃣  - Démarrer la Phase 1", "blue");
   log("4️⃣  - Soumettre les résultats d'un jeu", "blue");
   log("5️⃣  - Voir le leaderboard actuel", "blue");
   log("6️⃣  - Passer à la phase suivante", "blue");
+  log("T - Démarrer une phase spécifique (2-5)", "blue");
+  log("M - Continuer Phase 4 Master Bracket (games 3-4 avec top 16)", "blue");
   log("7️⃣  - Voir tous les jeux de la phase", "blue");
   log("8️⃣  - Soumettre tous les résultats d'un jeu (aléatoire)", "blue");
   log("9️⃣  - Terminer tous les jeux de la phase (automatique)", "blue");
@@ -789,7 +795,53 @@ async function moveToNextPhaseAction() {
       );
       const phase1 = phases.find((p) => p.order_index === 1);
       if (phase1) {
-        await startPhase3WithSplit(phase1.id, currentPhaseId, nextPhase.id);
+        const result = await startPhase3FromPhase1And2(
+          phase1.id,
+          currentPhaseId,
+          nextPhase.id,
+        );
+        log(
+          `   🏅 Master: ${result.masterBracket.players.length} joueurs`,
+          "green",
+        );
+        log(
+          `   🥈 Amateur: ${result.amateurBracket.players.length} joueurs`,
+          "green",
+        );
+      }
+    } else if (nextPhase.order_index === 4) {
+      // Phase 4: Master/Amateur avec relégation
+      log("   Transition vers Phase 4 avec relégation...", "cyan");
+      const phase3 = phases.find((p) => p.order_index === 3);
+      if (phase3) {
+        const result = await startPhase4FromPhase3(phase3.id, nextPhase.id);
+        log(
+          `   🏅 Master: ${result.masterBracket.players.length} joueurs`,
+          "green",
+        );
+        log(
+          `   🥈 Amateur: ${result.amateurBracket.players.length} joueurs (RESET)`,
+          "green",
+        );
+      }
+    } else if (nextPhase.order_index === 5) {
+      // Phase 5: Finales
+      log("   Transition vers les FINALES...", "cyan");
+      const phase4 = phases.find((p) => p.order_index === 4);
+      if (phase4) {
+        const result = await startPhase5FromPhase4(phase4.id, nextPhase.id);
+        log(
+          `   🏆 Challenger: ${result.challengerBracket.players.length} joueurs`,
+          "green",
+        );
+        log(
+          `   🏅 Master: ${result.masterBracket.players.length} joueurs`,
+          "green",
+        );
+        log(
+          `   🥈 Amateur: ${result.amateurBracket.players.length} joueurs`,
+          "green",
+        );
       }
     } else {
       // Phases suivantes: Logique simplifiée pour la démo
@@ -868,6 +920,188 @@ async function viewTournamentInfoAction() {
   await pause();
 }
 
+async function startSpecificPhaseAction() {
+  if (!currentTournamentId) {
+    log("\n❌ Veuillez d'abord créer un tournoi!", "red");
+    await pause();
+    return;
+  }
+
+  log("\n🔧 Démarrage manuel d'une phase spécifique...", "yellow");
+
+  const phases = await db.query.phase.findMany({
+    where: eq(phase.tournament_id, currentTournamentId),
+    orderBy: (phase, { asc }) => [asc(phase.order_index)],
+  });
+
+  log("\nPhases disponibles:", "cyan");
+  phases.forEach((p) => {
+    log(`  ${p.order_index}. ${p.name}`, "cyan");
+  });
+
+  const input = await question("\nQuelle phase voulez-vous démarrer? (2-5): ");
+  const phaseIndex = parseInt(input.trim());
+
+  if (isNaN(phaseIndex) || phaseIndex < 2 || phaseIndex > 5) {
+    log("❌ Numéro de phase invalide!", "red");
+    await pause();
+    return;
+  }
+
+  const targetPhase = phases.find((p) => p.order_index === phaseIndex);
+  if (!targetPhase) {
+    log("❌ Phase introuvable!", "red");
+    await pause();
+    return;
+  }
+
+  try {
+    if (phaseIndex === 2) {
+      // Phase 2
+      const phase1 = phases.find((p) => p.order_index === 1);
+      if (!phase1) {
+        log("❌ Phase 1 introuvable!", "red");
+        await pause();
+        return;
+      }
+
+      log("   Sélection des 96 derniers de la Phase 1...", "cyan");
+      const result = await startPhase2FromPhase1(phase1.id, targetPhase.id);
+      log(
+        `\n✅ Phase 2 démarrée: ${result.qualifiedPlayers.length} joueurs, ${result.games.length} lobbies`,
+        "green",
+      );
+    } else if (phaseIndex === 3) {
+      // Phase 3
+      const phase1 = phases.find((p) => p.order_index === 1);
+      const phase2 = phases.find((p) => p.order_index === 2);
+
+      if (!phase1 || !phase2) {
+        log("❌ Phases 1 ou 2 introuvables!", "red");
+        await pause();
+        return;
+      }
+
+      log(
+        "   Séparation Master/Amateur basée sur les phases 1 et 2...",
+        "cyan",
+      );
+      const result = await startPhase3FromPhase1And2(
+        phase1.id,
+        phase2.id,
+        targetPhase.id,
+        8,
+      );
+
+      log("\n✅ Phase 3 démarrée avec succès!", "green");
+      log(
+        `   🏅 Bracket MASTER:\n      - Joueurs: ${result.masterBracket.players.length}\n      - Lobbies: ${result.masterBracket.games.length}\n      - Source: ${result.masterBracket.source}`,
+        "cyan",
+      );
+      log(
+        `   🥈 Bracket AMATEUR:\n      - Joueurs: ${result.amateurBracket.players.length}\n      - Lobbies: ${result.amateurBracket.games.length}\n      - Source: ${result.amateurBracket.source}`,
+        "cyan",
+      );
+    } else if (phaseIndex === 4) {
+      // Phase 4
+      const phase3 = phases.find((p) => p.order_index === 3);
+
+      if (!phase3) {
+        log("❌ Phase 3 introuvable!", "red");
+        await pause();
+        return;
+      }
+
+      log("   Transition vers Phase 4 avec relégation...", "cyan");
+      const result = await startPhase4FromPhase3(phase3.id, targetPhase.id);
+
+      log("\n✅ Phase 4 démarrée avec succès!", "green");
+      log(
+        `   🏅 Bracket MASTER:\n      - Joueurs: ${result.masterBracket.players.length}\n      - Lobbies: ${result.masterBracket.games.length}\n      - Source: ${result.masterBracket.source}`,
+        "cyan",
+      );
+      log(
+        `   🥈 Bracket AMATEUR (RESET):\n      - Joueurs: ${result.amateurBracket.players.length}\n      - Lobbies: ${result.amateurBracket.games.length}\n      - Source: ${result.amateurBracket.source}`,
+        "cyan",
+      );
+    } else if (phaseIndex === 5) {
+      // Phase 5
+      const phase4 = phases.find((p) => p.order_index === 4);
+
+      if (!phase4) {
+        log("❌ Phase 4 introuvable!", "red");
+        await pause();
+        return;
+      }
+
+      log("   Transition vers les FINALES...", "cyan");
+      const result = await startPhase5FromPhase4(phase4.id, targetPhase.id);
+
+      log("\n✅ Phase 5 - FINALES démarrée avec succès!", "green");
+      log(
+        `   🏆 Bracket CHALLENGER:\n      - Joueurs: ${result.challengerBracket.players.length}\n      - Source: ${result.challengerBracket.source}`,
+        "cyan",
+      );
+      log(
+        `   🏅 Bracket MASTER:\n      - Joueurs: ${result.masterBracket.players.length}\n      - Source: ${result.masterBracket.source}`,
+        "cyan",
+      );
+      log(
+        `   🥈 Bracket AMATEUR:\n      - Joueurs: ${result.amateurBracket.players.length}\n      - Source: ${result.amateurBracket.source}`,
+        "cyan",
+      );
+    }
+
+    currentPhaseId = targetPhase.id;
+  } catch (error: any) {
+    log(`\n❌ Erreur: ${error.message}`, "red");
+    console.error(error);
+  }
+
+  await pause();
+}
+
+async function continuePhase4MasterBracketAction() {
+  if (!currentTournamentId || !currentPhaseId) {
+    log("\n❌ Veuillez d'abord sélectionner un tournoi et une phase!", "red");
+    await pause();
+    return;
+  }
+
+  log("\n🎯 Continuation du bracket Master de Phase 4...", "yellow");
+
+  // Vérifier que c'est bien la phase 4
+  const phaseData = await db.query.phase.findFirst({
+    where: eq(phase.id, currentPhaseId),
+  });
+
+  if (!phaseData || phaseData.order_index !== 4) {
+    log("❌ Cette action n'est disponible que pour la Phase 4!", "red");
+    await pause();
+    return;
+  }
+
+  try {
+    log("   Récupération du top 16 après games 1-2...", "cyan");
+    const result = await continuePhase4MasterBracket(currentPhaseId);
+
+    log("\n✅ Games 3-4 créées avec succès pour le bracket Master!", "green");
+    log(
+      `   🏅 Top 16 du bracket Master:\n      - Joueurs: ${result.players.length}\n      - Lobbies créés: ${result.games.length}\n      - Source: ${result.source}`,
+      "cyan",
+    );
+    log(
+      "   Note: Les games 3 et 4 utilisent ces 16 meilleurs joueurs",
+      "yellow",
+    );
+  } catch (error: any) {
+    log(`\n❌ Erreur: ${error.message}`, "red");
+    console.error(error);
+  }
+
+  await pause();
+}
+
 function pause() {
   return question("\nAppuyez sur Entrée pour continuer...");
 }
@@ -902,6 +1136,14 @@ async function main() {
         break;
       case "6":
         await moveToNextPhaseAction();
+        break;
+      case "t":
+      case "T":
+        await startSpecificPhaseAction();
+        break;
+      case "m":
+      case "M":
+        await continuePhase4MasterBracketAction();
         break;
       case "7":
         await viewGamesAction();

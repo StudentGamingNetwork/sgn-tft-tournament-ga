@@ -1,20 +1,62 @@
 import { useState, useMemo } from "react";
 import { Card } from "@heroui/card";
+import { Tabs, Tab } from "@heroui/tabs";
+import { Chip } from "@heroui/chip";
 import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell } from "@heroui/table";
 import { Pagination } from "@heroui/pagination";
 import { Trophy, Award, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import type { PhasePlayerStats } from "@/app/actions/tournaments";
+import type { PhasePlayerStats, GameWithResults } from "@/app/actions/tournaments";
 
 interface OverviewTabProps {
     participants: PhasePlayerStats[];
+    games: GameWithResults[];
+    phaseOrderIndex: number;
 }
 
 const ITEMS_PER_PAGE = 20;
 
-export function OverviewTab({ participants }: OverviewTabProps) {
+export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTabProps) {
     const [sortColumn, setSortColumn] = useState<keyof PhasePlayerStats | null>(null);
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
+    const [selectedBracket, setSelectedBracket] = useState<string>("all");
+
+    // Extraire les brackets uniques des games
+    const brackets = useMemo(() => {
+        const uniqueBrackets = Array.from(new Set(games.map(g => g.bracket_name)));
+        return uniqueBrackets.filter(b => b !== "unknown");
+    }, [games]);
+
+    // Filtrer les participants par bracket
+    const filteredParticipants = useMemo(() => {
+        if (selectedBracket === "all" || brackets.length <= 1) {
+            return participants;
+        }
+
+        // Obtenir les IDs des joueurs qui ont joué dans ce bracket
+        const bracketPlayerIds = new Set(
+            games
+                .filter(g => g.bracket_name === selectedBracket)
+                .flatMap(g => g.assignedPlayers.map(p => p.player_id))
+        );
+
+        return participants.filter(p => bracketPlayerIds.has(p.player_id));
+    }, [participants, selectedBracket, brackets, games]);
+
+    const getBracketColor = (bracketName: string) => {
+        switch (bracketName) {
+            case "challenger":
+                return "success";
+            case "master":
+                return "primary";
+            case "amateur":
+                return "warning";
+            case "common":
+                return "default";
+            default:
+                return "default";
+        }
+    };
 
     const handleSort = (column: keyof PhasePlayerStats) => {
         if (sortColumn === column) {
@@ -33,9 +75,9 @@ export function OverviewTab({ participants }: OverviewTabProps) {
     };
 
     const sortedParticipants = useMemo(() => {
-        if (!sortColumn) return participants;
+        if (!sortColumn) return filteredParticipants;
 
-        return [...participants].sort((a, b) => {
+        return [...filteredParticipants].sort((a, b) => {
             const aValue = a[sortColumn];
             const bValue = b[sortColumn];
 
@@ -54,7 +96,7 @@ export function OverviewTab({ participants }: OverviewTabProps) {
 
             return sortDirection === "asc" ? comparison : -comparison;
         });
-    }, [participants, sortColumn, sortDirection]);
+    }, [filteredParticipants, sortColumn, sortDirection]);
 
     const totalPages = Math.ceil(sortedParticipants.length / ITEMS_PER_PAGE);
 
@@ -82,10 +124,73 @@ export function OverviewTab({ participants }: OverviewTabProps) {
     return (
         <Card>
             <div className="p-6">
-                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                    <Trophy className="text-primary" />
-                    Classement des Participants
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-bold flex items-center gap-2">
+                        <Trophy className="text-primary" />
+                        Classement des Participants
+                    </h2>
+                    {brackets.length > 1 && (
+                        <Chip color={getBracketColor(selectedBracket)} variant="flat" size="lg">
+                            {selectedBracket === "all" ? "Tous les brackets" : selectedBracket.toUpperCase()}
+                        </Chip>
+                    )}
+                </div>
+
+                {/* Tabs pour les brackets (si plusieurs) */}
+                {brackets.length > 1 && (
+                    <Tabs
+                        selectedKey={selectedBracket}
+                        onSelectionChange={(key) => {
+                            setSelectedBracket(key as string);
+                            setCurrentPage(1);
+                        }}
+                        aria-label="Brackets"
+                        color="primary"
+                        variant="underlined"
+                        className="mb-4"
+                        classNames={{
+                            tabList: "gap-6 w-full relative rounded-none p-0 border-b border-divider",
+                            cursor: "w-full bg-primary",
+                            tab: "max-w-fit px-0 h-12",
+                        }}
+                    >
+                        <Tab
+                            key="all"
+                            title={
+                                <div className="flex items-center gap-2">
+                                    <Trophy size={16} />
+                                    <span>Tous ({participants.length})</span>
+                                </div>
+                            }
+                        />
+                        {brackets.map((bracket) => {
+                            const bracketPlayerCount = games
+                                .filter(g => g.bracket_name === bracket)
+                                .flatMap(g => g.assignedPlayers)
+                                .filter((p, idx, arr) => arr.findIndex(p2 => p2.player_id === p.player_id) === idx)
+                                .length;
+
+                            return (
+                                <Tab
+                                    key={bracket}
+                                    title={
+                                        <div className="flex items-center gap-2">
+                                            <Chip
+                                                size="sm"
+                                                color={getBracketColor(bracket)}
+                                                variant="dot"
+                                            >
+                                                {bracket.toUpperCase()}
+                                            </Chip>
+                                            <span>({bracketPlayerCount})</span>
+                                        </div>
+                                    }
+                                />
+                            );
+                        })}
+                    </Tabs>
+                )}
+
                 <Table aria-label="Participants table" className="min-w-full">
                     <TableHeader>
                         <TableColumn>

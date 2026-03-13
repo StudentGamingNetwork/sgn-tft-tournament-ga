@@ -242,8 +242,7 @@ export async function hasResults(gameId: string): Promise<boolean> {
 
 /**
  * Automatically create the next game for a phase if all current games have results
- * For Phase 1: Re-seeds players based on current standings and applies snake draft
- * For other phases: Would use rotation matrices (not yet implemented)
+ * Handles phases with multiple brackets (Master/Amateur/Challenger) correctly
  */
 export async function checkAndCreateNextGame(
   phaseId: string,
@@ -272,6 +271,7 @@ export async function checkAndCreateNextGame(
     with: {
       results: true,
       lobbyPlayers: true,
+      bracket: true,
     },
   });
 
@@ -279,81 +279,109 @@ export async function checkAndCreateNextGame(
     return { created: false }; // No games found
   }
 
-  // 4. Check if ALL current games have results
-  const allHaveResults = currentGames.every((g) => g.results.length > 0);
+  // 4. Group games by bracket to handle each bracket separately
+  const gamesByBracket = new Map<string, typeof currentGames>();
+  for (const game of currentGames) {
+    if (!game.bracket_id) continue;
 
-  if (!allHaveResults) {
-    return { created: false }; // Some games still need results
+    if (!gamesByBracket.has(game.bracket_id)) {
+      gamesByBracket.set(game.bracket_id, []);
+    }
+    gamesByBracket.get(game.bracket_id)!.push(game);
   }
 
-  // 5. Re-seed based on current standings for all phases
-  return await createNextGameWithReseed(
-    phaseId,
-    currentGameNumber,
-    currentGames,
-    phaseData.order_index,
-  );
+  // 5. Create next game for each bracket separately
+  let totalGamesCreated = 0;
+
+  for (const [bracketId, bracketGames] of gamesByBracket) {
+    // Only progress a bracket when all lobbies of that bracket are completed.
+    const bracketAllHaveResults = bracketGames.every(
+      (g) => g.results.length > 0,
+    );
+
+    if (!bracketAllHaveResults) {
+      continue;
+    }
+
+    // Phase 4 Master special flow:
+    // - Game 2 is auto-created after Game 1
+    // - Games 3-4 are auto-created with top 16 after Game 2 is fully completed
+    const bracketName = bracketGames[0]?.bracket?.name;
+    if (
+      phaseData.order_index === 4 &&
+      bracketName === "master" &&
+      currentGameNumber === 2
+    ) {
+      const result = await createPhase4MasterTop16Games(phaseId, bracketId);
+      if (result.created && result.gamesCreated) {
+        totalGamesCreated += result.gamesCreated;
+      }
+      continue;
+    }
+
+    if (
+      phaseData.order_index === 4 &&
+      bracketName === "master" &&
+      currentGameNumber >= 3
+    ) {
+      continue;
+    }
+
+    const result = await createNextGameWithReseed(
+      phaseId,
+      bracketId,
+      currentGameNumber,
+      bracketGames,
+      phaseData.order_index,
+    );
+
+    if (result.created && result.gamesCreated) {
+      totalGamesCreated += result.gamesCreated;
+    }
+  }
+
+  return {
+    created: totalGamesCreated > 0,
+    gamesCreated: totalGamesCreated,
+  };
 }
 
-/**
- * Create next game by re-seeding players based on current standings
- * For Phase 1: Re-numbers seeds starting at 1 based on current leaderboard rank
- * For Phase 2+: Preserves original seeds from game 1 to maintain ranking context (e.g., 33-128 for Phase 2)
- */
-async function createNextGameWithReseed(
+async function createPhase4MasterTop16Games(
   phaseId: string,
-  currentGameNumber: number,
-  currentGames: any[],
-  phaseOrderIndex: number,
+  bracketId: string,
 ): Promise<{ created: boolean; gamesCreated?: number }> {
-  const nextGameNumber = currentGameNumber + 1;
+  const existingGames3 = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, phaseId),
+      eq(game.bracket_id, bracketId),
+      eq(game.game_number, 3),
+    ),
+  });
 
-  // 1. Get current leaderboard (sorted by points, tie-breakers, etc.)
-  const leaderboard = await getLeaderboard(phaseId);
-
-  if (leaderboard.length === 0) {
-    throw new Error("No leaderboard data found");
+  if (existingGames3.length > 0) {
+    return { created: false, gamesCreated: 0 };
   }
 
-  // 2. Get original seeds from game 1 for this phase
-  const game1 = await db.query.game.findMany({
-    where: and(eq(game.phase_id, phaseId), eq(game.game_number, 1)),
-    with: {
-      lobbyPlayers: true,
-    },
-  });
+  const leaderboard = await getLeaderboard(phaseId, bracketId);
+  const top16 = leaderboard.slice(0, 16);
 
-  // Build map of player_id -> original seed from game 1
-  const originalSeedsMap = new Map<string, number>();
-  game1.forEach((g) => {
-    g.lobbyPlayers.forEach((lp) => {
-      originalSeedsMap.set(lp.player_id, lp.seed);
-    });
-  });
+  if (top16.length < 16) {
+    throw new Error(
+      `Phase 4 master requires 16 players for games 3-4, found ${top16.length}`,
+    );
+  }
 
-  // 3. Get all players with their rank data to create SeededPlayer objects
-  const playerIds = leaderboard.map((entry) => entry.player_id);
+  const playerIds = top16.map((entry) => entry.player_id);
   const playersData = await db.query.player.findMany({
     where: inArray(player.id, playerIds),
   });
-
   const playersMap = new Map(playersData.map((p) => [p.id, p]));
 
-  // 4. Transform leaderboard to SeededPlayer[]
-  // Phase 1: Use current rank as new seed (1-based)
-  // Phase 2+: Preserve original seed from game 1
-  const seededPlayers: SeededPlayer[] = leaderboard.map((entry, index) => {
+  const seededPlayers: SeededPlayer[] = top16.map((entry, index) => {
     const playerData = playersMap.get(entry.player_id);
     if (!playerData) {
       throw new Error(`Player ${entry.player_id} not found`);
     }
-
-    // For Phase 1, renumber seeds starting at 1 based on current rank
-    // For Phase 2+, use original seed from game 1 to preserve context (e.g., 33-128)
-    const seed =
-      phaseOrderIndex === 1
-        ? index + 1 // Phase 1: Current rank becomes new seed
-        : originalSeedsMap.get(entry.player_id) || index + 1; // Phase 2+: Keep original seed
 
     return {
       player_id: entry.player_id,
@@ -362,31 +390,111 @@ async function createNextGameWithReseed(
       tier: playerData.tier!,
       division: playerData.division as any,
       league_points: playerData.league_points!,
-      seed,
+      seed: index + 1,
     };
   });
 
-  // 5. Calculate lobby count (same as Game 1) and determine starting seed
-  const lobbyCount = currentGames.length;
+  const seedingMatrix = generateSnakeDraftMatrix(16, 1);
+  const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
+
+  let gamesCreated = 0;
+  for (const gameNumber of [3, 4]) {
+    for (const assignment of assignments) {
+      const newGame = await createGame({
+        bracket_id: bracketId,
+        phase_id: phaseId,
+        lobby_name: assignment.lobby_name,
+        game_number: gameNumber,
+      });
+
+      const lobbyPlayerAssignments = assignment.players.map((player: any) => ({
+        game_id: newGame.id,
+        player_id: player.player_id,
+        seed: player.seed,
+      }));
+
+      await db.insert(lobbyPlayer).values(lobbyPlayerAssignments);
+      gamesCreated++;
+    }
+  }
+
+  return { created: gamesCreated > 0, gamesCreated };
+}
+
+/**
+ * Create next game by re-seeding players based on current standings.
+ * Uses contiguous seeds (1..N) from current leaderboard rank for robustness.
+ * Handles brackets separately for phases with multiple brackets (Master/Amateur/Challenger).
+ */
+async function createNextGameWithReseed(
+  phaseId: string,
+  bracketId: string,
+  currentGameNumber: number,
+  currentGames: any[],
+  phaseOrderIndex: number,
+): Promise<{ created: boolean; gamesCreated?: number }> {
+  const nextGameNumber = currentGameNumber + 1;
+
+  // Guard against duplicate next-game creation.
+  const existingNextGames = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, phaseId),
+      eq(game.bracket_id, bracketId),
+      eq(game.game_number, nextGameNumber),
+    ),
+  });
+
+  if (existingNextGames.length > 0) {
+    return { created: false, gamesCreated: 0 };
+  }
+
+  // 1. Get current leaderboard for THIS BRACKET ONLY
+  const leaderboard = await getLeaderboard(phaseId, bracketId);
+
+  if (leaderboard.length === 0) {
+    throw new Error(`No leaderboard data found for bracket ${bracketId}`);
+  }
+
+  // 2. Get all players with their rank data to create SeededPlayer objects
+  const playerIds = leaderboard.map((entry) => entry.player_id);
+  const playersData = await db.query.player.findMany({
+    where: inArray(player.id, playerIds),
+  });
+
+  const playersMap = new Map(playersData.map((p) => [p.id, p]));
+
+  // 3. Transform leaderboard to SeededPlayer[] with contiguous seeds (1..N)
+  const seededPlayers: SeededPlayer[] = leaderboard.map((entry, index) => {
+    const playerData = playersMap.get(entry.player_id);
+    if (!playerData) {
+      throw new Error(`Player ${entry.player_id} not found`);
+    }
+
+    return {
+      player_id: entry.player_id,
+      name: entry.player_name,
+      riot_id: entry.riot_id,
+      tier: playerData.tier!,
+      division: playerData.division as any,
+      league_points: playerData.league_points!,
+      seed: index + 1,
+    };
+  });
+
+  // 4. Determine starting seed
   const playerCount = seededPlayers.length;
   const startSeed =
     seededPlayers.length > 0
       ? Math.min(...seededPlayers.map((p) => p.seed))
       : 1;
 
-  // 6. Generate seeding matrix dynamically based on player count and starting seed
+  // 5. Generate seeding matrix dynamically based on player count and starting seed
   const seedingMatrix = generateSnakeDraftMatrix(playerCount, startSeed);
 
-  // 7. Apply seeding matrix to get lobby assignments
+  // 6. Apply seeding matrix to get lobby assignments
   const newAssignments = applySeedingMatrix(seededPlayers, seedingMatrix);
 
-  // 8. Get bracket info
-  const firstGame = currentGames[0];
-  if (!firstGame.bracket_id) {
-    return { created: false };
-  }
-
-  // 9. Create new games with re-seeded player assignments
+  // 7. Create new games with re-seeded player assignments for this bracket
   let gamesCreated = 0;
 
   for (const assignment of newAssignments) {
@@ -395,9 +503,9 @@ async function createNextGameWithReseed(
       continue;
     }
 
-    // Create the game
+    // Create the game for this specific bracket
     const newGame = await createGame({
-      bracket_id: firstGame.bracket_id,
+      bracket_id: bracketId,
       phase_id: phaseId,
       lobby_name: assignment.lobby_name,
       game_number: nextGameNumber,

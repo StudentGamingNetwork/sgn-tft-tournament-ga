@@ -44,6 +44,7 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("./seeding-service", () => ({
   seedPlayersForPhase: vi.fn(),
+  seedPlayersBasedOnLeaderboard: vi.fn(),
   assignPlayersToLobbies: vi.fn(),
   seedAndCreateFirstGame: vi.fn(),
   seedAndCreateFirstGameFromLeaderboard: vi.fn(),
@@ -186,10 +187,13 @@ describe("Tournament Workflow", () => {
           { id: "bracket-amateur", phase_id: "phase-3", name: "amateur" },
         ]);
 
-        const { seedPlayersForPhase, assignPlayersToLobbies } = await import(
-          "./seeding-service"
-        );
+        const {
+          seedPlayersForPhase,
+          seedPlayersBasedOnLeaderboard,
+          assignPlayersToLobbies,
+        } = await import("./seeding-service");
         vi.mocked(seedPlayersForPhase).mockResolvedValue([]);
+        vi.mocked(seedPlayersBasedOnLeaderboard).mockResolvedValue([]);
         vi.mocked(assignPlayersToLobbies).mockResolvedValue([
           { game: { id: "game-1" }, lobbyPlayers: [] },
         ]);
@@ -307,10 +311,13 @@ describe("Tournament Workflow", () => {
             return [];
           });
 
-        const { seedPlayersForPhase, assignPlayersToLobbies } = await import(
-          "./seeding-service"
-        );
+        const {
+          seedPlayersForPhase,
+          seedPlayersBasedOnLeaderboard,
+          assignPlayersToLobbies,
+        } = await import("./seeding-service");
         vi.mocked(seedPlayersForPhase).mockResolvedValue([]);
+        vi.mocked(seedPlayersBasedOnLeaderboard).mockResolvedValue([]);
         vi.mocked(assignPlayersToLobbies).mockResolvedValue([
           { game: { id: "game-1" }, lobbyPlayers: [] },
         ]);
@@ -318,15 +325,15 @@ describe("Tournament Workflow", () => {
         const result = await startPhase4FromPhase3("phase-3", "phase-4");
 
         // Vérifications
-        expect(seedPlayersForPhase).toHaveBeenCalledTimes(2);
+        expect(seedPlayersBasedOnLeaderboard).toHaveBeenCalledTimes(1);
+        expect(seedPlayersForPhase).toHaveBeenCalledTimes(1);
+        expect(assignPlayersToLobbies).toHaveBeenCalledTimes(2);
 
-        // P4 Master: 32 joueurs (top 32 de P3 Master)
-        const masterCall = vi
-          .mocked(seedPlayersForPhase)
-          .mock.calls.find(
-            (call) => call[1].length === 32 && call[1][0].includes("p3-master"),
-          );
-        expect(masterCall).toBeDefined();
+        // P4 Master: top 32 de P3 Master via leaderboard (pas de reset)
+        const masterLeaderboardCall = vi
+          .mocked(seedPlayersBasedOnLeaderboard)
+          .mock.calls.find((call) => call[0].length === 32);
+        expect(masterLeaderboardCall).toBeDefined();
 
         // P4 Amateur: 64 joueurs (top 32 P3 Amateur + bottom 32 P3 Master)
         const amateurCall = vi

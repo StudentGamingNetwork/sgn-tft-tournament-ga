@@ -2,7 +2,7 @@ import { Button } from "@heroui/button";
 import { Card } from "@heroui/card";
 import { Chip } from "@heroui/chip";
 import { Play, CheckCircle, Clock, AlertCircle } from "lucide-react";
-import { useTournamentPlayers, useTournamentPhases, useDeletePhase, useStartPhase } from "@/lib/hooks/useTournament";
+import { useTournamentPlayers, useTournamentPhases, useDeletePhase, useStartPhase, useStartNextPhase } from "@/lib/hooks/useTournament";
 import type { PhaseWithDetails } from "@/app/actions/tournaments";
 
 interface PhasesTabProps {
@@ -21,6 +21,7 @@ export function PhasesTab({
     const { data: players = [] } = useTournamentPlayers(tournamentId);
     const deletePhase = useDeletePhase(tournamentId);
     const startPhase = useStartPhase(tournamentId);
+    const startNextPhase = useStartNextPhase(tournamentId);
 
     const handleDeletePhase = async (phaseId: string) => {
         if (!confirm("Êtes-vous sûr de vouloir supprimer cette phase ? Cela supprimera aussi tous les brackets, parties et résultats associés.")) {
@@ -94,13 +95,63 @@ export function PhasesTab({
         }
     };
 
+    const sortedPhases = [...phases].sort((a, b) => a.order_index - b.order_index);
+    const nextStartablePhase = sortedPhases.find((current) => {
+        if (current.status !== "not_started") return false;
+        if (current.order_index === 1) return true;
+
+        const previousPhase = sortedPhases.find(
+            (p) => p.order_index === current.order_index - 1,
+        );
+
+        return previousPhase?.status === "completed";
+    });
+
+    const handleStartNextPhase = async () => {
+        if (!nextStartablePhase) {
+            alert("Aucune phase éligible à démarrer pour le moment.");
+            return;
+        }
+
+        const message = `Démarrer la prochaine phase (${nextStartablePhase.name}) ?`;
+        if (!confirm(message)) {
+            return;
+        }
+
+        try {
+            const result = await startNextPhase.mutateAsync();
+            if (!result.success) {
+                alert(`Erreur : ${result.error}`);
+                return;
+            }
+
+            alert(
+                `✅ ${result.startedPhaseName} démarrée avec succès !`,
+            );
+        } catch (error) {
+            console.error("Error starting next phase:", error);
+            alert("Erreur lors du démarrage de la prochaine phase");
+        }
+    };
+
     return (
         <Card className="p-6 mt-4">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">Phases du tournoi</h2>
-                <Button color="primary" onPress={onCreatePhaseOpen}>
-                    Créer une phase
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button
+                        color="success"
+                        onPress={handleStartNextPhase}
+                        isLoading={startNextPhase.isPending}
+                        isDisabled={!nextStartablePhase}
+                        startContent={!startNextPhase.isPending && <Play size={16} />}
+                    >
+                        Démarrer la prochaine phase
+                    </Button>
+                    <Button color="primary" onPress={onCreatePhaseOpen}>
+                        Créer une phase manquante
+                    </Button>
+                </div>
             </div>
 
             {isLoading ? (
@@ -150,7 +201,7 @@ export function PhasesTab({
                                                 )}
                                                 {phase.canEnterResults && (
                                                     <Chip size="sm" color="success" variant="dot">
-                                                        Peut saisir résultats
+                                                        Peut saisir les résultats
                                                     </Chip>
                                                 )}
                                             </div>

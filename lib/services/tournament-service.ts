@@ -9,7 +9,7 @@
  *   - Master: 64 joueurs (Top 32 P1 + Top 32 P2)
  *   - Amateur: 64 joueurs (64 derniers P2)
  * - Phase 4 : 96 joueurs (2 brackets)
- *   - Master: 32 joueurs (Top 32 P3 Master)
+ *   - Master: 32 joueurs (Top 32 P3 Master) games 1-2, puis 16 joueurs (Top 16 après games 1-2) games 3-4
  *   - Amateur: 64 joueurs (RESET points) (Top 32 P3 Amateur + 32 derniers P3 Master)
  * - Phase 5 : 24 joueurs (3 brackets)
  *   - Challenger: 8 joueurs (Top 8 P4 Master)
@@ -19,12 +19,13 @@
 
 import { db } from "@/lib/db";
 import { tournament, phase, bracket, game } from "@/models/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import type { BracketType } from "@/types/tournament";
 import {
   seedAndCreateFirstGame,
   seedAndCreateFirstGameFromLeaderboard,
   seedPlayersForPhase,
+  seedPlayersBasedOnLeaderboard,
   assignPlayersToLobbies,
 } from "./seeding-service";
 import { getLeaderboard, getCumulativeLeaderboard } from "./scoring-service";
@@ -214,100 +215,6 @@ export async function advanceToNextPhase(
 }
 
 /**
- * Workflow complet Phase 1+2 -> Phase 3 avec séparation Master/Amateur
- * Calcule le classement cumulatif P1+P2 puis crée les games de Phase 3
- */
-export async function startPhase3WithSplit(
-  phase1Id: string,
-  phase2Id: string,
-  phase3Id: string,
-  options?: {
-    masterTopN?: number; // Défaut: 32
-    amateurRange?: [number, number]; // Défaut: [33, 64]
-    lobbyCount?: number; // Défaut: 4 pour Master (32 joueurs / 8), 4 pour Amateur
-  },
-) {
-  const masterTopN = options?.masterTopN || 32;
-  const amateurRange = options?.amateurRange || [33, 64];
-  const lobbyCount = options?.lobbyCount || 4;
-
-  // 1. Calculer le classement cumulatif Phase 1 + Phase 2
-  const cumulativeLeaderboard = await getCumulativeLeaderboard([
-    phase1Id,
-    phase2Id,
-  ]);
-
-  if (cumulativeLeaderboard.length < amateurRange[1]) {
-    throw new Error(
-      `Not enough players: found ${cumulativeLeaderboard.length}, need at least ${amateurRange[1]}`,
-    );
-  }
-
-  // 2. Séparer Master (Top 32) et Amateur (33-64)
-  const masterPlayerIds = cumulativeLeaderboard
-    .slice(0, masterTopN)
-    .map((p) => p.player_id);
-
-  const amateurPlayerIds = cumulativeLeaderboard
-    .slice(amateurRange[0] - 1, amateurRange[1])
-    .map((p) => p.player_id);
-
-  // 3. Obtenir les brackets de Phase 3
-  const brackets = await db.query.bracket.findMany({
-    where: eq(bracket.phase_id, phase3Id),
-  });
-
-  const masterBracket = brackets.find((b) => b.name === "master");
-  const amateurBracket = brackets.find((b) => b.name === "amateur");
-
-  if (!masterBracket || !amateurBracket) {
-    throw new Error('Phase 3 must have both "master" and "amateur" brackets');
-  }
-
-  // 4. Seed les joueurs Master basé sur leur classement P1+P2
-  const masterSeededPlayers = await seedPlayersForPhase(
-    phase3Id,
-    masterPlayerIds,
-  );
-
-  // 5. Créer les games Master (Game 1)
-  const masterGames = await assignPlayersToLobbies(
-    phase3Id,
-    masterBracket.id,
-    1, // Game number 1
-    masterSeededPlayers,
-  );
-
-  // 6. Seed les joueurs Amateur basé sur leur classement P1+P2
-  const amateurSeededPlayers = await seedPlayersForPhase(
-    phase3Id,
-    amateurPlayerIds,
-  );
-
-  // 7. Créer les games Amateur (Game 1)
-  const amateurGames = await assignPlayersToLobbies(
-    phase3Id,
-    amateurBracket.id,
-    1, // Game number 1
-    amateurSeededPlayers,
-  );
-
-  return {
-    cumulativeLeaderboard,
-    masterBracket: {
-      bracket: masterBracket,
-      players: masterSeededPlayers,
-      games: masterGames.map((g) => g.game),
-    },
-    amateurBracket: {
-      bracket: amateurBracket,
-      players: amateurSeededPlayers,
-      games: amateurGames.map((g) => g.game),
-    },
-  };
-}
-
-/**
  * PHASE 1 → PHASE 2
  * Élimine les 32 meilleurs joueurs de Phase 1
  * Les 96 derniers continuent en Phase 2
@@ -480,11 +387,16 @@ export async function startPhase4FromPhase3(
     throw new Error("Phase 4 must have both master and amateur brackets");
   }
 
-  // Seed et créer games pour Master (32 joueurs / 8 = 4 lobbies)
-  const masterSeededPlayers = await seedPlayersForPhase(
-    phase4Id,
-    phase4MasterPlayerIds,
+  // Seed et créer game 1 pour Master (32 joueurs / 8 = 4 lobbies)
+  // PAS DE RESET : on utilise le classement de Phase 3 Master pour le seeding des lobbies
+  // Game 2 sera créée automatiquement quand toutes les lobbies de la game 1 seront terminées.
+  // Games 3-4 seront créées plus tard avec seulement le top 16 via continuePhase4MasterBracket().
+  const top32MasterLeaderboard = masterLeaderboard.slice(0, 32);
+  const masterSeededPlayers = await seedPlayersBasedOnLeaderboard(
+    top32MasterLeaderboard,
   );
+
+  // Créer seulement la game 1
   const masterGames = await assignPlayersToLobbies(
     phase4Id,
     phase4Master.id,
@@ -492,7 +404,8 @@ export async function startPhase4FromPhase3(
     masterSeededPlayers,
   );
 
-  // Seed et créer games pour Amateur (64 joueurs / 8 = 8 lobbies, RESET)
+  // Seed et créer games pour Amateur (64 joueurs / 8 = 8 lobbies)
+  // RESET : on utilise le rank Riot initial pour le seeding des lobbies
   const amateurSeededPlayers = await seedPlayersForPhase(
     phase4Id,
     phase4AmateurPlayerIds,
@@ -517,6 +430,81 @@ export async function startPhase4FromPhase3(
       games: amateurGames.map((g) => g.game),
       source: "Top 32 P3 Amateur + 32 derniers P3 Master (RESET)",
     },
+  };
+}
+
+/**
+ * PHASE 4 MASTER - CONTINUATION
+ * Cr\u00e9e les games 3 et 4 du bracket Master avec seulement le top 16 apr\u00e8s les games 1-2
+ * \u00c0 appeler apr\u00e8s que les games 1 et 2 du bracket Master soient termin\u00e9es
+ */
+export async function continuePhase4MasterBracket(phase4Id: string) {
+  // Obtenir le bracket Master de Phase 4
+  const phase4Brackets = await db.query.bracket.findMany({
+    where: eq(bracket.phase_id, phase4Id),
+  });
+
+  const phase4Master = phase4Brackets.find((b) => b.name === "master");
+
+  if (!phase4Master) {
+    throw new Error("Phase 4 Master bracket not found");
+  }
+
+  // V\u00e9rifier que les games 1 et 2 existent
+  const existingGames = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, phase4Id),
+      eq(game.bracket_id, phase4Master.id),
+    ),
+  });
+
+  const game1Exists = existingGames.some((g) => g.game_number === 1);
+  const game2Exists = existingGames.some((g) => g.game_number === 2);
+  const game3Exists = existingGames.some((g) => g.game_number === 3);
+
+  if (!game1Exists || !game2Exists) {
+    throw new Error("Games 1 and 2 must be created first");
+  }
+
+  if (game3Exists) {
+    throw new Error("Games 3-4 already exist for Phase 4 Master bracket");
+  }
+
+  // R\u00e9cup\u00e9rer le leaderboard apr\u00e8s les games 1-2
+  const leaderboard = await getLeaderboard(phase4Id, phase4Master.id);
+
+  // Garder seulement le top 16
+  const top16Leaderboard = leaderboard.slice(0, 16);
+
+  if (top16Leaderboard.length < 16) {
+    throw new Error(
+      `Only ${top16Leaderboard.length} players found in leaderboard, need 16`,
+    );
+  }
+
+  // Seed les 16 joueurs
+  const seededPlayers = await seedPlayersBasedOnLeaderboard(top16Leaderboard);
+
+  // Cr\u00e9er games 3 et 4 (16 joueurs / 8 = 2 lobbies par game)
+  const games3 = await assignPlayersToLobbies(
+    phase4Id,
+    phase4Master.id,
+    3,
+    seededPlayers,
+  );
+
+  const games4 = await assignPlayersToLobbies(
+    phase4Id,
+    phase4Master.id,
+    4,
+    seededPlayers,
+  );
+
+  return {
+    bracket: phase4Master,
+    players: seededPlayers,
+    games: [...games3, ...games4].map((g) => g.game),
+    source: "Top 16 P4 Master apr\u00e8s games 1-2",
   };
 }
 

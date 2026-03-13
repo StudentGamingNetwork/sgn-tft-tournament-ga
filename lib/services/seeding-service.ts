@@ -148,10 +148,11 @@ export async function assignPlayersToLobbies(
 
     // Assign players to this lobby
     const lobbyPlayerAssignments = assignment.players.map(
-      (player: SeededPlayer, index: number) => ({
+      (player: SeededPlayer) => ({
         game_id: newGame.id,
         player_id: player.player_id,
-        seed: index + 1, // Local seed within this lobby (1-8)
+        // Keep the global seed (not 1-8 local lobby position) so reseeding across games works.
+        seed: player.seed,
       }),
     );
 

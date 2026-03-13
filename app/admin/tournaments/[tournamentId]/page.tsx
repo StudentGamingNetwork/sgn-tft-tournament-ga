@@ -282,7 +282,7 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
                         </div>
                     }
                 >
-                    <ResultsTab />
+                    <ResultsTab tournamentId={tournamentId} />
                 </Tab>
 
                 <Tab

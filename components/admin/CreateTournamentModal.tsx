@@ -130,7 +130,7 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                             <p className="font-semibold mb-1">Note:</p>
                             <ul className="list-disc list-inside space-y-1">
                                 <li>Un nouveau tournoi sera créé avec le statut sélectionné</li>
-                                <li>Vous pourrez ajouter des phases et des joueurs après la création</li>
+                                <li>Les 5 phases standards seront créées automatiquement (avec leurs brackets)</li>
                                 <li>Le statut peut être modifié ultérieurement</li>
                             </ul>
                         </div>
