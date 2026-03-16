@@ -6,6 +6,7 @@ import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell } from 
 import { Pagination } from "@heroui/pagination";
 import { Trophy, Award, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import type { PhasePlayerStats, GameWithResults } from "@/app/actions/tournaments";
+import { getBracketChipColor } from "@/utils/bracket-colors";
 
 interface OverviewTabProps {
     participants: PhasePlayerStats[];
@@ -42,21 +43,6 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
 
         return participants.filter(p => bracketPlayerIds.has(p.player_id));
     }, [participants, selectedBracket, brackets, games]);
-
-    const getBracketColor = (bracketName: string) => {
-        switch (bracketName) {
-            case "challenger":
-                return "success";
-            case "master":
-                return "primary";
-            case "amateur":
-                return "warning";
-            case "common":
-                return "default";
-            default:
-                return "default";
-        }
-    };
 
     const handleSort = (column: keyof PhasePlayerStats) => {
         if (sortColumn === column) {
@@ -130,7 +116,7 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
                         Classement des Participants
                     </h2>
                     {brackets.length > 1 && (
-                        <Chip color={getBracketColor(selectedBracket)} variant="flat" size="lg">
+                        <Chip color={getBracketChipColor(selectedBracket)} variant="flat" size="lg">
                             {selectedBracket === "all" ? "Tous les brackets" : selectedBracket.toUpperCase()}
                         </Chip>
                     )}
@@ -177,7 +163,7 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
                                         <div className="flex items-center gap-2">
                                             <Chip
                                                 size="sm"
-                                                color={getBracketColor(bracket)}
+                                                color={getBracketChipColor(bracket)}
                                                 variant="dot"
                                             >
                                                 {bracket.toUpperCase()}

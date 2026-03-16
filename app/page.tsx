@@ -23,7 +23,7 @@ export default function Home() {
                 </div>
 
                 <p className={subtitle({ class: "text-center" })}>
-                    Tournoi officiel de la Gaming Assembly avec 5 phases progressives, brackets élites et système de promotion/relégation dynamique.
+                    Tournoi officiel de la Gaming Assembly avec 5 phases progressives, brackets elites et systeme de promotion/relégation dynamique.
                 </p>
 
                 <div className="flex gap-4">
@@ -34,7 +34,7 @@ export default function Home() {
                         size="lg"
                         variant="shadow"
                     >
-                        Voir les Classements
+                        Voir les classements
                     </Button>
                     <Button
                         as={Link}
@@ -42,7 +42,7 @@ export default function Home() {
                         size="lg"
                         variant="bordered"
                     >
-                        Calendrier des Matchs
+                        Calendrier des matchs
                     </Button>
                 </div>
             </section>
@@ -51,7 +51,7 @@ export default function Home() {
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border border-violet-500/20">
                     <CardBody className="text-center py-6">
-                        <p className="text-4xl font-bold text-violet-500">128</p>
+                        <p className="text-4xl font-bold text-violet-500">64-128</p>
                         <p className="text-sm text-default-500 mt-2">Joueurs au départ</p>
                     </CardBody>
                 </Card>
@@ -66,7 +66,7 @@ export default function Home() {
                 <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20">
                     <CardBody className="text-center py-6">
                         <p className="text-4xl font-bold text-green-500">3</p>
-                        <p className="text-sm text-default-500 mt-2">Brackets Finales</p>
+                        <p className="text-sm text-default-500 mt-2">Brackets finales</p>
                     </CardBody>
                 </Card>
 
@@ -94,10 +94,10 @@ export default function Home() {
                         <CardBody className="pt-4">
                             <h3 className="text-xl font-bold mb-2">Qualifications</h3>
                             <ul className="text-sm text-default-600 space-y-2">
-                                <li>• 128 joueurs → 16 lobbies</li>
-                                <li>• 6 games par phase</li>
+                                <li>• De 64 à 128 joueurs → lobbies de 8</li>
+                                <li>• 6 parties par phase</li>
                                 <li>• Top 32 → Bracket Master</li>
-                                <li>• Autres → Bracket Amateur</li>
+                                <li>• Slots manquants retirés par le bas</li>
                             </ul>
                         </CardBody>
                     </Card>
@@ -113,7 +113,7 @@ export default function Home() {
                                 <li>• 2 Brackets séparés</li>
                                 <li>• Système de relégation</li>
                                 <li>• Reset stratégique des points</li>
-                                <li>• Competition intense</li>
+                                <li>• Compétition intense</li>
                             </ul>
                         </CardBody>
                     </Card>
@@ -148,7 +148,7 @@ export default function Home() {
                         <CardBody className="gap-3">
                             <div className="flex items-center gap-3">
                                 <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                                    <span className="text-2xl">�</span>
+                                    <span className="text-2xl">🧩</span>
                                 </div>
                                 <div>
                                     <h4 className="font-semibold">Seeding Snake</h4>
@@ -169,7 +169,7 @@ export default function Home() {
                                 <div>
                                     <h4 className="font-semibold">Système de Points</h4>
                                     <p className="text-sm text-default-500">
-                                        8 pts (1er) à 1 pt (8e) + tie-breakers multiples
+                                        8 pts (1er) à 1 pt (8e) + tie-breaks multiples
                                     </p>
                                 </div>
                             </div>
@@ -201,7 +201,7 @@ export default function Home() {
                                 <div>
                                     <h4 className="font-semibold">Format Compétitif</h4>
                                     <p className="text-sm text-default-500">
-                                        Jusqu'à 7 games par phase, 8 joueurs par lobby
+                                        Jusqu'à 7 parties par phase, 8 joueurs par lobby
                                     </p>
                                 </div>
                             </div>
@@ -232,7 +232,7 @@ export default function Home() {
                                 size="lg"
                                 variant="shadow"
                             >
-                                Voir les Classements
+                                Voir les classements
                             </Button>
                             <Button
                                 as={Link}
@@ -240,7 +240,7 @@ export default function Home() {
                                 size="lg"
                                 variant="flat"
                             >
-                                Résultats des Matchs
+                                Résultats des matchs
                             </Button>
                         </div>
                     </CardBody>

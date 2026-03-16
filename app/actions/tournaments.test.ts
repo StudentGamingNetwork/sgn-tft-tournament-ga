@@ -1,0 +1,490 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("next/headers", () => ({
+  headers: vi.fn(async () => new Headers()),
+}));
+
+vi.mock("@/lib/auth", () => ({
+  auth: {
+    api: {
+      getSession: vi.fn(),
+    },
+  },
+}));
+
+vi.mock("@/lib/db", () => ({
+  db: {
+    insert: vi.fn(() => ({
+      values: vi.fn(),
+    })),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => ({
+          returning: vi.fn(),
+        })),
+      })),
+    })),
+    delete: vi.fn(() => ({
+      where: vi.fn(),
+    })),
+    query: {
+      phase: {
+        findMany: vi.fn(),
+        findFirst: vi.fn(),
+      },
+      tournamentRegistration: {
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+      },
+      bracket: {
+        findMany: vi.fn(),
+      },
+      team: {
+        findFirst: vi.fn(),
+      },
+    },
+  },
+}));
+
+vi.mock("@/lib/services/tournament-service", () => ({
+  createStandardTournament: vi.fn(),
+  startPhase: vi.fn(),
+  startPhase2FromPhase1: vi.fn(),
+  startPhase3FromPhase1And2: vi.fn(),
+  startPhase4FromPhase3: vi.fn(),
+  startPhase5FromPhase4: vi.fn(),
+}));
+
+vi.mock("@/lib/services/game-service", () => ({
+  submitGameResults: vi.fn(),
+}));
+
+vi.mock("@/lib/services/player-service", () => ({
+  createPlayer: vi.fn(),
+  getPlayerByRiotId: vi.fn(),
+  importPlayersFromCSV: vi.fn(),
+  updatePlayer: vi.fn(),
+}));
+
+const tournamentsActions = await import("@/app/actions/tournaments");
+const { auth } = await import("@/lib/auth");
+const { db } = await import("@/lib/db");
+const { createStandardTournament } = await import(
+  "@/lib/services/tournament-service"
+);
+const { submitGameResults } = await import("@/lib/services/game-service");
+const { getPlayerByRiotId } = await import("@/lib/services/player-service");
+const {
+  startPhase2FromPhase1,
+  startPhase3FromPhase1And2,
+  startPhase4FromPhase3,
+  startPhase5FromPhase4,
+} = await import("@/lib/services/tournament-service");
+
+const mockGetSession = vi.mocked(auth.api.getSession);
+const mockCreateStandardTournament = vi.mocked(createStandardTournament);
+const mockSubmitGameResults = vi.mocked(submitGameResults);
+const mockGetPlayerByRiotId = vi.mocked(getPlayerByRiotId);
+const mockStartPhase2FromPhase1 = vi.mocked(startPhase2FromPhase1);
+const mockStartPhase3FromPhase1And2 = vi.mocked(startPhase3FromPhase1And2);
+const mockStartPhase4FromPhase3 = vi.mocked(startPhase4FromPhase3);
+const mockStartPhase5FromPhase4 = vi.mocked(startPhase5FromPhase4);
+
+describe("tournaments actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(db.query.phase.findMany).mockResolvedValue([] as any);
+    vi.mocked(db.query.bracket.findMany).mockResolvedValue([] as any);
+  });
+
+  describe("startPhase1Action", () => {
+    it("refuse moins de 64 joueurs confirmes", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      vi.mocked(db.query.phase.findFirst).mockResolvedValue({
+        id: "p1",
+        order_index: 1,
+      } as any);
+      vi.mocked(db.query.tournamentRegistration.findMany).mockResolvedValue(
+        Array.from({ length: 56 }, (_, index) => ({
+          player_id: `p-${index}`,
+        })) as any,
+      );
+
+      const result = await tournamentsActions.startPhase1Action("p1", "t-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("minimum 64");
+    });
+
+    it("refuse un nombre de joueurs non multiple de 8", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      vi.mocked(db.query.phase.findFirst).mockResolvedValue({
+        id: "p1",
+        order_index: 1,
+      } as any);
+      vi.mocked(db.query.tournamentRegistration.findMany).mockResolvedValue(
+        Array.from({ length: 66 }, (_, index) => ({
+          player_id: `p-${index}`,
+        })) as any,
+      );
+
+      const result = await tournamentsActions.startPhase1Action("p1", "t-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("multiple de 8");
+    });
+  });
+
+  describe("auth guard", () => {
+    it("refuse createTournament sans session", async () => {
+      mockGetSession.mockResolvedValue(null as any);
+
+      await expect(
+        tournamentsActions.createTournament({
+          name: "Test",
+          year: "2026",
+          status: "upcoming",
+        }),
+      ).rejects.toThrow("Impossible de créer le tournoi");
+    });
+
+    it("autorise createTournament avec session", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockCreateStandardTournament.mockResolvedValue({
+        id: "t-1",
+        name: "Test",
+        year: "2026",
+        status: "upcoming",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
+      const result = await tournamentsActions.createTournament({
+        name: "Test",
+        year: "2026",
+        status: "upcoming",
+      });
+
+      expect(result.id).toBe("t-1");
+      expect(mockCreateStandardTournament).toHaveBeenCalledWith("Test", "2026");
+    });
+
+    it("refuse submitGameResultsAction sans session", async () => {
+      mockGetSession.mockResolvedValue(null as any);
+
+      const result = await tournamentsActions.submitGameResultsAction("g-1", [
+        { player_id: "p1", placement: 1 },
+        { player_id: "p2", placement: 2 },
+        { player_id: "p3", placement: 3 },
+        { player_id: "p4", placement: 4 },
+        { player_id: "p5", placement: 5 },
+        { player_id: "p6", placement: 6 },
+        { player_id: "p7", placement: 7 },
+        { player_id: "p8", placement: 8 },
+      ]);
+
+      expect(result.success).toBe(false);
+      expect(mockSubmitGameResults).not.toHaveBeenCalled();
+    });
+
+    it("refuse updateRegistrationStatus sans session", async () => {
+      mockGetSession.mockResolvedValue(null as any);
+
+      await expect(
+        tournamentsActions.updateRegistrationStatus("t-1", "p-1", "confirmed"),
+      ).rejects.toThrow("Impossible de mettre à jour le statut");
+    });
+  });
+
+  describe("importPlayersAndRegisterToTournament", () => {
+    it("retourne une erreur globale si non authentifié", async () => {
+      mockGetSession.mockResolvedValue(null as any);
+
+      const result =
+        await tournamentsActions.importPlayersAndRegisterToTournament("t-1", [
+          {
+            name: "Player One",
+            riot_id: "PlayerOne#EUW",
+            tier: "GOLD",
+            division: "I",
+            league_points: 50,
+          },
+        ]);
+
+      expect(result.success).toBe(false);
+      expect(result.errors[0]?.player).toBe("all");
+    });
+
+    it("met a jour/inscrit un joueur existant", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockGetPlayerByRiotId.mockResolvedValue({ id: "p-1" } as any);
+      vi.mocked(db.query.tournamentRegistration.findFirst).mockResolvedValue(
+        undefined as any,
+      );
+
+      const insertValues = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(db.insert).mockReturnValue({ values: insertValues } as any);
+
+      const result =
+        await tournamentsActions.importPlayersAndRegisterToTournament("t-1", [
+          {
+            name: "Player One",
+            riot_id: "PlayerOne#EUW",
+            tier: "GOLD",
+            division: "I",
+            league_points: 50,
+          },
+        ]);
+
+      expect(result.success).toBe(true);
+      expect(result.updated).toBe(1);
+      expect(result.registered).toBe(1);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("phase transition action wrappers", () => {
+    it("startPhase2Action mappe correctement les stats", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockStartPhase2FromPhase1.mockResolvedValue({
+        eliminatedPlayers: Array.from({ length: 32 }, (_, i) => ({
+          player_id: `e-${i}`,
+          rank: i + 1,
+        })),
+        qualifiedPlayers: Array.from({ length: 96 }, (_, i) => ({
+          player_id: `q-${i}`,
+          rank: i + 33,
+        })),
+        games: Array.from({ length: 12 }, (_, i) => ({ id: `g-${i}` })),
+      } as any);
+
+      const result = await tournamentsActions.startPhase2Action("p1", "p2");
+
+      expect(result.success).toBe(true);
+      expect(result.stats?.eliminatedCount).toBe(32);
+      expect(result.stats?.qualifiedCount).toBe(96);
+      expect(result.stats?.lobbyCount).toBe(12);
+    });
+
+    it("startPhase3Action mappe correctement les stats", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockStartPhase3FromPhase1And2.mockResolvedValue({
+        masterBracket: { players: Array.from({ length: 64 }, () => ({})) },
+        amateurBracket: { players: Array.from({ length: 64 }, () => ({})) },
+      } as any);
+
+      const result = await tournamentsActions.startPhase3Action(
+        "p1",
+        "p2",
+        "p3",
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.stats?.masterCount).toBe(64);
+      expect(result.stats?.amateurCount).toBe(64);
+    });
+
+    it("startPhase4Action mappe correctement les stats", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockStartPhase4FromPhase3.mockResolvedValue({
+        masterBracket: { players: Array.from({ length: 32 }, () => ({})) },
+        amateurBracket: { players: Array.from({ length: 64 }, () => ({})) },
+      } as any);
+
+      const result = await tournamentsActions.startPhase4Action("p3", "p4");
+
+      expect(result.success).toBe(true);
+      expect(result.stats?.masterCount).toBe(32);
+      expect(result.stats?.amateurCount).toBe(64);
+    });
+
+    it("startPhase5Action mappe correctement les stats", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockStartPhase5FromPhase4.mockResolvedValue({
+        challengerBracket: { players: Array.from({ length: 8 }, () => ({})) },
+        masterBracket: { players: Array.from({ length: 8 }, () => ({})) },
+        amateurBracket: { players: Array.from({ length: 8 }, () => ({})) },
+      } as any);
+
+      const result = await tournamentsActions.startPhase5Action("p4", "p5");
+
+      expect(result.success).toBe(true);
+      expect(result.stats?.challengerCount).toBe(8);
+      expect(result.stats?.masterCount).toBe(8);
+      expect(result.stats?.amateurCount).toBe(8);
+    });
+
+    it("retourne success=false quand le service de transition lève une erreur", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockStartPhase4FromPhase3.mockRejectedValue(new Error("transition ko"));
+
+      const result = await tournamentsActions.startPhase4Action("p3", "p4");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("transition ko");
+    });
+  });
+
+  describe("startNextPhaseAction", () => {
+    it("retourne une erreur si aucune phase n'existe", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([] as any);
+
+      const result = await tournamentsActions.startNextPhaseAction("t-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Aucune phase trouvée");
+    });
+
+    it("démarre la phase 2 quand la phase 1 est completed", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p1",
+          tournament_id: "t-1",
+          name: "Phase 1",
+          order_index: 1,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b1",
+              name: "common",
+              games: [{ id: "g1", game_number: 1, results: [{ id: "r1" }] }],
+            },
+          ],
+        },
+        {
+          id: "p2",
+          tournament_id: "t-1",
+          name: "Phase 2",
+          order_index: 2,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b2",
+              name: "common",
+              games: [],
+            },
+          ],
+        },
+      ] as any);
+
+      mockStartPhase2FromPhase1.mockResolvedValue({
+        eliminatedPlayers: Array.from({ length: 32 }, (_, i) => ({
+          player_id: `e-${i}`,
+          rank: i + 1,
+        })),
+        qualifiedPlayers: Array.from({ length: 96 }, (_, i) => ({
+          player_id: `q-${i}`,
+          rank: i + 33,
+        })),
+        games: Array.from({ length: 12 }, (_, i) => ({ id: `g-${i}` })),
+      } as any);
+
+      const result = await tournamentsActions.startNextPhaseAction("t-1");
+
+      expect(result.success).toBe(true);
+      expect(result.startedPhaseId).toBe("p2");
+      expect(result.startedPhaseOrder).toBe(2);
+      expect(mockStartPhase2FromPhase1).toHaveBeenCalledWith("p1", "p2");
+    });
+
+    it("retourne une erreur quand aucune phase n'est éligible", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p1",
+          tournament_id: "t-1",
+          name: "Phase 1",
+          order_index: 1,
+          total_games: 4,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b1",
+              name: "common",
+              games: [{ id: "g1", game_number: 1, results: [] }],
+            },
+          ],
+        },
+        {
+          id: "p2",
+          tournament_id: "t-1",
+          name: "Phase 2",
+          order_index: 2,
+          total_games: 4,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b2",
+              name: "common",
+              games: [],
+            },
+          ],
+        },
+      ] as any);
+
+      const result = await tournamentsActions.startNextPhaseAction("t-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Aucune phase éligible");
+    });
+
+    it("propage l'erreur de startPhase2Action", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p1",
+          tournament_id: "t-1",
+          name: "Phase 1",
+          order_index: 1,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b1",
+              name: "common",
+              games: [{ id: "g1", game_number: 1, results: [{ id: "r1" }] }],
+            },
+          ],
+        },
+        {
+          id: "p2",
+          tournament_id: "t-1",
+          name: "Phase 2",
+          order_index: 2,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b2",
+              name: "common",
+              games: [],
+            },
+          ],
+        },
+      ] as any);
+
+      mockStartPhase2FromPhase1.mockRejectedValue(
+        new Error("phase 2 impossible"),
+      );
+
+      const result = await tournamentsActions.startNextPhaseAction("t-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("phase 2 impossible");
+    });
+  });
+});

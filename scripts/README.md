@@ -27,14 +27,15 @@ Le script vous guide à travers les différentes étapes d'un tournoi :
 - Crée un tournoi avec ses 5 phases
 - Configure automatiquement les brackets (common, master, amateur, challenger)
 
-### 2️⃣ Générer et ajouter 128 joueurs
+### 2️⃣ Générer et ajouter des joueurs
 
-- Génère 128 joueurs fictifs avec des rangs aléatoires
+- Génère un palier supporté de joueurs fictifs avec des rangs aléatoires
+- Paliers supportés : 64, 72, 80, 88, 96, 104, 112, 120, 128
 - Les inscrit automatiquement au tournoi
 
 ### 3️⃣ Démarrer la Phase 1
 
-- Répartit les 128 joueurs dans des lobbies de 8
+- Répartit de 64 à 128 joueurs dans des lobbies de 8
 - Crée le premier jeu pour chaque lobby
 - Utilise la matrice de seeding de Phase 1
 
@@ -53,9 +54,10 @@ Le script vous guide à travers les différentes étapes d'un tournoi :
 - Vérifie que tous les jeux sont terminés
 - Applique les règles de qualification :
   - **Phase 2** : Les 96 derniers de la Phase 1
+  - **Phase 2** : Les qualifiés restants de la Phase 1 selon le palier
   - **Phase 3** : Split Master/Amateur basé sur le cumulatif Phase 1+2
     - Master : Top 32 de P1 + Top 32 de P2
-    - Amateur : Rangs 33-64 de P2
+    - Amateur : Reliquat de P2 après alimentation du Master
   - **Phase 4** : Basé sur les résultats de Phase 3
   - **Phase 5** : Finales (Challenger, Master, Amateur)
 
@@ -83,14 +85,14 @@ Le script vous guide à travers les différentes étapes d'un tournoi :
 
 Le tournoi suit la structure officielle :
 
-- **Phase 1** : 128 joueurs, 1 bracket (common), 6 jeux
-- **Phase 2** : 96 joueurs (96 derniers de P1), 1 bracket (common), 6 jeux
-- **Phase 3** : 128 joueurs, 2 brackets, 6 jeux, **RESET des points**
-  - Master : 64 joueurs (32 meilleurs P1 + 32 meilleurs P2)
-  - Amateur : 64 joueurs (rangs 33-96 P2)
-- **Phase 4** : 96 joueurs, 2 brackets, 6 jeux
+- **Phase 1** : de 64 à 128 joueurs, 1 bracket (common), lobbies de 8
+- **Phase 2** : taille variable selon le palier, 1 bracket (common)
+- **Phase 3** : split Master/Amateur, **RESET des points**
+  - Master : 64 joueurs tant que le palier le permet
+  - Amateur : absorbe les slots manquants par le bas
+- **Phase 4** : Master prioritaire à 32, Amateur variable puis plafonné à 64
   - Master : 32 joueurs (Top 32 P3 Master)
-  - Amateur : 64 joueurs (Top 32 P3 Amateur + rangs 33-64 P3 Master) **RESET**
+  - Amateur : relégués Master + meilleurs Amateur, **RESET**
 - **Phase 5** : 24 joueurs, 3 brackets, 6 jeux
   - Challenger : 8 joueurs (Top 8 P4 Master)
   - Master : 8 joueurs (rangs 9-16 P4 Master)

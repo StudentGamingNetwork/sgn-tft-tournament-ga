@@ -9,6 +9,7 @@ import type { GameWithResults } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
 import { submitGameResultsAction } from "@/app/actions/tournaments";
 import { EnterResultsModal } from "./EnterResultsModal";
+import { getBracketChipColor } from "@/utils/bracket-colors";
 
 interface GamesTabProps {
     games: GameWithResults[];
@@ -140,7 +141,7 @@ export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
                             </h3>
                             <div className="flex items-center gap-2">
                                 <Chip
-                                    color={game.bracket_name === "challenger" ? "success" : game.bracket_name === "master" ? "primary" : "warning"}
+                                    color={getBracketChipColor(game.bracket_name)}
                                     variant="flat"
                                 >
                                     {game.bracket_name.toUpperCase()}

@@ -46,6 +46,7 @@ const rl = readline.createInterface({
 let currentTournamentId: string | null = null;
 let currentPhaseId: string | null = null;
 let playerIds: string[] = [];
+let simulatedPlayerCount = 128;
 
 // Couleurs pour la console
 const colors = {
@@ -64,6 +65,18 @@ function log(message: string, color: keyof typeof colors = "reset") {
 
 function question(query: string): Promise<string> {
   return new Promise((resolve) => rl.question(query, resolve));
+}
+
+function validateSimulatedPlayerCount(playerCount: number): string | null {
+  if (!Number.isInteger(playerCount) || playerCount <= 0) {
+    return "Le nombre de joueurs doit etre un entier positif.";
+  }
+
+  if (playerCount % 8 !== 0) {
+    return "Le nombre de joueurs doit etre un multiple de 8.";
+  }
+
+  return null;
 }
 
 async function displayMenu() {
@@ -111,7 +124,7 @@ async function displayMenu() {
   log("Actions disponibles:", "bright");
   log("1️⃣  - Créer un nouveau tournoi", "blue");
   log("S - Sélectionner un tournoi existant", "blue");
-  log("2️⃣  - Générer et ajouter 128 joueurs", "blue");
+  log("2️⃣  - Générer et ajouter des joueurs (multiple de 8)", "blue");
   log("3️⃣  - Démarrer la Phase 1", "blue");
   log("4️⃣  - Soumettre les résultats d'un jeu", "blue");
   log("5️⃣  - Voir le leaderboard actuel", "blue");
@@ -265,7 +278,23 @@ async function generatePlayersAction() {
     return;
   }
 
-  log("\n👥 Génération de 128 joueurs...", "yellow");
+  const defaultCount = simulatedPlayerCount.toString();
+  const countInput = await question(
+    `Nombre de joueurs (multiple de 8) [${defaultCount}]: `,
+  );
+
+  const targetCount = Number.parseInt(countInput.trim() || defaultCount, 10);
+
+  const countValidationError = validateSimulatedPlayerCount(targetCount);
+  if (countValidationError) {
+    log(`\n❌ ${countValidationError}`, "red");
+    await pause();
+    return;
+  }
+
+  simulatedPlayerCount = targetCount;
+
+  log(`\n👥 Génération de ${targetCount} joueurs...`, "yellow");
 
   const tiers: Array<
     | "IRON"
@@ -294,7 +323,7 @@ async function generatePlayersAction() {
 
   playerIds = [];
 
-  for (let i = 0; i < 128; i++) {
+  for (let i = 0; i < targetCount; i++) {
     const tierIndex = Math.floor(Math.random() * tiers.length);
     const tier = tiers[tierIndex];
     const division =
@@ -322,11 +351,11 @@ async function generatePlayersAction() {
     playerIds.push(newPlayer.id);
 
     if ((i + 1) % 20 === 0) {
-      log(`   Créés: ${i + 1}/128`, "cyan");
+      log(`   Créés: ${i + 1}/${targetCount}`, "cyan");
     }
   }
 
-  log(`\n✅ 128 joueurs créés et enregistrés au tournoi!`, "green");
+  log(`\n✅ ${targetCount} joueurs créés et enregistrés au tournoi!`, "green");
   await pause();
 }
 
@@ -768,24 +797,11 @@ async function moveToNextPhaseAction() {
 
     // Logique spécifique selon la phase
     if (nextPhase.order_index === 2) {
-      // Phase 2: Prendre les 96 derniers de la phase 1
-      log("   Sélection des 96 derniers de la Phase 1...", "cyan");
-      const leaderboard = await getLeaderboard(currentPhaseId);
-      const phase2Leaderboard = leaderboard.slice(32, 128);
-
-      const brackets = await db.query.bracket.findMany({
-        where: eq(bracket.phase_id, nextPhase.id),
-      });
-
-      // IMPORTANT: Utiliser seedAndCreateFirstGameFromLeaderboard pour que le seeding
-      // soit basé sur le classement de Phase 1, pas sur les tier/LP Riot initiaux
-      const { seedAndCreateFirstGameFromLeaderboard } = await import(
-        "@/lib/services/seeding-service"
-      );
-      await seedAndCreateFirstGameFromLeaderboard(
-        nextPhase.id,
-        brackets[0].id,
-        phase2Leaderboard,
+      log("   Qualification Phase 2 selon le palier du tournoi...", "cyan");
+      const result = await startPhase2FromPhase1(currentPhaseId, nextPhase.id);
+      log(
+        `   🎯 Qualifiés: ${result.qualifiedPlayers.length} joueurs | Lobbies: ${result.games.length}`,
+        "green",
       );
     } else if (nextPhase.order_index === 3) {
       // Phase 3: Split Master/Amateur
@@ -965,7 +981,7 @@ async function startSpecificPhaseAction() {
         return;
       }
 
-      log("   Sélection des 96 derniers de la Phase 1...", "cyan");
+      log("   Qualification Phase 2 selon le palier du tournoi...", "cyan");
       const result = await startPhase2FromPhase1(phase1.id, targetPhase.id);
       log(
         `\n✅ Phase 2 démarrée: ${result.qualifiedPlayers.length} joueurs, ${result.games.length} lobbies`,

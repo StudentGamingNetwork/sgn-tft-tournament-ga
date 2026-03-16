@@ -2,7 +2,7 @@ import { Card } from "@heroui/card";
 import { Chip } from "@heroui/chip";
 import { Button } from "@heroui/button";
 import { Pagination } from "@heroui/pagination";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useTournamentGlobalResults } from "@/lib/hooks/useTournament";
 
 interface ResultsTabProps {
@@ -44,6 +44,59 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
         master: "Master",
         amateur: "Amateur",
         common: "Common",
+    };
+
+    const escapeCsvCell = (value: string | number): string => {
+        const text = String(value ?? "");
+        if (/[",\n]/.test(text)) {
+            return `"${text.replace(/"/g, '""')}"`;
+        }
+        return text;
+    };
+
+    const handleExportCsv = () => {
+        if (leaderboard.length === 0) return;
+
+        const header = [
+            "rang",
+            "joueur",
+            "riot_id",
+            "points",
+            "parties_jouees",
+            "top_1",
+            "top_4",
+            "placement_moyen",
+        ];
+
+        const lines = leaderboard.map((entry) => [
+            entry.rank,
+            entry.player_name,
+            entry.riot_id,
+            entry.total_points,
+            entry.games_played,
+            entry.top1_count,
+            entry.top4_count,
+            entry.games_played > 0 ? entry.avg_placement.toFixed(2) : "-",
+        ]);
+
+        const csvContent = [header, ...lines]
+            .map((row) => row.map((cell) => escapeCsvCell(cell)).join(","))
+            .join("\n");
+
+        const blob = new Blob([`\uFEFF${csvContent}`], {
+            type: "text/csv;charset=utf-8;",
+        });
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const timestamp = new Date().toISOString().slice(0, 10);
+
+        link.href = url;
+        link.download = `classement-${safeSelectedFilter}-${timestamp}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
     };
 
     const getFinalsSectionLabel = (rank: number): string => {
@@ -117,6 +170,15 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                         ))}
 
                         <div className="ml-auto flex items-center gap-2">
+                            <Button
+                                size="sm"
+                                variant="flat"
+                                color="primary"
+                                onPress={handleExportCsv}
+                                isDisabled={leaderboard.length === 0}
+                            >
+                                Exporter CSV
+                            </Button>
                             {[10, 25, 50].map((size) => (
                                 <Button
                                     key={size}
@@ -170,15 +232,15 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                             !!currentSectionLabel && currentSectionLabel !== previousSectionLabel;
 
                                         return (
-                                            <>
+                                            <Fragment key={entry.player_id}>
                                                 {shouldShowSectionHeader && (
-                                                    <tr key={`section-${currentSectionLabel}-${entry.rank}`} className="bg-default-100 border-y border-default-200">
+                                                    <tr key={`section-${currentSectionLabel}-${entry.player_id}`} className="bg-default-100 border-y border-default-200">
                                                         <td colSpan={8} className="py-2 px-2 text-xs font-semibold uppercase tracking-wide text-default-700">
                                                             {currentSectionLabel}
                                                         </td>
                                                     </tr>
                                                 )}
-                                                <tr key={entry.player_id} className="border-b border-default-100">
+                                                <tr className="border-b border-default-100">
                                                     <td className="py-2 pr-3 font-semibold">{entry.rank}</td>
                                                     <td className="py-2 pr-3">{entry.player_name}</td>
                                                     <td className="py-2 pr-3 text-default-500">{entry.riot_id}</td>
@@ -188,7 +250,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                                     <td className="py-2 pr-3">{entry.top4_count}</td>
                                                     <td className="py-2 pr-3">{entry.games_played > 0 ? entry.avg_placement.toFixed(2) : "-"}</td>
                                                 </tr>
-                                            </>
+                                            </Fragment>
                                         );
                                     })}
                                 </tbody>

@@ -126,7 +126,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                 }
 
                 const message = `Démarrer la Phase 2 ?\n\n` +
-                    `Les 96 derniers joueurs de la Phase 1 continueront.\n` +
+                    `Les joueurs qualifiés de la Phase 1 continueront selon le palier.\n` +
                     `Les 32 premiers seront qualifiés directement pour le bracket Master de la Phase 3.`;
 
                 if (!confirm(message)) {
@@ -155,11 +155,11 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
 
                 const message = `Démarrer la Phase 3 ?\n\n` +
                     `RESET des points - Nouveau départ pour tous !\n\n` +
-                    `🏅 Bracket MASTER (64 joueurs):\n` +
+                    `🏅 Bracket MASTER (jusqu'à 64 joueurs):\n` +
                     `   - Top 32 de la Phase 1\n` +
                     `   - Top 32 de la Phase 2\n\n` +
-                    `🥈 Bracket AMATEUR (64 joueurs):\n` +
-                    `   - 64 derniers de la Phase 2`;
+                    `🥈 Bracket AMATEUR (taille variable selon le palier):\n` +
+                    `   - Joueurs restants de la Phase 2`;
 
                 if (!confirm(message)) {
                     setIsStartingPhase(false);
@@ -187,9 +187,9 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                 const message = `Démarrer la Phase 4 ?\n\n` +
                     `🏅 Bracket MASTER (32 joueurs):\n` +
                     `   - Top 32 du bracket Master P3\n\n` +
-                    `🥈 Bracket AMATEUR (64 joueurs - RESET):\n` +
-                    `   - Top 32 du bracket Amateur P3\n` +
-                    `   - Rangs 33-64 du bracket Master P3 (relégués)`;
+                    `🥈 Bracket AMATEUR (taille variable - RESET):\n` +
+                    `   - Qualifiés du bracket Amateur P3\n` +
+                    `   - Relégués du bas du bracket Master P3`;
 
                 if (!confirm(message)) {
                     setIsStartingPhase(false);

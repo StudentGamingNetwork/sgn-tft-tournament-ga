@@ -2,22 +2,22 @@
 
 ## Vue d'ensemble
 
-Système de tournoi TFT à 5 phases avec éliminations progressives, fusions de brackets, relégations et resets de points stratégiques.
+Système de tournoi TFT à 5 phases avec éliminations progressives, fusions de brackets, relégations et resets de points stratégiques. Le tournoi supporte de 64 à 128 joueurs, toujours par multiple de 8.
 
 ## Flux du Tournoi
 
 ```
-Phase 1 (128 joueurs)
+Phase 1 (64 a 128 joueurs)
     ↓ [Passage du top 32 en Phase 3]
-Phase 2 (96 joueurs)
+Phase 2 (taille variable selon le palier)
     ↓ [Fusion P1+P2 / RESET points]
-Phase 3 (128 joueurs, 2 brackets)
+Phase 3 (64 joueurs en Master + Amateur variable)
     ├── Master (64): Top 32 P1 + Top 32 P2
-    └── Amateur (64): 64 derniers P2
+  └── Amateur (0 a 64): reliquat de P2
     ↓
-Phase 4 (96 joueurs, 2 brackets)
+Phase 4 (32 joueurs en Master + Amateur variable puis plafonne a 64)
     ├── Master (32): Top 32 P3 Master
-    └── Amateur (64, RESET): Top 32 P3 Amateur + 32 derniers P3 Master
+  └── Amateur (32 a 64, RESET): meilleurs P3 Amateur + 32 derniers P3 Master
     ↓
 Phase 5 (24 joueurs, 3 brackets - FINALES)
     ├── Challenger (8): Top 8 P4 Master
@@ -27,54 +27,68 @@ Phase 5 (24 joueurs, 3 brackets - FINALES)
 
 ## Détails par Phase
 
+## Table Par Palier
+
+| Joueurs | P2  | P3 Master | P3 Amateur | P4 Master | P4 Amateur | P5        |
+| ------- | --- | --------- | ---------- | --------- | ---------- | --------- |
+| 64      | 32  | 64        | 0          | 32        | 32         | 8 / 8 / 8 |
+| 72      | 40  | 64        | 8          | 32        | 40         | 8 / 8 / 8 |
+| 80      | 48  | 64        | 16         | 32        | 48         | 8 / 8 / 8 |
+| 88      | 56  | 64        | 24         | 32        | 56         | 8 / 8 / 8 |
+| 96      | 64  | 64        | 32         | 32        | 64         | 8 / 8 / 8 |
+| 104     | 72  | 64        | 40         | 32        | 64         | 8 / 8 / 8 |
+| 112     | 80  | 64        | 48         | 32        | 64         | 8 / 8 / 8 |
+| 120     | 88  | 64        | 56         | 32        | 64         | 8 / 8 / 8 |
+| 128     | 96  | 64        | 64         | 32        | 64         | 8 / 8 / 8 |
+
 ### Phase 1
 
-- **Joueurs** : 128 (tous les inscrits)
+- **Joueurs** : de 64 à 128 (tous les inscrits), par multiple de 8
 - **Bracket** : 1 (common)
-- **Lobbies** : 16 (8 joueurs par lobby)
+- **Lobbies** : nombre variable, toujours 8 joueurs par lobby
 - **Games** : 6 games
-- **Transition** : Les 32 premiers sont **promus** vers le bracket master de la phase 3, les 96 derniers passent en Phase 2
+- **Transition** : Les 32 premiers sont **promus** vers le bracket master de la phase 3, les autres passent en Phase 2 selon le palier du tournoi
 
 ### Phase 2
 
-- **Joueurs** : 96 (96 derniers de Phase 1)
+- **Joueurs** : taille variable selon le palier (de 32 à 96)
 - **Bracket** : 1 (common)
-- **Lobbies** : 12 (8 joueurs par lobby)
+- **Lobbies** : nombre variable (8 joueurs par lobby)
 - **Games** : 6 games
-- **Seeding** : Les joueurs conservent leur rang original de Phase 1 (seeds 33-128 au lieu de être renumerés 1-96)
+- **Seeding** : Les joueurs conservent leur rang original de Phase 1
   - Exemple: Le joueur classé 33ème en Phase 1 a le seed 33 en Phase 2 (pas le seed 1)
   - Cela préserve le contexte de classement et facilite le suivi des performances
 - **Transition** :
   - Top 32 P1 + Top 32 P2 → Master (64 joueurs)
-  - 64 derniers P2 → Amateur (64 joueurs)
+  - Reliquat de P2 → Amateur (0 à 64 joueurs)
   - **RESET des points** pour Phase 3
 
 ### Phase 3
 
-- **Joueurs** : 128 (fusion et split)
+- **Joueurs** : taille variable selon le palier
 - **Brackets** : 2
   - **Master** : 64 joueurs
     - Source : Top 32 Phase 1 + Top 32 Phase 2
     - Lobbies : 8 (8 joueurs par lobby)
   - **Amateur** : 64 joueurs
-    - Source : 64 derniers Phase 2
-    - Lobbies : 8 (8 joueurs par lobby)
+    - Source : reliquat Phase 2
+    - Lobbies : nombre variable (8 joueurs par lobby)
 - **Games** : 6 games par bracket
 - **Points** : RESET (nouveau départ)
 - **Transition** :
   - Top 32 Master → Phase 4 Master (32 joueurs)
-  - Top 32 Amateur + 32 derniers Master → Phase 4 Amateur (64 joueurs, RESET)
+  - Meilleurs Amateur + 32 derniers Master → Phase 4 Amateur (taille variable, RESET)
 
 ### Phase 4
 
-- **Joueurs** : 96
+- **Joueurs** : de 64 à 96 selon le palier
 - **Brackets** : 2
   - **Master** : 32 joueurs
     - Source : Top 32 Phase 3 Master
     - Lobbies : 4 (8 joueurs par lobby)
   - **Amateur** : 64 joueurs
-    - Source : Top 32 Phase 3 Amateur + 32 derniers Phase 3 Master
-    - Lobbies : 8 (8 joueurs par lobby)
+    - Source : meilleurs Phase 3 Amateur + 32 derniers Phase 3 Master
+    - Lobbies : nombre variable (8 joueurs par lobby)
     - **RESET des points** (relégation)
 - **Games** : 6 games par bracket
 - **Transition** :
@@ -119,10 +133,10 @@ Les resets de points interviennent aux moments suivants :
 - **Phase 1** : Classement par tier Riot (CHALLENGER → UNRANKED)
   - En cas d'égalité : classement par League Points (LP)
   - En cas d'égalité parfaite : tri alphabétique par nom
-  - Seeds: 1-128
+  - Seeds: 1-N
 - **Phases suivantes (2+)** : Basé sur le classement de la phase précédente
   - Les seeds originaux du leaderboard sont préservés
-  - Exemple: Phase 2 utilise seeds 33-128 (les 96 derniers de Phase 1)
+  - Exemple: Phase 2 utilise les seeds à partir du rang 33 de Phase 1
   - Cela maintient le contexte de performance à travers les phases
 
 ### Attribution des Lobbies
@@ -187,7 +201,6 @@ import { startPhase } from "@/lib/services/tournament-service";
 
 const phase1Result = await startPhase(phase1Id, {
   autoSeed: true,
-  lobbyCount: 16,
   playerIds: allPlayerIds,
 });
 ```
@@ -215,7 +228,7 @@ import {
 } from "@/lib/services/tournament-service";
 
 // Phase 1 → Phase 2
-const phase2 = await startPhase2FromPhase1(phase1Id, phase2Id, 12);
+const phase2 = await startPhase2FromPhase1(phase1Id, phase2Id);
 
 // Phase 2 → Phase 3
 const phase3 = await startPhase3FromPhase1And2(phase1Id, phase2Id, phase3Id, 8);

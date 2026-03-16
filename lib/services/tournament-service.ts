@@ -29,6 +29,7 @@ import {
   assignPlayersToLobbies,
 } from "./seeding-service";
 import { getLeaderboard, getCumulativeLeaderboard } from "./scoring-service";
+import { getTournamentStructureFromLeaderboardSize } from "./tournament-structure";
 
 /**
  * Crée un tournoi standard avec la structure de phases correcte :
@@ -225,15 +226,18 @@ export async function startPhase2FromPhase1(
 ) {
   // Obtenir le classement de Phase 1
   const phase1Leaderboard = await getLeaderboard(phase1Id);
+  const structure = getTournamentStructureFromLeaderboardSize(
+    phase1Leaderboard.length,
+  );
 
-  if (phase1Leaderboard.length < 128) {
-    throw new Error(
-      `Phase 1 should have 128 players, found ${phase1Leaderboard.length}`,
-    );
-  }
-
-  // Prendre les 96 derniers (éliminer les 32 premiers)
-  const phase2Leaderboard = phase1Leaderboard.slice(32); // Skip les 32 premiers
+  const eliminatedPlayers = phase1Leaderboard.slice(
+    0,
+    structure.phase2.eliminatedFromPhase1,
+  );
+  const phase2Leaderboard = phase1Leaderboard.slice(
+    structure.phase2.eliminatedFromPhase1,
+    structure.phase2.eliminatedFromPhase1 + structure.phase2.totalPlayers,
+  );
 
   // Obtenir le bracket de Phase 2
   const brackets = await db.query.bracket.findMany({
@@ -252,8 +256,8 @@ export async function startPhase2FromPhase1(
   );
 
   return {
-    eliminatedPlayers: phase1Leaderboard.slice(0, 32),
-    qualifiedPlayers: phase1Leaderboard.slice(32),
+    eliminatedPlayers,
+    qualifiedPlayers: phase2Leaderboard,
     games: result.games,
     seededPlayers: result.seededPlayers,
   };
@@ -269,21 +273,40 @@ export async function startPhase3FromPhase1And2(
   phase1Id: string,
   phase2Id: string,
   phase3Id: string,
-  lobbyCount: number = 8, // 64 joueurs / 8 = 8 lobbies par bracket
+  lobbyCount: number = 8,
 ) {
   // Get classements
   const phase1Leaderboard = await getLeaderboard(phase1Id);
   const phase2Leaderboard = await getLeaderboard(phase2Id);
+  const structure = getTournamentStructureFromLeaderboardSize(
+    phase1Leaderboard.length,
+  );
 
-  // Master bracket: Top 32 P1 + Top 32 P2
-  const top32Phase1 = phase1Leaderboard.slice(0, 32).map((p) => p.player_id);
-  const top32Phase2 = phase2Leaderboard.slice(0, 32).map((p) => p.player_id);
-  const masterPlayerIds = [...top32Phase1, ...top32Phase2]; // 64 joueurs
+  if (phase2Leaderboard.length !== structure.phase2.totalPlayers) {
+    throw new Error(
+      `Phase 2 should have ${structure.phase2.totalPlayers} players, found ${phase2Leaderboard.length}`,
+    );
+  }
 
-  // Amateur bracket: 64 derniers de P2
+  // Master bracket: fixed top block from P1 and P2
+  const phase1MasterQualifiers = phase1Leaderboard
+    .slice(0, structure.phase3.phase1MasterQualifiers)
+    .map((p) => p.player_id);
+  const phase2MasterQualifiers = phase2Leaderboard
+    .slice(0, structure.phase3.phase2MasterQualifiers)
+    .map((p) => p.player_id);
+  const masterPlayerIds = [
+    ...phase1MasterQualifiers,
+    ...phase2MasterQualifiers,
+  ];
+
+  // Amateur bracket: remaining P2 players after Master allocation
   const amateurPlayerIds = phase2Leaderboard
-    .slice(32, 96)
-    .map((p) => p.player_id); // 64 joueurs
+    .slice(
+      structure.phase3.phase2MasterQualifiers,
+      structure.phase3.phase2MasterQualifiers + structure.phase3.amateurPlayers,
+    )
+    .map((p) => p.player_id);
 
   // Obtenir les brackets de Phase 3
   const brackets = await db.query.bracket.findMany({
@@ -310,29 +333,33 @@ export async function startPhase3FromPhase1And2(
   );
 
   // Seed Amateur
-  const amateurSeededPlayers = await seedPlayersForPhase(
-    phase3Id,
-    amateurPlayerIds,
-  );
-  const amateurGames = await assignPlayersToLobbies(
-    phase3Id,
-    amateurBracket.id,
-    1,
-    amateurSeededPlayers,
-  );
+  const amateurSeededPlayers = amateurPlayerIds.length
+    ? await seedPlayersForPhase(phase3Id, amateurPlayerIds)
+    : [];
+  const amateurGames = amateurSeededPlayers.length
+    ? await assignPlayersToLobbies(
+        phase3Id,
+        amateurBracket.id,
+        1,
+        amateurSeededPlayers,
+      )
+    : [];
 
   return {
     masterBracket: {
       bracket: masterBracket,
       players: masterSeededPlayers,
       games: masterGames.map((g) => g.game),
-      source: "Top 32 P1 + Top 32 P2",
+      source: `Top ${structure.phase3.phase1MasterQualifiers} P1 + Top ${structure.phase3.phase2MasterQualifiers} P2`,
     },
     amateurBracket: {
       bracket: amateurBracket,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
-      source: "64 derniers P2",
+      source:
+        structure.phase3.amateurPlayers > 0
+          ? `${structure.phase3.amateurPlayers} derniers P2`
+          : "Aucun joueur amateur pour ce palier",
     },
   };
 }
@@ -362,18 +389,27 @@ export async function startPhase4FromPhase3(
   // Classements de Phase 3
   const masterLeaderboard = await getLeaderboard(phase3Id, phase3Master.id);
   const amateurLeaderboard = await getLeaderboard(phase3Id, phase3Amateur.id);
+  const structure = getTournamentStructureFromLeaderboardSize(
+    masterLeaderboard.length + amateurLeaderboard.length,
+  );
 
-  // Phase 4 Master: Top 32 de P3 Master
+  // Phase 4 Master: top block from P3 Master
   const phase4MasterPlayerIds = masterLeaderboard
-    .slice(0, 32)
+    .slice(0, structure.phase4.masterPlayers)
     .map((p) => p.player_id);
 
-  // Phase 4 Amateur: Top 32 P3 Amateur + 32 derniers P3 Master (RESET)
-  const top32Amateur = amateurLeaderboard.slice(0, 32).map((p) => p.player_id);
-  const bottom32Master = masterLeaderboard
-    .slice(32, 64)
+  // Phase 4 Amateur: relegated Master + top Amateur until capacity is reached
+  const topAmateur = amateurLeaderboard
+    .slice(0, structure.phase4.amateurQualifiedToPhase4)
     .map((p) => p.player_id);
-  const phase4AmateurPlayerIds = [...top32Amateur, ...bottom32Master]; // 64 joueurs
+  const bottom32Master = masterLeaderboard
+    .slice(
+      structure.phase4.masterPlayers,
+      structure.phase4.masterPlayers +
+        structure.phase4.masterRelegatedToAmateur,
+    )
+    .map((p) => p.player_id);
+  const phase4AmateurPlayerIds = [...topAmateur, ...bottom32Master];
 
   // Obtenir les brackets de Phase 4
   const phase4Brackets = await db.query.bracket.findMany({
@@ -387,11 +423,14 @@ export async function startPhase4FromPhase3(
     throw new Error("Phase 4 must have both master and amateur brackets");
   }
 
-  // Seed et créer game 1 pour Master (32 joueurs / 8 = 4 lobbies)
+  // Seed et créer game 1 pour Master
   // PAS DE RESET : on utilise le classement de Phase 3 Master pour le seeding des lobbies
   // Game 2 sera créée automatiquement quand toutes les lobbies de la game 1 seront terminées.
   // Games 3-4 seront créées plus tard avec seulement le top 16 via continuePhase4MasterBracket().
-  const top32MasterLeaderboard = masterLeaderboard.slice(0, 32);
+  const top32MasterLeaderboard = masterLeaderboard.slice(
+    0,
+    structure.phase4.masterPlayers,
+  );
   const masterSeededPlayers = await seedPlayersBasedOnLeaderboard(
     top32MasterLeaderboard,
   );
@@ -404,31 +443,32 @@ export async function startPhase4FromPhase3(
     masterSeededPlayers,
   );
 
-  // Seed et créer games pour Amateur (64 joueurs / 8 = 8 lobbies)
+  // Seed et créer games pour Amateur
   // RESET : on utilise le rank Riot initial pour le seeding des lobbies
-  const amateurSeededPlayers = await seedPlayersForPhase(
-    phase4Id,
-    phase4AmateurPlayerIds,
-  );
-  const amateurGames = await assignPlayersToLobbies(
-    phase4Id,
-    phase4Amateur.id,
-    1,
-    amateurSeededPlayers,
-  );
+  const amateurSeededPlayers = phase4AmateurPlayerIds.length
+    ? await seedPlayersForPhase(phase4Id, phase4AmateurPlayerIds)
+    : [];
+  const amateurGames = amateurSeededPlayers.length
+    ? await assignPlayersToLobbies(
+        phase4Id,
+        phase4Amateur.id,
+        1,
+        amateurSeededPlayers,
+      )
+    : [];
 
   return {
     masterBracket: {
       bracket: phase4Master,
       players: masterSeededPlayers,
       games: masterGames.map((g) => g.game),
-      source: "Top 32 P3 Master",
+      source: `Top ${structure.phase4.masterPlayers} P3 Master`,
     },
     amateurBracket: {
       bracket: phase4Amateur,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
-      source: "Top 32 P3 Amateur + 32 derniers P3 Master (RESET)",
+      source: `Top ${structure.phase4.amateurQualifiedToPhase4} P3 Amateur + ${structure.phase4.masterRelegatedToAmateur} derniers P3 Master (RESET)`,
     },
   };
 }
@@ -470,22 +510,23 @@ export async function continuePhase4MasterBracket(phase4Id: string) {
     throw new Error("Games 3-4 already exist for Phase 4 Master bracket");
   }
 
-  // R\u00e9cup\u00e9rer le leaderboard apr\u00e8s les games 1-2
+  // Recuperer le leaderboard apres les games 1-2
   const leaderboard = await getLeaderboard(phase4Id, phase4Master.id);
+  const masterTopCut = 16;
 
-  // Garder seulement le top 16
-  const top16Leaderboard = leaderboard.slice(0, 16);
+  // Garder seulement le top cut Master
+  const top16Leaderboard = leaderboard.slice(0, masterTopCut);
 
-  if (top16Leaderboard.length < 16) {
+  if (top16Leaderboard.length < masterTopCut) {
     throw new Error(
-      `Only ${top16Leaderboard.length} players found in leaderboard, need 16`,
+      `Only ${top16Leaderboard.length} players found in leaderboard, need ${masterTopCut}`,
     );
   }
 
-  // Seed les 16 joueurs
+  // Seed les joueurs qualifies pour le top cut Master
   const seededPlayers = await seedPlayersBasedOnLeaderboard(top16Leaderboard);
 
-  // Cr\u00e9er games 3 et 4 (16 joueurs / 8 = 2 lobbies par game)
+  // Creer games 3 et 4 pour le top cut Master
   const games3 = await assignPlayersToLobbies(
     phase4Id,
     phase4Master.id,
@@ -504,7 +545,7 @@ export async function continuePhase4MasterBracket(phase4Id: string) {
     bracket: phase4Master,
     players: seededPlayers,
     games: [...games3, ...games4].map((g) => g.game),
-    source: "Top 16 P4 Master apr\u00e8s games 1-2",
+    source: `Top ${masterTopCut} P4 Master apres games 1-2`,
   };
 }
 
@@ -534,20 +575,26 @@ export async function startPhase5FromPhase4(
   // Classements de Phase 4
   const masterLeaderboard = await getLeaderboard(phase4Id, phase4Master.id);
   const amateurLeaderboard = await getLeaderboard(phase4Id, phase4Amateur.id);
+  const structure = getTournamentStructureFromLeaderboardSize(
+    masterLeaderboard.length + amateurLeaderboard.length,
+  );
 
-  // Phase 5 Challenger: Top 8 P4 Master
+  // Phase 5 Challenger: top P4 Master
   const challengerPlayerIds = masterLeaderboard
-    .slice(0, 8)
+    .slice(0, structure.phase5.challengerPlayers)
     .map((p) => p.player_id);
 
-  // Phase 5 Master: Ranks 9-16 P4 Master
+  // Phase 5 Master: next block from P4 Master
   const phase5MasterPlayerIds = masterLeaderboard
-    .slice(8, 16)
+    .slice(
+      structure.phase5.challengerPlayers,
+      structure.phase5.challengerPlayers + structure.phase5.masterPlayers,
+    )
     .map((p) => p.player_id);
 
-  // Phase 5 Amateur: Top 8 P4 Amateur
+  // Phase 5 Amateur: top P4 Amateur
   const phase5AmateurPlayerIds = amateurLeaderboard
-    .slice(0, 8)
+    .slice(0, structure.phase5.amateurPlayers)
     .map((p) => p.player_id);
 
   // Obtenir les brackets de Phase 5
@@ -604,19 +651,19 @@ export async function startPhase5FromPhase4(
       bracket: challengerBracket,
       players: challengerSeededPlayers,
       games: challengerGames.map((g) => g.game),
-      source: "Top 8 P4 Master",
+      source: `Top ${structure.phase5.challengerPlayers} P4 Master`,
     },
     masterBracket: {
       bracket: masterBracket,
       players: masterSeededPlayers,
       games: masterGames.map((g) => g.game),
-      source: "Ranks 9-16 P4 Master",
+      source: `Ranks ${structure.phase5.challengerPlayers + 1}-${structure.phase5.challengerPlayers + structure.phase5.masterPlayers} P4 Master`,
     },
     amateurBracket: {
       bracket: amateurBracket,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
-      source: "Top 8 P4 Amateur",
+      source: `Top ${structure.phase5.amateurPlayers} P4 Amateur`,
     },
   };
 }

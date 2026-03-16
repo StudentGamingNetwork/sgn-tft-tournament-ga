@@ -12,6 +12,7 @@ import {
   bracket,
 } from "@/models/schema";
 import { eq, desc, sql, count, inArray } from "drizzle-orm";
+import { headers } from "next/headers";
 import type {
   Tournament,
   InsertTournament,
@@ -44,11 +45,36 @@ import {
   startPhase4FromPhase3,
   startPhase5FromPhase4,
 } from "@/lib/services/tournament-service";
+import { validateTournamentPlayerCount } from "@/lib/services/tournament-structure";
 import { submitGameResults } from "@/lib/services/game-service";
+import { auth } from "@/lib/auth";
 
 interface TournamentWithCount extends Tournament {
   registrationsCount: number;
   currentPhase: string | null;
+}
+
+async function requireAuthenticatedUser(): Promise<void> {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session?.user) {
+    throw new Error("Authentification requise");
+  }
+}
+
+async function requireTournamentNotStarted(
+  tournamentId: string,
+): Promise<void> {
+  const phases = await getTournamentPhases(tournamentId);
+  const hasStartedPhase = phases.some((p) => p.totalGamesCreated > 0);
+
+  if (hasStartedPhase) {
+    throw new Error(
+      "Le tournoi a deja demarre. Les inscriptions et la structure ne peuvent plus etre modifiees.",
+    );
+  }
 }
 
 export interface TournamentGlobalResults {
@@ -249,6 +275,13 @@ export async function getTournamentGlobalResults(
     let globalLeaderboard: LeaderboardEntry[];
 
     if (hierarchyPhase) {
+      // Within each hierarchy bucket, use the ranking of the current hierarchy phase
+      // (e.g., finals points in Phase 5) instead of cumulative points.
+      const hierarchyPhaseLeaderboard = await getLeaderboard(hierarchyPhase.id);
+      const hierarchyRankByPlayerId = new Map(
+        hierarchyPhaseLeaderboard.map((entry) => [entry.player_id, entry.rank]),
+      );
+
       const hierarchyGames = await db.query.game.findMany({
         where: eq(game.phase_id, hierarchyPhase.id),
         with: {
@@ -288,8 +321,13 @@ export async function getTournamentGlobalResults(
           return prioA - prioB;
         }
 
-        const rankA = a.rank > 0 ? a.rank : Number.MAX_SAFE_INTEGER;
-        const rankB = b.rank > 0 ? b.rank : Number.MAX_SAFE_INTEGER;
+        const hierarchyRankA = hierarchyRankByPlayerId.get(a.player_id);
+        const hierarchyRankB = hierarchyRankByPlayerId.get(b.player_id);
+
+        const rankA =
+          hierarchyRankA ?? (a.rank > 0 ? a.rank : Number.MAX_SAFE_INTEGER);
+        const rankB =
+          hierarchyRankB ?? (b.rank > 0 ? b.rank : Number.MAX_SAFE_INTEGER);
 
         if (rankA !== rankB) {
           return rankA - rankB;
@@ -384,6 +422,8 @@ export async function createTournament(data: {
   status: "upcoming" | "ongoing" | "completed";
 }): Promise<Tournament> {
   try {
+    await requireAuthenticatedUser();
+
     // Always create tournaments with the full standard phase/bracket structure.
     const createdTournament = await createStandardTournament(
       data.name,
@@ -419,6 +459,8 @@ export async function updateTournament(
   data: Partial<InsertTournament>,
 ): Promise<Tournament> {
   try {
+    await requireAuthenticatedUser();
+
     const result = await db
       .update(tournament)
       .set(data)
@@ -441,6 +483,8 @@ export async function updateTournament(
  */
 export async function deleteTournament(id: string): Promise<void> {
   try {
+    await requireAuthenticatedUser();
+
     await db.delete(tournament).where(eq(tournament.id, id));
   } catch (error) {
     console.error("Error deleting tournament:", error);
@@ -475,6 +519,9 @@ export async function registerPlayerToTournament(
   playerId: string,
 ): Promise<void> {
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
     await db.insert(tournamentRegistration).values({
       tournament_id: tournamentId,
       player_id: playerId,
@@ -494,6 +541,9 @@ export async function unregisterPlayerFromTournament(
   playerId: string,
 ): Promise<void> {
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
     await db
       .delete(tournamentRegistration)
       .where(
@@ -571,6 +621,9 @@ export async function createPlayerAndRegister(
   },
 ): Promise<{ success: boolean; error?: string; playerId?: string }> {
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
     // Validate player data
     const validation = validatePlayerData({
       name: playerData.name,
@@ -676,6 +729,9 @@ export async function importPlayersAndRegisterToTournament(
   };
 
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
     for (const playerData of csvData) {
       try {
         // Check if player exists
@@ -740,6 +796,9 @@ export async function updateRegistrationStatus(
   status: RegistrationStatusType,
 ): Promise<void> {
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
     await db
       .update(tournamentRegistration)
       .set({
@@ -762,6 +821,9 @@ export async function confirmAllPlayersInTournament(
   tournamentId: string,
 ): Promise<{ success: boolean; count: number; error?: string }> {
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
     const result = await db
       .update(tournamentRegistration)
       .set({
@@ -789,6 +851,9 @@ export async function unconfirmAllPlayersInTournament(
   tournamentId: string,
 ): Promise<{ success: boolean; count: number; error?: string }> {
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
     const result = await db
       .update(tournamentRegistration)
       .set({
@@ -816,6 +881,9 @@ export async function unregisterAllPlayersFromTournament(
   tournamentId: string,
 ): Promise<{ success: boolean; count: number; error?: string }> {
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
     const result = await db
       .delete(tournamentRegistration)
       .where(eq(tournamentRegistration.tournament_id, tournamentId))
@@ -847,6 +915,8 @@ export async function updatePlayerInfo(
   },
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAuthenticatedUser();
+
     // Validate player data
     const validation = validatePlayerData({
       name: playerData.name,
@@ -1046,6 +1116,9 @@ export async function createPhase(data: { tournament_id: string }): Promise<{
   phaseName?: string;
 }> {
   try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(data.tournament_id);
+
     const standardPhaseTemplates = [
       {
         order_index: 1,
@@ -1140,6 +1213,18 @@ export async function createPhase(data: { tournament_id: string }): Promise<{
  */
 export async function deletePhase(phaseId: string): Promise<void> {
   try {
+    await requireAuthenticatedUser();
+
+    const phaseData = await db.query.phase.findFirst({
+      where: eq(phase.id, phaseId),
+    });
+
+    if (!phaseData || !phaseData.tournament_id) {
+      throw new Error("Phase introuvable");
+    }
+
+    await requireTournamentNotStarted(phaseData.tournament_id);
+
     await db.delete(phase).where(eq(phase.id, phaseId));
   } catch (error) {
     console.error("Error deleting phase:", error);
@@ -1158,6 +1243,21 @@ export async function updatePhase(
   },
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAuthenticatedUser();
+
+    const phaseData = await db.query.phase.findFirst({
+      where: eq(phase.id, phaseId),
+    });
+
+    if (!phaseData || !phaseData.tournament_id) {
+      return {
+        success: false,
+        error: "Phase introuvable",
+      };
+    }
+
+    await requireTournamentNotStarted(phaseData.tournament_id);
+
     const updateData: any = {
       updatedAt: new Date(),
     };
@@ -1224,6 +1324,8 @@ export async function startPhase1Action(
   tournamentId: string,
 ): Promise<{ success: boolean; error?: string; lobbyCount?: number }> {
   try {
+    await requireAuthenticatedUser();
+
     // 1. Vérifier que c'est bien la Phase 1
     const phaseData = await db.query.phase.findFirst({
       where: eq(phase.id, phaseId),
@@ -1253,12 +1355,14 @@ export async function startPhase1Action(
       };
     }
 
-    if (confirmedPlayers.length < 8) {
+    if (confirmedPlayers.length < 64) {
       return {
         success: false,
-        error: `Pas assez de joueurs confirmés (minimum 8, actuellement ${confirmedPlayers.length})`,
+        error: `Pas assez de joueurs confirmés (minimum 64, actuellement ${confirmedPlayers.length})`,
       };
     }
+
+    validateTournamentPlayerCount(confirmedPlayers.length);
 
     // 3. Calculer le nombre de lobbies (8 joueurs par lobby)
     const lobbyCount = Math.floor(confirmedPlayers.length / 8);
@@ -1298,7 +1402,7 @@ export async function startPhase1Action(
 
 /**
  * Démarrer la Phase 2 à partir de la Phase 1
- * Sélectionne les 96 derniers joueurs de la Phase 1
+ * Sélectionne les qualifiés restants de la Phase 1 selon le palier de joueurs
  */
 export async function startPhase2Action(
   phase1Id: string,
@@ -1313,6 +1417,8 @@ export async function startPhase2Action(
   };
 }> {
   try {
+    await requireAuthenticatedUser();
+
     const result = await startPhase2FromPhase1(phase1Id, phase2Id);
 
     return {
@@ -1349,11 +1455,13 @@ export async function startPhase3Action(
   stats?: { masterCount: number; amateurCount: number };
 }> {
   try {
+    await requireAuthenticatedUser();
+
     const result = await startPhase3FromPhase1And2(
       phase1Id,
       phase2Id,
       phase3Id,
-      8, // 64 joueurs / 8 = 8 lobbies par bracket
+      8,
     );
 
     return {
@@ -1388,6 +1496,8 @@ export async function startPhase4Action(
   stats?: { masterCount: number; amateurCount: number };
 }> {
   try {
+    await requireAuthenticatedUser();
+
     const result = await startPhase4FromPhase3(phase3Id, phase4Id);
 
     return {
@@ -1426,6 +1536,8 @@ export async function startPhase5Action(
   };
 }> {
   try {
+    await requireAuthenticatedUser();
+
     const result = await startPhase5FromPhase4(phase4Id, phase5Id);
 
     return {
@@ -1459,6 +1571,8 @@ export async function startNextPhaseAction(tournamentId: string): Promise<{
   startedPhaseOrder?: number;
 }> {
   try {
+    await requireAuthenticatedUser();
+
     const phases = await getTournamentPhases(tournamentId);
 
     if (phases.length === 0) {
@@ -1854,6 +1968,8 @@ export async function submitGameResultsAction(
   gameResults: GameResult[],
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    await requireAuthenticatedUser();
+
     await submitGameResults(gameId, gameResults);
     return { success: true };
   } catch (error) {
