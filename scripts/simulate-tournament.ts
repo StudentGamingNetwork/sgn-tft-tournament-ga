@@ -67,6 +67,28 @@ function question(query: string): Promise<string> {
   return new Promise((resolve) => rl.question(query, resolve));
 }
 
+function getFriendlySimulationError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message.includes("Previous phase is not completed")) {
+    return "Impossible de demarrer cette phase: la phase precedente n'est pas terminee.";
+  }
+
+  if (message.includes("Phase already started")) {
+    return "Impossible de demarrer cette phase: elle est deja demarree ou terminee.";
+  }
+
+  if (message.includes("Previous phase mismatch")) {
+    return "Impossible de demarrer cette phase: la phase precedente fournie ne correspond pas a la sequence du tournoi.";
+  }
+
+  if (message.includes("Previous phase not found")) {
+    return "Impossible de demarrer cette phase: la phase precedente est introuvable.";
+  }
+
+  return message;
+}
+
 function validateSimulatedPlayerCount(playerCount: number): string | null {
   if (!Number.isInteger(playerCount) || playerCount <= 0) {
     return "Le nombre de joueurs doit etre un entier positif.";
@@ -394,7 +416,7 @@ async function startPhase1Action() {
     });
     log(`   ${games.length} jeux créés pour cette phase`, "cyan");
   } catch (error: any) {
-    log(`\n❌ Erreur: ${error.message}`, "red");
+    log(`\n❌ ${getFriendlySimulationError(error)}`, "red");
   }
 
   await pause();
@@ -875,7 +897,7 @@ async function moveToNextPhaseAction() {
 
     log(`\n✅ Phase ${nextPhase.name} démarrée!`, "green");
   } catch (error: any) {
-    log(`\n❌ Erreur: ${error.message}`, "red");
+    log(`\n❌ ${getFriendlySimulationError(error)}`, "red");
     console.error(error);
   }
 
@@ -1070,7 +1092,7 @@ async function startSpecificPhaseAction() {
 
     currentPhaseId = targetPhase.id;
   } catch (error: any) {
-    log(`\n❌ Erreur: ${error.message}`, "red");
+    log(`\n❌ ${getFriendlySimulationError(error)}`, "red");
     console.error(error);
   }
 

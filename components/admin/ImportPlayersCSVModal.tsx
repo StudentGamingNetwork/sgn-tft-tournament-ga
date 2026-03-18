@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from "@heroui/modal";
 import { Button } from "@heroui/button";
 import { Card } from "@heroui/card";
 import { Checkbox } from "@heroui/checkbox";
 import { FileUp, AlertCircle, CheckCircle, Upload } from "lucide-react";
 import { importPlayersAndRegisterToTournament } from "@/app/actions/tournaments";
-import { parsePlayersCSV } from "@/utils/validation";
+import {
+    buildDefaultPlayerCsvMapping,
+    extractCsvHeaders,
+    parsePlayersCSV,
+    type PlayerCsvColumn,
+    type PlayerCsvColumnMapping,
+    PLAYER_CSV_REQUIRED_COLUMNS,
+} from "@/utils/validation";
 import type { PlayerCSVImport, PlayerValidationError } from "@/types/tournament";
 
 interface ImportPlayersCSVModalProps {
@@ -23,7 +30,24 @@ export function ImportPlayersCSVModal({
     onSuccess,
     tournamentId,
 }: ImportPlayersCSVModalProps) {
+    const fieldDefinitions: Array<{
+        key: PlayerCsvColumn;
+        label: string;
+        required: boolean;
+    }> = [
+        { key: "name", label: "name", required: true },
+        { key: "riot_id", label: "riot_id", required: true },
+        { key: "tier", label: "tier", required: true },
+        { key: "division", label: "division", required: false },
+        { key: "league_points", label: "league_points", required: false },
+        { key: "discord_tag", label: "discord_tag", required: false },
+        { key: "team_name", label: "team_name", required: false },
+    ];
+
     const [file, setFile] = useState<File | null>(null);
+    const [csvContent, setCsvContent] = useState("");
+    const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+    const [columnMapping, setColumnMapping] = useState<PlayerCsvColumnMapping | null>(null);
     const [csvData, setCsvData] = useState<PlayerCSVImport[]>([]);
     const [validationErrors, setValidationErrors] = useState<PlayerValidationError[]>([]);
     const [isImporting, setIsImporting] = useState(false);
@@ -35,19 +59,9 @@ export function ImportPlayersCSVModal({
     } | null>(null);
     const [updateExisting, setUpdateExisting] = useState(true);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const selectedFile = e.target.files?.[0];
-        if (!selectedFile) return;
-
-        setFile(selectedFile);
-        setImportResult(null);
-        setValidationErrors([]);
-
-        // Read and parse CSV
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const content = event.target?.result as string;
-            const parseResult = parsePlayersCSV(content);
+    const parseWithMapping = useCallback(
+        (content: string, mapping: PlayerCsvColumnMapping) => {
+            const parseResult = parsePlayersCSV(content, mapping);
 
             if (parseResult.success && parseResult.data) {
                 setCsvData(parseResult.data);
@@ -56,8 +70,63 @@ export function ImportPlayersCSVModal({
                 setValidationErrors(parseResult.errors);
                 setCsvData([]);
             }
+        },
+        [],
+    );
+
+    const hasRequiredMapping = useMemo(() => {
+        if (!columnMapping) {
+            return false;
+        }
+
+        return PLAYER_CSV_REQUIRED_COLUMNS.every((column) => {
+            const mappedHeader = columnMapping[column];
+            return !!mappedHeader && csvHeaders.includes(mappedHeader);
+        });
+    }, [columnMapping, csvHeaders]);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const selectedFile = e.target.files?.[0];
+        if (!selectedFile) return;
+
+        setFile(selectedFile);
+        setCsvContent("");
+        setCsvHeaders([]);
+        setColumnMapping(null);
+        setCsvData([]);
+        setImportResult(null);
+        setValidationErrors([]);
+
+        // Read and parse CSV
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const content = event.target?.result as string;
+            const headers = extractCsvHeaders(content);
+            const defaultMapping = buildDefaultPlayerCsvMapping(headers);
+
+            setCsvContent(content);
+            setCsvHeaders(headers);
+            setColumnMapping(defaultMapping);
+            parseWithMapping(content, defaultMapping);
         };
         reader.readAsText(selectedFile);
+    };
+
+    const handleMappingChange = (field: PlayerCsvColumn, header: string) => {
+        if (!columnMapping) {
+            return;
+        }
+
+        const updatedMapping: PlayerCsvColumnMapping = {
+            ...columnMapping,
+            [field]: header || null,
+        };
+
+        setColumnMapping(updatedMapping);
+
+        if (csvContent) {
+            parseWithMapping(csvContent, updatedMapping);
+        }
     };
 
     const handleImport = async () => {
@@ -85,6 +154,9 @@ export function ImportPlayersCSVModal({
 
     const resetModal = () => {
         setFile(null);
+        setCsvContent("");
+        setCsvHeaders([]);
+        setColumnMapping(null);
         setCsvData([]);
         setValidationErrors([]);
         setImportResult(null);
@@ -179,6 +251,46 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                 />
                             </label>
                         </div>
+
+                        {/* Mapping des colonnes */}
+                        {csvHeaders.length > 0 && columnMapping && (
+                            <Card className="p-4 bg-default-50">
+                                <h3 className="font-semibold mb-2">Mapping des colonnes CSV</h3>
+                                <p className="text-sm text-default-600 mb-3">
+                                    Associez les colonnes de votre fichier aux colonnes attendues.
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {fieldDefinitions.map((field) => (
+                                        <div key={field.key} className="flex flex-col gap-1">
+                                            <label className="text-sm font-medium">
+                                                {field.label} {field.required ? "*" : "(optionnel)"}
+                                            </label>
+                                            <select
+                                                value={columnMapping[field.key] || ""}
+                                                onChange={(event) =>
+                                                    handleMappingChange(field.key, event.target.value)
+                                                }
+                                                className="w-full rounded-md border border-default-300 bg-default-100 text-foreground px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                            >
+                                                <option value="">
+                                                    {field.required ? "Sélectionner une colonne" : "Non mappé"}
+                                                </option>
+                                                {csvHeaders.map((header) => (
+                                                    <option key={`${field.key}-${header}`} value={header}>
+                                                        {header}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    ))}
+                                </div>
+                                {!hasRequiredMapping && (
+                                    <p className="text-danger text-sm mt-3">
+                                        Les colonnes obligatoires (name, riot_id, tier) doivent être mappées.
+                                    </p>
+                                )}
+                            </Card>
+                        )}
 
                         {/* Options */}
                         {csvData.length > 0 && (
@@ -309,7 +421,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                             color="primary"
                             onPress={handleImport}
                             isLoading={isImporting}
-                            isDisabled={csvData.length === 0 || validationErrors.length > 0}
+                            isDisabled={csvData.length === 0 || validationErrors.length > 0 || !hasRequiredMapping}
                             startContent={!isImporting && <FileUp size={18} />}
                         >
                             Importer {csvData.length} joueur(s)

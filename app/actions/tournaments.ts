@@ -77,6 +77,116 @@ async function requireTournamentNotStarted(
   }
 }
 
+async function validatePhaseStartEligibility(
+  targetPhaseId: string,
+  options?: {
+    expectedPreviousPhaseId?: string;
+  },
+): Promise<{ valid: true; tournamentId: string } | { valid: false; error: string }> {
+  const targetPhaseData = await db.query.phase.findFirst({
+    where: eq(phase.id, targetPhaseId),
+  });
+
+  if (!targetPhaseData?.tournament_id) {
+    return { valid: false, error: "Phase introuvable" };
+  }
+
+  const phases = await getTournamentPhases(targetPhaseData.tournament_id);
+  const targetPhase = phases.find((p) => p.id === targetPhaseId);
+
+  if (!targetPhase) {
+    return { valid: false, error: "Phase introuvable" };
+  }
+
+  if (targetPhase.status !== "not_started") {
+    return {
+      valid: false,
+      error: "Cette phase est déjà démarrée ou terminée",
+    };
+  }
+
+  if (targetPhase.order_index > 1) {
+    const previousPhase = phases.find(
+      (p) => p.order_index === targetPhase.order_index - 1,
+    );
+
+    if (!previousPhase) {
+      return {
+        valid: false,
+        error: "Phase précédente introuvable",
+      };
+    }
+
+    if (
+      options?.expectedPreviousPhaseId &&
+      previousPhase.id !== options.expectedPreviousPhaseId
+    ) {
+      return {
+        valid: false,
+        error: "La phase précédente fournie ne correspond pas au tournoi",
+      };
+    }
+
+    if (previousPhase.status !== "completed") {
+      return {
+        valid: false,
+        error: "La phase précédente n'est pas terminée",
+      };
+    }
+  }
+
+  return { valid: true, tournamentId: targetPhaseData.tournament_id };
+}
+
+async function syncTournamentStatusFromPhases(
+  tournamentId: string,
+): Promise<void> {
+  const phases = await getTournamentPhases(tournamentId);
+  const hasStartedPhase = phases.some((p) => p.totalGamesCreated > 0);
+  const phase5 = phases.find((p) => p.order_index === 5);
+
+  const isCompleted =
+    !!phase5 &&
+    phase5.totalGamesExpected > 0 &&
+    phase5.gamesWithResults >= phase5.totalGamesExpected;
+
+  let expectedStatus: "upcoming" | "ongoing" | "completed" = "upcoming";
+
+  if (isCompleted) {
+    expectedStatus = "completed";
+  } else if (hasStartedPhase) {
+    expectedStatus = "ongoing";
+  }
+
+  const currentTournament = await db.query.tournament.findFirst({
+    where: eq(tournament.id, tournamentId),
+  });
+
+  if (!currentTournament || currentTournament.status === expectedStatus) {
+    return;
+  }
+
+  await db
+    .update(tournament)
+    .set({
+      status: expectedStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(tournament.id, tournamentId));
+}
+
+async function syncTournamentStatusFromPhaseId(phaseId: string): Promise<void> {
+  const phaseData = await db.query.phase.findFirst({
+    where: eq(phase.id, phaseId),
+  });
+
+  if (!phaseData?.tournament_id) {
+    return;
+  }
+
+  await syncTournamentStatusFromPhases(phaseData.tournament_id);
+}
+
 export interface TournamentGlobalResults {
   activePhase: {
     id: string;
@@ -1342,6 +1452,18 @@ export async function startPhase1Action(
       };
     }
 
+    if (phaseData.tournament_id !== tournamentId) {
+      return {
+        success: false,
+        error: "La phase ne correspond pas au tournoi",
+      };
+    }
+
+    const eligibility = await validatePhaseStartEligibility(phaseId);
+    if (!eligibility.valid) {
+      return { success: false, error: eligibility.error };
+    }
+
     // 2. Récupérer les joueurs confirmés
     const confirmedPlayers = await db.query.tournamentRegistration.findMany({
       where: sql`${tournamentRegistration.tournament_id} = ${tournamentId} AND ${tournamentRegistration.status} = 'confirmed'`,
@@ -1387,6 +1509,8 @@ export async function startPhase1Action(
       playerIds: playerIds,
     });
 
+    await syncTournamentStatusFromPhases(tournamentId);
+
     return { success: true, lobbyCount };
   } catch (error) {
     console.error("Error starting phase:", error);
@@ -1419,7 +1543,16 @@ export async function startPhase2Action(
   try {
     await requireAuthenticatedUser();
 
+    const eligibility = await validatePhaseStartEligibility(phase2Id, {
+      expectedPreviousPhaseId: phase1Id,
+    });
+    if (!eligibility.valid) {
+      return { success: false, error: eligibility.error };
+    }
+
     const result = await startPhase2FromPhase1(phase1Id, phase2Id);
+
+    await syncTournamentStatusFromPhaseId(phase2Id);
 
     return {
       success: true,
@@ -1457,12 +1590,21 @@ export async function startPhase3Action(
   try {
     await requireAuthenticatedUser();
 
+    const eligibility = await validatePhaseStartEligibility(phase3Id, {
+      expectedPreviousPhaseId: phase2Id,
+    });
+    if (!eligibility.valid) {
+      return { success: false, error: eligibility.error };
+    }
+
     const result = await startPhase3FromPhase1And2(
       phase1Id,
       phase2Id,
       phase3Id,
       8,
     );
+
+    await syncTournamentStatusFromPhaseId(phase3Id);
 
     return {
       success: true,
@@ -1498,7 +1640,16 @@ export async function startPhase4Action(
   try {
     await requireAuthenticatedUser();
 
+    const eligibility = await validatePhaseStartEligibility(phase4Id, {
+      expectedPreviousPhaseId: phase3Id,
+    });
+    if (!eligibility.valid) {
+      return { success: false, error: eligibility.error };
+    }
+
     const result = await startPhase4FromPhase3(phase3Id, phase4Id);
+
+    await syncTournamentStatusFromPhaseId(phase4Id);
 
     return {
       success: true,
@@ -1538,7 +1689,16 @@ export async function startPhase5Action(
   try {
     await requireAuthenticatedUser();
 
+    const eligibility = await validatePhaseStartEligibility(phase5Id, {
+      expectedPreviousPhaseId: phase4Id,
+    });
+    if (!eligibility.valid) {
+      return { success: false, error: eligibility.error };
+    }
+
     const result = await startPhase5FromPhase4(phase4Id, phase5Id);
+
+    await syncTournamentStatusFromPhaseId(phase5Id);
 
     return {
       success: true,
@@ -1971,6 +2131,15 @@ export async function submitGameResultsAction(
     await requireAuthenticatedUser();
 
     await submitGameResults(gameId, gameResults);
+
+    const gameData = await db.query.game.findFirst({
+      where: eq(game.id, gameId),
+    });
+
+    if (gameData?.phase_id) {
+      await syncTournamentStatusFromPhaseId(gameData.phase_id);
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Error submitting game results:", error);

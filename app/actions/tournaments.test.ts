@@ -28,8 +28,14 @@ vi.mock("@/lib/db", () => ({
       where: vi.fn(),
     })),
     query: {
+      tournament: {
+        findFirst: vi.fn(),
+      },
       phase: {
         findMany: vi.fn(),
+        findFirst: vi.fn(),
+      },
+      game: {
         findFirst: vi.fn(),
       },
       tournamentRegistration: {
@@ -75,6 +81,7 @@ const { createStandardTournament } = await import(
 const { submitGameResults } = await import("@/lib/services/game-service");
 const { getPlayerByRiotId } = await import("@/lib/services/player-service");
 const {
+  startPhase,
   startPhase2FromPhase1,
   startPhase3FromPhase1And2,
   startPhase4FromPhase3,
@@ -85,6 +92,7 @@ const mockGetSession = vi.mocked(auth.api.getSession);
 const mockCreateStandardTournament = vi.mocked(createStandardTournament);
 const mockSubmitGameResults = vi.mocked(submitGameResults);
 const mockGetPlayerByRiotId = vi.mocked(getPlayerByRiotId);
+const mockStartPhase = vi.mocked(startPhase);
 const mockStartPhase2FromPhase1 = vi.mocked(startPhase2FromPhase1);
 const mockStartPhase3FromPhase1And2 = vi.mocked(startPhase3FromPhase1And2);
 const mockStartPhase4FromPhase3 = vi.mocked(startPhase4FromPhase3);
@@ -94,7 +102,16 @@ describe("tournaments actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(db.query.phase.findMany).mockResolvedValue([] as any);
+    vi.mocked(db.query.phase.findFirst).mockResolvedValue({
+      id: "phase-default",
+      tournament_id: "t-1",
+      order_index: 1,
+    } as any);
     vi.mocked(db.query.bracket.findMany).mockResolvedValue([] as any);
+    vi.mocked(db.query.game.findFirst).mockResolvedValue(undefined as any);
+    vi.mocked(db.query.tournament.findFirst).mockResolvedValue(
+      undefined as any,
+    );
   });
 
   describe("startPhase1Action", () => {
@@ -103,12 +120,25 @@ describe("tournaments actions", () => {
       vi.mocked(db.query.phase.findFirst).mockResolvedValue({
         id: "p1",
         order_index: 1,
+        tournament_id: "t-1",
       } as any);
       vi.mocked(db.query.tournamentRegistration.findMany).mockResolvedValue(
         Array.from({ length: 56 }, (_, index) => ({
           player_id: `p-${index}`,
         })) as any,
       );
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p1",
+          tournament_id: "t-1",
+          name: "Phase 1",
+          order_index: 1,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [{ id: "b1", name: "common", games: [] }],
+        },
+      ] as any);
 
       const result = await tournamentsActions.startPhase1Action("p1", "t-1");
 
@@ -121,17 +151,157 @@ describe("tournaments actions", () => {
       vi.mocked(db.query.phase.findFirst).mockResolvedValue({
         id: "p1",
         order_index: 1,
+        tournament_id: "t-1",
       } as any);
       vi.mocked(db.query.tournamentRegistration.findMany).mockResolvedValue(
         Array.from({ length: 66 }, (_, index) => ({
           player_id: `p-${index}`,
         })) as any,
       );
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p1",
+          tournament_id: "t-1",
+          name: "Phase 1",
+          order_index: 1,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [{ id: "b1", name: "common", games: [] }],
+        },
+      ] as any);
 
       const result = await tournamentsActions.startPhase1Action("p1", "t-1");
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("multiple de 8");
+    });
+
+    it("passe le tournoi en ongoing quand la phase 1 démarre", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      vi.mocked(db.query.phase.findFirst).mockResolvedValue({
+        id: "p1",
+        order_index: 1,
+        tournament_id: "t-1",
+      } as any);
+      vi.mocked(db.query.tournamentRegistration.findMany).mockResolvedValue(
+        Array.from({ length: 64 }, (_, index) => ({
+          player_id: `p-${index}`,
+        })) as any,
+      );
+      vi.mocked(db.query.bracket.findMany).mockResolvedValue([
+        { id: "b1", phase_id: "p1", name: "common" },
+      ] as any);
+      mockStartPhase.mockResolvedValue({ phaseId: "p1" } as any);
+
+      vi.mocked(db.query.phase.findMany)
+        .mockResolvedValueOnce([
+          {
+            id: "p1",
+            tournament_id: "t-1",
+            name: "Phase 1",
+            order_index: 1,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [{ id: "b1", name: "common", games: [] }],
+          },
+          {
+            id: "p5",
+            tournament_id: "t-1",
+            name: "Phase 5",
+            order_index: 5,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [{ id: "b5", name: "challenger", games: [] }],
+          },
+        ] as any)
+        .mockResolvedValueOnce([
+          {
+            id: "p1",
+            tournament_id: "t-1",
+            name: "Phase 1",
+            order_index: 1,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [
+              {
+                id: "b1",
+                name: "common",
+                games: [{ id: "g1", game_number: 1, results: [] }],
+              },
+            ],
+          },
+          {
+            id: "p5",
+            tournament_id: "t-1",
+            name: "Phase 5",
+            order_index: 5,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [{ id: "b5", name: "challenger", games: [] }],
+          },
+        ] as any);
+
+      vi.mocked(db.query.tournament.findFirst).mockResolvedValue({
+        id: "t-1",
+        status: "upcoming",
+      } as any);
+
+      const whereMock = vi.fn().mockResolvedValue([]);
+      const setMock = vi.fn(() => ({ where: whereMock }));
+      vi.mocked(db.update).mockReturnValue({ set: setMock } as any);
+
+      const result = await tournamentsActions.startPhase1Action("p1", "t-1");
+
+      expect(result.success).toBe(true);
+      expect(setMock).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "ongoing" }),
+      );
+    });
+
+    it("refuse de redémarrer une phase déjà démarrée", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+
+      vi.mocked(db.query.phase.findFirst)
+        .mockResolvedValueOnce({
+          id: "p1",
+          order_index: 1,
+          tournament_id: "t-1",
+        } as any)
+        .mockResolvedValueOnce({
+          id: "p1",
+          order_index: 1,
+          tournament_id: "t-1",
+        } as any);
+
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p1",
+          tournament_id: "t-1",
+          name: "Phase 1",
+          order_index: 1,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b1",
+              name: "common",
+              games: [{ id: "g1", game_number: 1, results: [] }],
+            },
+          ],
+        },
+      ] as any);
+
+      const result = await tournamentsActions.startPhase1Action("p1", "t-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("déjà démarrée");
+      expect(mockStartPhase).not.toHaveBeenCalled();
     });
   });
 
@@ -258,6 +428,35 @@ describe("tournaments actions", () => {
         games: Array.from({ length: 12 }, (_, i) => ({ id: `g-${i}` })),
       } as any);
 
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p1",
+          tournament_id: "t-1",
+          name: "Phase 1",
+          order_index: 1,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b1",
+              name: "common",
+              games: [{ id: "g1", game_number: 1, results: [{ id: "r1" }] }],
+            },
+          ],
+        },
+        {
+          id: "p2",
+          tournament_id: "t-1",
+          name: "Phase 2",
+          order_index: 2,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [{ id: "b2", name: "common", games: [] }],
+        },
+      ] as any);
+
       const result = await tournamentsActions.startPhase2Action("p1", "p2");
 
       expect(result.success).toBe(true);
@@ -272,6 +471,35 @@ describe("tournaments actions", () => {
         masterBracket: { players: Array.from({ length: 64 }, () => ({})) },
         amateurBracket: { players: Array.from({ length: 64 }, () => ({})) },
       } as any);
+
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p2",
+          tournament_id: "t-1",
+          name: "Phase 2",
+          order_index: 2,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b2",
+              name: "common",
+              games: [{ id: "g2", game_number: 1, results: [{ id: "r2" }] }],
+            },
+          ],
+        },
+        {
+          id: "p3",
+          tournament_id: "t-1",
+          name: "Phase 3",
+          order_index: 3,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [{ id: "b3", name: "master", games: [] }],
+        },
+      ] as any);
 
       const result = await tournamentsActions.startPhase3Action(
         "p1",
@@ -291,6 +519,35 @@ describe("tournaments actions", () => {
         amateurBracket: { players: Array.from({ length: 64 }, () => ({})) },
       } as any);
 
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p3",
+          tournament_id: "t-1",
+          name: "Phase 3",
+          order_index: 3,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b3",
+              name: "master",
+              games: [{ id: "g3", game_number: 1, results: [{ id: "r3" }] }],
+            },
+          ],
+        },
+        {
+          id: "p4",
+          tournament_id: "t-1",
+          name: "Phase 4",
+          order_index: 4,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [{ id: "b4", name: "master", games: [] }],
+        },
+      ] as any);
+
       const result = await tournamentsActions.startPhase4Action("p3", "p4");
 
       expect(result.success).toBe(true);
@@ -306,6 +563,35 @@ describe("tournaments actions", () => {
         amateurBracket: { players: Array.from({ length: 8 }, () => ({})) },
       } as any);
 
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p4",
+          tournament_id: "t-1",
+          name: "Phase 4",
+          order_index: 4,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b4",
+              name: "master",
+              games: [{ id: "g4", game_number: 1, results: [{ id: "r4" }] }],
+            },
+          ],
+        },
+        {
+          id: "p5",
+          tournament_id: "t-1",
+          name: "Phase 5",
+          order_index: 5,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [{ id: "b5", name: "challenger", games: [] }],
+        },
+      ] as any);
+
       const result = await tournamentsActions.startPhase5Action("p4", "p5");
 
       expect(result.success).toBe(true);
@@ -318,10 +604,89 @@ describe("tournaments actions", () => {
       mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
       mockStartPhase4FromPhase3.mockRejectedValue(new Error("transition ko"));
 
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p3",
+          tournament_id: "t-1",
+          name: "Phase 3",
+          order_index: 3,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b3",
+              name: "master",
+              games: [{ id: "g3", game_number: 1, results: [{ id: "r3" }] }],
+            },
+          ],
+        },
+        {
+          id: "p4",
+          tournament_id: "t-1",
+          name: "Phase 4",
+          order_index: 4,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [{ id: "b4", name: "master", games: [] }],
+        },
+      ] as any);
+
       const result = await tournamentsActions.startPhase4Action("p3", "p4");
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("transition ko");
+    });
+
+    it("refuse startPhase2Action quand la phase 1 n'est pas terminée", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+
+      vi.mocked(db.query.phase.findFirst).mockResolvedValue({
+        id: "p2",
+        tournament_id: "t-1",
+      } as any);
+
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p1",
+          tournament_id: "t-1",
+          name: "Phase 1",
+          order_index: 1,
+          total_games: 2,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b1",
+              name: "common",
+              games: [{ id: "g1", game_number: 1, results: [{ id: "r1" }] }],
+            },
+          ],
+        },
+        {
+          id: "p2",
+          tournament_id: "t-1",
+          name: "Phase 2",
+          order_index: 2,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b2",
+              name: "common",
+              games: [],
+            },
+          ],
+        },
+      ] as any);
+
+      const result = await tournamentsActions.startPhase2Action("p1", "p2");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("phase précédente n'est pas terminée");
+      expect(mockStartPhase2FromPhase1).not.toHaveBeenCalled();
     });
   });
 
@@ -485,6 +850,214 @@ describe("tournaments actions", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("phase 2 impossible");
+    });
+  });
+
+  describe("submitGameResultsAction status sync", () => {
+    it("passe le tournoi en completed quand la phase 5 est entièrement saisie", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockSubmitGameResults.mockResolvedValue(undefined as any);
+
+      vi.mocked(db.query.game.findFirst).mockResolvedValue({
+        id: "g-final",
+        phase_id: "p5",
+      } as any);
+
+      vi.mocked(db.query.phase.findFirst).mockResolvedValue({
+        id: "p5",
+        tournament_id: "t-1",
+      } as any);
+
+      vi.mocked(db.query.phase.findMany).mockResolvedValue([
+        {
+          id: "p5",
+          tournament_id: "t-1",
+          name: "Phase 5",
+          order_index: 5,
+          total_games: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          brackets: [
+            {
+              id: "b5",
+              name: "challenger",
+              games: [
+                { id: "g-final", game_number: 1, results: [{ id: "r1" }] },
+              ],
+            },
+          ],
+        },
+      ] as any);
+
+      vi.mocked(db.query.tournament.findFirst).mockResolvedValue({
+        id: "t-1",
+        status: "ongoing",
+      } as any);
+
+      const whereMock = vi.fn().mockResolvedValue([]);
+      const setMock = vi.fn(() => ({ where: whereMock }));
+      vi.mocked(db.update).mockReturnValue({ set: setMock } as any);
+
+      const result = await tournamentsActions.submitGameResultsAction(
+        "g-final",
+        [
+          { player_id: "p1", placement: 1 },
+          { player_id: "p2", placement: 2 },
+          { player_id: "p3", placement: 3 },
+          { player_id: "p4", placement: 4 },
+          { player_id: "p5", placement: 5 },
+          { player_id: "p6", placement: 6 },
+          { player_id: "p7", placement: 7 },
+          { player_id: "p8", placement: 8 },
+        ],
+      );
+
+      expect(result.success).toBe(true);
+      expect(setMock).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "completed" }),
+      );
+    });
+
+    it("enchaîne ongoing puis completed sur le flux phase 1 puis finale", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockStartPhase.mockResolvedValue({ phaseId: "p1" } as any);
+      mockSubmitGameResults.mockResolvedValue(undefined as any);
+
+      vi.mocked(db.query.phase.findFirst)
+        .mockResolvedValueOnce({
+          id: "p1",
+          order_index: 1,
+          tournament_id: "t-1",
+        } as any)
+        .mockResolvedValueOnce({
+          id: "p5",
+          tournament_id: "t-1",
+        } as any);
+
+      vi.mocked(db.query.tournamentRegistration.findMany).mockResolvedValue(
+        Array.from({ length: 64 }, (_, index) => ({
+          player_id: `p-${index}`,
+        })) as any,
+      );
+
+      vi.mocked(db.query.bracket.findMany).mockResolvedValue([
+        { id: "b1", phase_id: "p1", name: "common" },
+      ] as any);
+
+      vi.mocked(db.query.game.findFirst).mockResolvedValue({
+        id: "g-final",
+        phase_id: "p5",
+      } as any);
+
+      vi.mocked(db.query.phase.findMany)
+        .mockResolvedValueOnce([
+          {
+            id: "p1",
+            tournament_id: "t-1",
+            name: "Phase 1",
+            order_index: 1,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [{ id: "b1", name: "common", games: [] }],
+          },
+          {
+            id: "p5",
+            tournament_id: "t-1",
+            name: "Phase 5",
+            order_index: 5,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [{ id: "b5", name: "challenger", games: [] }],
+          },
+        ] as any)
+        .mockResolvedValueOnce([
+          {
+            id: "p1",
+            tournament_id: "t-1",
+            name: "Phase 1",
+            order_index: 1,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [
+              {
+                id: "b1",
+                name: "common",
+                games: [{ id: "g1", game_number: 1, results: [] }],
+              },
+            ],
+          },
+          {
+            id: "p5",
+            tournament_id: "t-1",
+            name: "Phase 5",
+            order_index: 5,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [{ id: "b5", name: "challenger", games: [] }],
+          },
+        ] as any)
+        .mockResolvedValueOnce([
+          {
+            id: "p5",
+            tournament_id: "t-1",
+            name: "Phase 5",
+            order_index: 5,
+            total_games: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            brackets: [
+              {
+                id: "b5",
+                name: "challenger",
+                games: [
+                  { id: "g-final", game_number: 1, results: [{ id: "r1" }] },
+                ],
+              },
+            ],
+          },
+        ] as any);
+
+      vi.mocked(db.query.tournament.findFirst)
+        .mockResolvedValueOnce({ id: "t-1", status: "upcoming" } as any)
+        .mockResolvedValueOnce({ id: "t-1", status: "ongoing" } as any);
+
+      const whereMock = vi.fn().mockResolvedValue([]);
+      const setMock = vi.fn(() => ({ where: whereMock }));
+      vi.mocked(db.update).mockReturnValue({ set: setMock } as any);
+
+      const startResult = await tournamentsActions.startPhase1Action(
+        "p1",
+        "t-1",
+      );
+      expect(startResult.success).toBe(true);
+
+      const submitResult = await tournamentsActions.submitGameResultsAction(
+        "g-final",
+        [
+          { player_id: "p1", placement: 1 },
+          { player_id: "p2", placement: 2 },
+          { player_id: "p3", placement: 3 },
+          { player_id: "p4", placement: 4 },
+          { player_id: "p5", placement: 5 },
+          { player_id: "p6", placement: 6 },
+          { player_id: "p7", placement: 7 },
+          { player_id: "p8", placement: 8 },
+        ],
+      );
+
+      expect(submitResult.success).toBe(true);
+      expect(setMock).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ status: "ongoing" }),
+      );
+      expect(setMock).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ status: "completed" }),
+      );
     });
   });
 });

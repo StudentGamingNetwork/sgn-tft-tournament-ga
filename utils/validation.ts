@@ -2,33 +2,124 @@
  * Validation utilities for player data
  */
 
-import type { TierType, DivisionType, PlayerCSVImport } from "@/types/tournament";
+import type {
+  TierType,
+  DivisionType,
+  PlayerCSVImport,
+} from "@/types/tournament";
+
+export const PLAYER_CSV_COLUMNS = [
+  "name",
+  "riot_id",
+  "tier",
+  "division",
+  "league_points",
+  "discord_tag",
+  "team_name",
+] as const;
+
+export type PlayerCsvColumn = (typeof PLAYER_CSV_COLUMNS)[number];
+
+export const PLAYER_CSV_REQUIRED_COLUMNS: PlayerCsvColumn[] = [
+  "name",
+  "riot_id",
+  "tier",
+];
+
+export type PlayerCsvColumnMapping = Record<PlayerCsvColumn, string | null>;
+
+const HEADER_ALIASES: Record<PlayerCsvColumn, string[]> = {
+  name: ["name", "nom", "playername", "player_name"],
+  riot_id: ["riot_id", "riotid", "riot id", "summoner", "summoner_name"],
+  tier: ["tier", "rank", "rang"],
+  division: ["division", "div", "rank_division"],
+  league_points: [
+    "league_points",
+    "lp",
+    "points",
+    "points_ligue",
+    "leaguepoints",
+  ],
+  discord_tag: ["discord_tag", "discord", "discord_id", "discordtag"],
+  team_name: ["team_name", "team", "equipe", "teamname"],
+};
+
+function normalizeHeader(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+export function extractCsvHeaders(csvContent: string): string[] {
+  const firstLine = csvContent.split(/\r?\n/)[0] || "";
+  return firstLine
+    .split(",")
+    .map((header) => header.trim())
+    .filter((header) => header.length > 0);
+}
+
+export function buildDefaultPlayerCsvMapping(
+  headers: string[],
+): PlayerCsvColumnMapping {
+  const normalizedToOriginal = new Map<string, string>();
+  headers.forEach((header) => {
+    normalizedToOriginal.set(normalizeHeader(header), header);
+  });
+
+  const mapping = {} as PlayerCsvColumnMapping;
+  for (const column of PLAYER_CSV_COLUMNS) {
+    let matchedHeader: string | null = null;
+    for (const alias of HEADER_ALIASES[column]) {
+      const candidate = normalizedToOriginal.get(normalizeHeader(alias));
+      if (candidate) {
+        matchedHeader = candidate;
+        break;
+      }
+    }
+    mapping[column] = matchedHeader;
+  }
+
+  return mapping;
+}
 
 /**
  * Validate Riot ID format (name#tag)
  * Example: PlayerName#1234
  */
-export function validateRiotId(riotId: string): { valid: boolean; error?: string } {
-    if (!riotId || typeof riotId !== "string") {
-        return { valid: false, error: "Le Riot ID est requis" };
-    }
+export function validateRiotId(riotId: string): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!riotId || typeof riotId !== "string") {
+    return { valid: false, error: "Le Riot ID est requis" };
+  }
 
-    const riotIdRegex = /^.+#[A-Z0-9]+$/i;
+  const riotIdRegex = /^.+#[A-Z0-9]+$/i;
 
-    if (!riotIdRegex.test(riotId)) {
-        return { valid: false, error: "Format invalide. Utilisez le format : Nom#TAG" };
-    }
+  if (!riotIdRegex.test(riotId)) {
+    return {
+      valid: false,
+      error: "Format invalide. Utilisez le format : Nom#TAG",
+    };
+  }
 
-    const parts = riotId.split("#");
-    if (parts[0].length < 3 || parts[0].length > 16) {
-        return { valid: false, error: "Le nom doit contenir entre 3 et 16 caractères" };
-    }
+  const parts = riotId.split("#");
+  if (parts[0].length < 3 || parts[0].length > 16) {
+    return {
+      valid: false,
+      error: "Le nom doit contenir entre 3 et 16 caractères",
+    };
+  }
 
-    if (parts[1].length < 3 || parts[1].length > 5) {
-        return { valid: false, error: "Le tag doit contenir entre 3 et 5 caractères" };
-    }
+  if (parts[1].length < 3 || parts[1].length > 5) {
+    return {
+      valid: false,
+      error: "Le tag doit contenir entre 3 et 5 caractères",
+    };
+  }
 
-    return { valid: true };
+  return { valid: true };
 }
 
 /**
@@ -36,114 +127,140 @@ export function validateRiotId(riotId: string): { valid: boolean; error?: string
  * Challenger, Grandmaster, Master, and Unranked tiers don't have divisions
  */
 export function validateTierDivision(
-    tier: TierType,
-    division: DivisionType
+  tier: TierType,
+  division: DivisionType,
 ): { valid: boolean; error?: string } {
-    const tiersWithoutDivision: TierType[] = ["CHALLENGER", "GRANDMASTER", "MASTER", "UNRANKED"];
+  const tiersWithoutDivision: TierType[] = [
+    "CHALLENGER",
+    "GRANDMASTER",
+    "MASTER",
+    "UNRANKED",
+  ];
 
-    if (tiersWithoutDivision.includes(tier)) {
-        if (division !== null && division !== undefined) {
-            return {
-                valid: false,
-                error: `Le tier ${tier} ne peut pas avoir de division`,
-            };
-        }
-    } else {
-        if (!division) {
-            return {
-                valid: false,
-                error: `Une division est requise pour le tier ${tier}`,
-            };
-        }
-
-        const validDivisions: DivisionType[] = ["I", "II", "III", "IV"];
-        if (!validDivisions.includes(division)) {
-            return {
-                valid: false,
-                error: `Division invalide. Valeurs acceptées : I, II, III, IV`,
-            };
-        }
+  if (tiersWithoutDivision.includes(tier)) {
+    if (division !== null && division !== undefined) {
+      return {
+        valid: false,
+        error: `Le tier ${tier} ne peut pas avoir de division`,
+      };
+    }
+  } else {
+    if (!division) {
+      return {
+        valid: false,
+        error: `Une division est requise pour le tier ${tier}`,
+      };
     }
 
-    return { valid: true };
+    const validDivisions: DivisionType[] = ["I", "II", "III", "IV"];
+    if (!validDivisions.includes(division)) {
+      return {
+        valid: false,
+        error: `Division invalide. Valeurs acceptées : I, II, III, IV`,
+      };
+    }
+  }
+
+  return { valid: true };
 }
 
 /**
  * Validate league points
  */
 export function validateLeaguePoints(
-    leaguePoints: number,
-    tier: TierType
+  leaguePoints: number,
+  tier: TierType,
 ): { valid: boolean; error?: string } {
-    if (typeof leaguePoints !== "number" || isNaN(leaguePoints)) {
-        return { valid: false, error: "Les points de ligue doivent être un nombre" };
-    }
+  if (typeof leaguePoints !== "number" || isNaN(leaguePoints)) {
+    return {
+      valid: false,
+      error: "Les points de ligue doivent être un nombre",
+    };
+  }
 
-    if (leaguePoints < 0) {
-        return { valid: false, error: "Les points de ligue ne peuvent pas être négatifs" };
-    }
+  if (leaguePoints < 0) {
+    return {
+      valid: false,
+      error: "Les points de ligue ne peuvent pas être négatifs",
+    };
+  }
 
-    // Challenger, Grandmaster, and Master can have LP > 100
-    const highLPTiers: TierType[] = ["CHALLENGER", "GRANDMASTER", "MASTER"];
+  // Challenger, Grandmaster, and Master can have LP > 100
+  const highLPTiers: TierType[] = ["CHALLENGER", "GRANDMASTER", "MASTER"];
 
-    if (!highLPTiers.includes(tier) && leaguePoints > 100) {
-        return { valid: false, error: "Les points de ligue ne peuvent pas dépasser 100 pour ce tier" };
-    }
+  if (!highLPTiers.includes(tier) && leaguePoints > 100) {
+    return {
+      valid: false,
+      error: "Les points de ligue ne peuvent pas dépasser 100 pour ce tier",
+    };
+  }
 
-    if (highLPTiers.includes(tier) && leaguePoints > 9999) {
-        return { valid: false, error: "Les points de ligue ne peuvent pas dépasser 9999" };
-    }
+  if (highLPTiers.includes(tier) && leaguePoints > 9999) {
+    return {
+      valid: false,
+      error: "Les points de ligue ne peuvent pas dépasser 9999",
+    };
+  }
 
-    return { valid: true };
+  return { valid: true };
 }
 
 /**
  * Validate player name
  */
-export function validatePlayerName(name: string): { valid: boolean; error?: string } {
-    if (!name || typeof name !== "string") {
-        return { valid: false, error: "Le nom est requis" };
-    }
+export function validatePlayerName(name: string): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!name || typeof name !== "string") {
+    return { valid: false, error: "Le nom est requis" };
+  }
 
-    const trimmedName = name.trim();
+  const trimmedName = name.trim();
 
-    if (trimmedName.length < 2) {
-        return { valid: false, error: "Le nom doit contenir au moins 2 caractères" };
-    }
+  if (trimmedName.length < 2) {
+    return {
+      valid: false,
+      error: "Le nom doit contenir au moins 2 caractères",
+    };
+  }
 
-    if (trimmedName.length > 50) {
-        return { valid: false, error: "Le nom ne peut pas dépasser 50 caractères" };
-    }
+  if (trimmedName.length > 50) {
+    return { valid: false, error: "Le nom ne peut pas dépasser 50 caractères" };
+  }
 
-    return { valid: true };
+  return { valid: true };
 }
 
 /**
  * Validate Discord tag format
  */
-export function validateDiscordTag(discordTag: string): { valid: boolean; error?: string } {
-    if (!discordTag) {
-        return { valid: true }; // Discord tag is optional
-    }
+export function validateDiscordTag(discordTag: string): {
+  valid: boolean;
+  error?: string;
+} {
+  if (!discordTag) {
+    return { valid: true }; // Discord tag is optional
+  }
 
-    // Discord username format (new format without #discriminator or old format with #1234)
-    const discordRegex = /^.{2,32}(#\d{4})?$/;
+  // Discord username format (new format without #discriminator or old format with #1234)
+  const discordRegex = /^.{2,32}(#\d{4})?$/;
 
-    if (!discordRegex.test(discordTag)) {
-        return { valid: false, error: "Format Discord invalide" };
-    }
+  if (!discordRegex.test(discordTag)) {
+    return { valid: false, error: "Format Discord invalide" };
+  }
 
-    return { valid: true };
+  return { valid: true };
 }
 
 /**
  * Validation error for CSV import
  */
 export interface PlayerValidationError {
-    line: number;
-    field: string;
-    value: any;
-    message: string;
+  line: number;
+  field: string;
+  value: any;
+  message: string;
 }
 
 /**
@@ -151,203 +268,266 @@ export interface PlayerValidationError {
  * Returns parsed data or validation errors
  */
 export function parsePlayersCSV(csvContent: string): {
-    success: boolean;
-    data?: PlayerCSVImport[];
-    errors?: PlayerValidationError[];
+  success: boolean;
+  data?: PlayerCSVImport[];
+  errors?: PlayerValidationError[];
+};
+export function parsePlayersCSV(
+  csvContent: string,
+  mapping: PlayerCsvColumnMapping,
+): {
+  success: boolean;
+  data?: PlayerCSVImport[];
+  errors?: PlayerValidationError[];
+};
+export function parsePlayersCSV(
+  csvContent: string,
+  mapping?: PlayerCsvColumnMapping,
+): {
+  success: boolean;
+  data?: PlayerCSVImport[];
+  errors?: PlayerValidationError[];
 } {
-    const errors: PlayerValidationError[] = [];
-    const data: PlayerCSVImport[] = [];
+  const errors: PlayerValidationError[] = [];
+  const data: PlayerCSVImport[] = [];
 
-    try {
-        const lines = csvContent.trim().split("\n");
+  try {
+    const lines = csvContent.trim().split("\n");
 
-        if (lines.length === 0) {
-            return {
-                success: false,
-                errors: [{ line: 0, field: "file", value: "", message: "Le fichier CSV est vide" }],
-            };
-        }
-
-        // Parse header
-        const header = lines[0].split(",").map((h) => h.trim());
-        const requiredColumns = ["name", "riot_id", "tier"];
-
-        const missingColumns = requiredColumns.filter((col) => !header.includes(col));
-        if (missingColumns.length > 0) {
-            return {
-                success: false,
-                errors: [{
-                    line: 0,
-                    field: "header",
-                    value: header.join(","),
-                    message: `Colonnes manquantes : ${missingColumns.join(", ")}`,
-                }],
-            };
-        }
-
-        // Parse data rows
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue; // Skip empty lines
-
-            const values = line.split(",").map((v) => v.trim());
-            const row: Record<string, string> = {};
-
-            header.forEach((col, index) => {
-                row[col] = values[index] || "";
-            });
-
-            const lineNumber = i + 1;
-
-            // Validate name
-            const nameValidation = validatePlayerName(row.name);
-            if (!nameValidation.valid) {
-                errors.push({
-                    line: lineNumber,
-                    field: "name",
-                    value: row.name,
-                    message: nameValidation.error!,
-                });
-            }
-
-            // Validate riot_id
-            const riotIdValidation = validateRiotId(row.riot_id);
-            if (!riotIdValidation.valid) {
-                errors.push({
-                    line: lineNumber,
-                    field: "riot_id",
-                    value: row.riot_id,
-                    message: riotIdValidation.error!,
-                });
-            }
-
-            // Validate tier
-            const tier = row.tier?.toUpperCase() as TierType;
-            const validTiers: TierType[] = [
-                "CHALLENGER", "GRANDMASTER", "MASTER", "DIAMOND", "EMERALD",
-                "PLATINUM", "GOLD", "SILVER", "BRONZE", "IRON", "UNRANKED",
-            ];
-
-            if (!validTiers.includes(tier)) {
-                errors.push({
-                    line: lineNumber,
-                    field: "tier",
-                    value: row.tier,
-                    message: `Tier invalide. Valeurs acceptées : ${validTiers.join(", ")}`,
-                });
-            }
-
-            // Validate division
-            const division = (row.division?.toUpperCase() || null) as DivisionType;
-            const tierDivisionValidation = validateTierDivision(tier, division);
-            if (!tierDivisionValidation.valid) {
-                errors.push({
-                    line: lineNumber,
-                    field: "division",
-                    value: row.division,
-                    message: tierDivisionValidation.error!,
-                });
-            }
-
-            // Validate league_points
-            const leaguePoints = parseInt(row.league_points || "0", 10);
-            const lpValidation = validateLeaguePoints(leaguePoints, tier);
-            if (!lpValidation.valid) {
-                errors.push({
-                    line: lineNumber,
-                    field: "league_points",
-                    value: row.league_points,
-                    message: lpValidation.error!,
-                });
-            }
-
-            // Validate discord_tag if provided
-            if (row.discord_tag) {
-                const discordValidation = validateDiscordTag(row.discord_tag);
-                if (!discordValidation.valid) {
-                    errors.push({
-                        line: lineNumber,
-                        field: "discord_tag",
-                        value: row.discord_tag,
-                        message: discordValidation.error!,
-                    });
-                }
-            }
-
-            // If no errors for this row, add to data
-            if (!errors.some((e) => e.line === lineNumber)) {
-                data.push({
-                    name: row.name,
-                    riot_id: row.riot_id,
-                    tier,
-                    division,
-                    league_points: leaguePoints,
-                    discord_tag: row.discord_tag || undefined,
-                    team_name: row.team_name || undefined,
-                });
-            }
-        }
-
-        if (errors.length > 0) {
-            return { success: false, errors };
-        }
-
-        return { success: true, data };
-    } catch (error) {
-        return {
-            success: false,
-            errors: [{
-                line: 0,
-                field: "file",
-                value: "",
-                message: `Erreur de parsing : ${error instanceof Error ? error.message : "Erreur inconnue"}`,
-            }],
-        };
+    if (lines.length === 0) {
+      return {
+        success: false,
+        errors: [
+          {
+            line: 0,
+            field: "file",
+            value: "",
+            message: "Le fichier CSV est vide",
+          },
+        ],
+      };
     }
+
+    // Parse header
+    const header = lines[0].split(",").map((h) => h.trim());
+    const effectiveMapping: PlayerCsvColumnMapping = mapping || {
+      name: header.includes("name") ? "name" : null,
+      riot_id: header.includes("riot_id") ? "riot_id" : null,
+      tier: header.includes("tier") ? "tier" : null,
+      division: header.includes("division") ? "division" : null,
+      league_points: header.includes("league_points") ? "league_points" : null,
+      discord_tag: header.includes("discord_tag") ? "discord_tag" : null,
+      team_name: header.includes("team_name") ? "team_name" : null,
+    };
+
+    const missingColumns = PLAYER_CSV_REQUIRED_COLUMNS.filter((column) => {
+      const mappedHeader = effectiveMapping[column];
+      return !mappedHeader || !header.includes(mappedHeader);
+    });
+
+    if (missingColumns.length > 0) {
+      return {
+        success: false,
+        errors: [
+          {
+            line: 0,
+            field: "header",
+            value: JSON.stringify(effectiveMapping),
+            message: `Colonnes manquantes : ${missingColumns.join(", ")}`,
+          },
+        ],
+      };
+    }
+
+    // Parse data rows
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue; // Skip empty lines
+
+      const values = line.split(",").map((v) => v.trim());
+      const row: Record<string, string> = {};
+
+      header.forEach((col, index) => {
+        row[col] = values[index] || "";
+      });
+
+      const mappedValue = (column: PlayerCsvColumn): string => {
+        const mappedHeader = effectiveMapping[column];
+        if (!mappedHeader) {
+          return "";
+        }
+        return row[mappedHeader] || "";
+      };
+
+      const lineNumber = i + 1;
+
+      // Validate name
+      const playerName = mappedValue("name");
+      const nameValidation = validatePlayerName(playerName);
+      if (!nameValidation.valid) {
+        errors.push({
+          line: lineNumber,
+          field: "name",
+          value: playerName,
+          message: nameValidation.error!,
+        });
+      }
+
+      // Validate riot_id
+      const riotId = mappedValue("riot_id");
+      const riotIdValidation = validateRiotId(riotId);
+      if (!riotIdValidation.valid) {
+        errors.push({
+          line: lineNumber,
+          field: "riot_id",
+          value: riotId,
+          message: riotIdValidation.error!,
+        });
+      }
+
+      // Validate tier
+      const tier = mappedValue("tier")?.toUpperCase() as TierType;
+      const validTiers: TierType[] = [
+        "CHALLENGER",
+        "GRANDMASTER",
+        "MASTER",
+        "DIAMOND",
+        "EMERALD",
+        "PLATINUM",
+        "GOLD",
+        "SILVER",
+        "BRONZE",
+        "IRON",
+        "UNRANKED",
+      ];
+
+      if (!validTiers.includes(tier)) {
+        errors.push({
+          line: lineNumber,
+          field: "tier",
+          value: mappedValue("tier"),
+          message: `Tier invalide. Valeurs acceptées : ${validTiers.join(", ")}`,
+        });
+      }
+
+      // Validate division
+      const division = (mappedValue("division")?.toUpperCase() ||
+        null) as DivisionType;
+      const tierDivisionValidation = validateTierDivision(tier, division);
+      if (!tierDivisionValidation.valid) {
+        errors.push({
+          line: lineNumber,
+          field: "division",
+          value: mappedValue("division"),
+          message: tierDivisionValidation.error!,
+        });
+      }
+
+      // Validate league_points
+      const leaguePoints = parseInt(mappedValue("league_points") || "0", 10);
+      const lpValidation = validateLeaguePoints(leaguePoints, tier);
+      if (!lpValidation.valid) {
+        errors.push({
+          line: lineNumber,
+          field: "league_points",
+          value: mappedValue("league_points"),
+          message: lpValidation.error!,
+        });
+      }
+
+      // Validate discord_tag if provided
+      const discordTag = mappedValue("discord_tag");
+      if (discordTag) {
+        const discordValidation = validateDiscordTag(discordTag);
+        if (!discordValidation.valid) {
+          errors.push({
+            line: lineNumber,
+            field: "discord_tag",
+            value: discordTag,
+            message: discordValidation.error!,
+          });
+        }
+      }
+
+      // If no errors for this row, add to data
+      if (!errors.some((e) => e.line === lineNumber)) {
+        data.push({
+          name: playerName,
+          riot_id: riotId,
+          tier,
+          division,
+          league_points: leaguePoints,
+          discord_tag: discordTag || undefined,
+          team_name: mappedValue("team_name") || undefined,
+        });
+      }
+    }
+
+    if (errors.length > 0) {
+      return { success: false, errors };
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    return {
+      success: false,
+      errors: [
+        {
+          line: 0,
+          field: "file",
+          value: "",
+          message: `Erreur de parsing : ${error instanceof Error ? error.message : "Erreur inconnue"}`,
+        },
+      ],
+    };
+  }
 }
 
 /**
  * Validate complete player data
  */
 export function validatePlayerData(data: {
-    name: string;
-    riot_id: string;
-    tier: TierType;
-    division?: DivisionType;
-    league_points: number;
-    discord_tag?: string;
+  name: string;
+  riot_id: string;
+  tier: TierType;
+  division?: DivisionType;
+  league_points: number;
+  discord_tag?: string;
 }): { valid: boolean; errors: Record<string, string> } {
-    const errors: Record<string, string> = {};
+  const errors: Record<string, string> = {};
 
-    const nameValidation = validatePlayerName(data.name);
-    if (!nameValidation.valid) {
-        errors.name = nameValidation.error!;
+  const nameValidation = validatePlayerName(data.name);
+  if (!nameValidation.valid) {
+    errors.name = nameValidation.error!;
+  }
+
+  const riotIdValidation = validateRiotId(data.riot_id);
+  if (!riotIdValidation.valid) {
+    errors.riot_id = riotIdValidation.error!;
+  }
+
+  const tierDivisionValidation = validateTierDivision(
+    data.tier,
+    data.division || null,
+  );
+  if (!tierDivisionValidation.valid) {
+    errors.division = tierDivisionValidation.error!;
+  }
+
+  const lpValidation = validateLeaguePoints(data.league_points, data.tier);
+  if (!lpValidation.valid) {
+    errors.league_points = lpValidation.error!;
+  }
+
+  if (data.discord_tag) {
+    const discordValidation = validateDiscordTag(data.discord_tag);
+    if (!discordValidation.valid) {
+      errors.discord_tag = discordValidation.error!;
     }
+  }
 
-    const riotIdValidation = validateRiotId(data.riot_id);
-    if (!riotIdValidation.valid) {
-        errors.riot_id = riotIdValidation.error!;
-    }
-
-    const tierDivisionValidation = validateTierDivision(data.tier, data.division || null);
-    if (!tierDivisionValidation.valid) {
-        errors.division = tierDivisionValidation.error!;
-    }
-
-    const lpValidation = validateLeaguePoints(data.league_points, data.tier);
-    if (!lpValidation.valid) {
-        errors.league_points = lpValidation.error!;
-    }
-
-    if (data.discord_tag) {
-        const discordValidation = validateDiscordTag(data.discord_tag);
-        if (!discordValidation.valid) {
-            errors.discord_tag = discordValidation.error!;
-        }
-    }
-
-    return {
-        valid: Object.keys(errors).length === 0,
-        errors,
-    };
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
 }

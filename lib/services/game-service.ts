@@ -20,6 +20,7 @@ import {
   generateSnakeDraftMatrix,
   applySeedingMatrix,
 } from "@/utils/seeding-matrices";
+import { syncTournamentStatusByPhaseId } from "@/lib/services/tournament-status-service";
 
 /**
  * Create a new game
@@ -175,6 +176,7 @@ export async function submitGameResults(
   // After successful submission, check if we should create the next game
   if (gameInfo.phase_id) {
     await checkAndCreateNextGame(gameInfo.phase_id, gameInfo.game_number);
+    await syncTournamentStatusByPhaseId(gameInfo.phase_id);
   }
 
   return resultsWithPoints;

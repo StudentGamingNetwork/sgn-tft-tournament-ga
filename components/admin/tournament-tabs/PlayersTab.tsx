@@ -4,7 +4,7 @@ import { Card } from "@heroui/card";
 import { Chip } from "@heroui/chip";
 import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell } from "@heroui/table";
 import { Pagination } from "@heroui/pagination";
-import { UserPlus, FileUp, CheckCircle, XCircle, Trash2 } from "lucide-react";
+import { UserPlus, FileUp, CheckCircle, XCircle, Trash2, Download } from "lucide-react";
 import { SortableTableHeader } from "@/components/admin/SortableTableHeader";
 import { PlayerActionButtons } from "@/components/admin/PlayerActionButtons";
 import {
@@ -43,6 +43,14 @@ const getDivisionRank = (division: string | null): number => {
         "IV": 1,
     };
     return divisionOrder[division || ""] || 0;
+};
+
+const escapeCsvCell = (value: string | number): string => {
+    const text = String(value ?? "");
+    if (/[",\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
 };
 
 interface PlayersTabProps {
@@ -256,6 +264,52 @@ export function PlayersTab({
 
     const isBulkActionLoading =
         confirmAll.isPending || unconfirmAll.isPending || unregisterAll.isPending;
+
+    const handleExportPlayersCsv = useCallback(() => {
+        if (sortedPlayers.length === 0) {
+            return;
+        }
+
+        const header = [
+            "name",
+            "riot_id",
+            "tier",
+            "division",
+            "league_points",
+            "discord_tag",
+            "team_name",
+        ];
+
+        const lines = sortedPlayers.map((player) => [
+            player.name,
+            player.riot_id,
+            player.tier || "",
+            player.division || "",
+            player.league_points ?? "",
+            player.discord_tag || "",
+            player.team?.name || "",
+        ]);
+
+        const csvContent = [header, ...lines]
+            .map((row) => row.map((cell) => escapeCsvCell(cell)).join(","))
+            .join("\n");
+
+        const blob = new Blob([`\uFEFF${csvContent}`], {
+            type: "text/csv;charset=utf-8;",
+        });
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const timestamp = new Date().toISOString().slice(0, 10);
+
+        link.href = url;
+        link.download = `joueurs-tournoi-${timestamp}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }, [sortedPlayers]);
+
     return (
         <Card className="p-6 mt-4">
             <div className="flex justify-between items-center mb-4">
@@ -269,6 +323,15 @@ export function PlayersTab({
                     )}
                 </div>
                 <div className="flex gap-2">
+                    <Button
+                        color="default"
+                        variant="flat"
+                        startContent={<Download size={18} />}
+                        onPress={handleExportPlayersCsv}
+                        isDisabled={sortedPlayers.length === 0}
+                    >
+                        Exporter CSV
+                    </Button>
                     <Button
                         color="secondary"
                         variant="flat"
