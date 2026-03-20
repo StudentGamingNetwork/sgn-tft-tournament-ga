@@ -14,7 +14,7 @@ export default function Home() {
                     <h1 className={title({ size: "lg" })}>
                         Tournoi&nbsp;
                     </h1>
-                    <h1 className={title({ color: "cyan", size: "lg" })}>
+                    <h1 className={title({ color: "yellow", size: "lg" })}>
                         TFT&nbsp;
                     </h1>
                     <h1 className={title({ size: "lg" })}>
@@ -49,30 +49,30 @@ export default function Home() {
 
             {/* Statistiques Clés */}
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <Card className="bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 border border-violet-500/20">
+                <Card className="bg-primary/10 border border-primary/20">
                     <CardBody className="text-center py-6">
-                        <p className="text-4xl font-bold text-violet-500">64-128</p>
+                        <p className="text-4xl font-bold text-primary">64-128</p>
                         <p className="text-sm text-default-500 mt-2">Joueurs au départ</p>
                     </CardBody>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border border-blue-500/20">
+                <Card className="bg-info/10 border border-info/20">
                     <CardBody className="text-center py-6">
-                        <p className="text-4xl font-bold text-blue-500">5</p>
+                        <p className="text-4xl font-bold text-info">5</p>
                         <p className="text-sm text-default-500 mt-2">Phases de compétition</p>
                     </CardBody>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border border-green-500/20">
+                <Card className="bg-success/10 border border-success/20">
                     <CardBody className="text-center py-6">
-                        <p className="text-4xl font-bold text-green-500">3</p>
+                        <p className="text-4xl font-bold text-success">3</p>
                         <p className="text-sm text-default-500 mt-2">Brackets finales</p>
                     </CardBody>
                 </Card>
 
-                <Card className="bg-gradient-to-br from-orange-500/10 to-yellow-500/10 border border-orange-500/20">
+                <Card className="bg-warning/10 border border-warning/20">
                     <CardBody className="text-center py-6">
-                        <p className="text-4xl font-bold text-orange-500">24</p>
+                        <p className="text-4xl font-bold text-warning">24</p>
                         <p className="text-sm text-default-500 mt-2">Finalistes</p>
                     </CardBody>
                 </Card>
@@ -82,7 +82,7 @@ export default function Home() {
             <section className="flex flex-col gap-6">
                 <div className="text-center">
                     <h2 className={title({ size: "md" })}>Structure du&nbsp;</h2>
-                    <h2 className={title({ color: "cyan", size: "md" })}>Tournoi</h2>
+                    <h2 className={title({ color: "yellow", size: "md" })}>Tournoi</h2>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
@@ -93,7 +93,7 @@ export default function Home() {
                         </CardHeader>
                         <CardBody className="pt-4">
                             <h3 className="text-xl font-bold mb-2">Qualifications</h3>
-                            <ul className="text-sm text-default-600 space-y-2">
+                            <ul className="text-sm text-default-500 space-y-2">
                                 <li>• De 64 à 128 joueurs → lobbies de 8</li>
                                 <li>• 6 parties par phase</li>
                                 <li>• Top 32 → Bracket Master</li>
@@ -109,7 +109,7 @@ export default function Home() {
                         </CardHeader>
                         <CardBody className="pt-4">
                             <h3 className="text-xl font-bold mb-2">Éliminations</h3>
-                            <ul className="text-sm text-default-600 space-y-2">
+                            <ul className="text-sm text-default-500 space-y-2">
                                 <li>• 2 Brackets séparés</li>
                                 <li>• Système de relégation</li>
                                 <li>• Reset stratégique des points</li>
@@ -125,7 +125,7 @@ export default function Home() {
                         </CardHeader>
                         <CardBody className="pt-4">
                             <h3 className="text-xl font-bold mb-2">Finales</h3>
-                            <ul className="text-sm text-default-600 space-y-2">
+                            <ul className="text-sm text-default-500 space-y-2">
                                 <li>• 24 joueurs → 3 brackets</li>
                                 <li>• Challenger (Top 8)</li>
                                 <li>• Master (8 joueurs)</li>
@@ -140,14 +140,14 @@ export default function Home() {
             <section className="flex flex-col gap-6">
                 <div className="text-center">
                     <h2 className={title({ size: "md" })}>Caractéristiques&nbsp;</h2>
-                    <h2 className={title({ color: "pink", size: "md" })}>Techniques</h2>
+                    <h2 className={title({ color: "yellow", size: "md" })}>Techniques</h2>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                     <Card>
                         <CardBody className="gap-3">
                             <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-info/10 flex items-center justify-center">
                                     <span className="text-2xl">🧩</span>
                                 </div>
                                 <div>
@@ -163,7 +163,7 @@ export default function Home() {
                     <Card>
                         <CardBody className="gap-3">
                             <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-secondary/50 flex items-center justify-center">
                                     <span className="text-2xl">📊</span>
                                 </div>
                                 <div>
@@ -179,7 +179,7 @@ export default function Home() {
                     <Card>
                         <CardBody className="gap-3">
                             <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-green-500/10 flex items-center justify-center">
+                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center">
                                     <span className="text-2xl">🎬</span>
                                 </div>
                                 <div>
@@ -195,7 +195,7 @@ export default function Home() {
                     <Card>
                         <CardBody className="gap-3">
                             <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center">
                                     <span className="text-2xl">🏆</span>
                                 </div>
                                 <div>
@@ -212,16 +212,16 @@ export default function Home() {
 
             {/* Call to Action Final */}
             <section className="flex flex-col items-center justify-center gap-6 py-8">
-                <Card className="w-full max-w-3xl bg-gradient-to-r from-cyan-500/10 via-purple-500/10 to-pink-500/10 border border-cyan-500/20">
+                <Card className="w-full max-w-3xl bg-primary/10 border border-primary/20">
                     <CardBody className="text-center py-10 gap-4">
                         <h3 className={title({ size: "sm" })}>
                             Suivez&nbsp;
-                            <span className={title({ color: "cyan", size: "sm" })}>
+                            <span className={title({ color: "yellow", size: "sm" })}>
                                 la compétition
                             </span>
                             &nbsp;en direct
                         </h3>
-                        <p className="text-default-600 max-w-2xl mx-auto">
+                        <p className="text-default-500 max-w-2xl mx-auto">
                             Consultez les classements en temps réel, les résultats des matchs et suivez la progression de vos joueurs préférés tout au long du tournoi.
                         </p>
                         <div className="flex gap-4 justify-center mt-4">

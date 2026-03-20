@@ -62,8 +62,8 @@ export function CreatePhaseModal({
                 </ModalHeader>
                 <ModalBody>
                     <div className="flex flex-col gap-4">
-                        <div className="p-3 bg-default-100 rounded-lg">
-                            <p className="text-sm text-default-600">
+                        <div className="p-3 bg-secondary/40 border border-divider rounded-lg">
+                            <p className="text-sm text-default-500">
                                 <strong>📝 Note :</strong> Cette action crée automatiquement la première
                                 phase manquante dans la structure standard (Phase 1 à 5), avec les
                                 brackets et le nombre de games configurés pour le format du tournoi.

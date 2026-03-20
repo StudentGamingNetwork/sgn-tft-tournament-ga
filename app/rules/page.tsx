@@ -15,7 +15,7 @@ const scoring = [
 export default function RulesPage() {
   return (
     <div className="flex flex-col gap-4 py-2">
-      <Card className="p-6">
+      <Card className="p-6 border border-divider bg-secondary">
         <h1 className="text-2xl font-bold">Format et règlement</h1>
         <p className="text-default-500 mt-2">
           Règles opérationnelles du tournoi TFT (format des phases, barème et tie-break).
@@ -23,9 +23,9 @@ export default function RulesPage() {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-5">
+        <Card className="p-5 border border-divider">
           <h2 className="text-lg font-semibold mb-3">Structure des phases</h2>
-          <ul className="space-y-2 text-sm text-default-700">
+          <ul className="space-y-2 text-sm text-default-600">
             <li>Phase 1: de 64 à 128 joueurs, toujours par multiple de 8.</li>
             <li>Phase 2: qualifiés restants de P1 selon le palier du tournoi.</li>
             <li>Phase 3: split Master/Amateur, avec Master prioritaire jusqu'à 64 joueurs.</li>
@@ -34,9 +34,9 @@ export default function RulesPage() {
           </ul>
         </Card>
 
-        <Card className="p-5">
+        <Card className="p-5 border border-divider">
           <h2 className="text-lg font-semibold mb-3">Tie-break</h2>
-          <ul className="space-y-2 text-sm text-default-700">
+          <ul className="space-y-2 text-sm text-default-600">
             <li>1. Total de points</li>
             <li>2. Nombre de top 1</li>
             <li>3. Nombre de top 4</li>
@@ -51,12 +51,12 @@ export default function RulesPage() {
         </Card>
       </div>
 
-      <Card className="p-5">
+      <Card className="p-5 border border-divider">
         <h2 className="text-lg font-semibold mb-3">Barème de points</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-default-200 text-left text-default-500">
+              <tr className="border-b border-divider text-left text-default-500">
                 <th className="py-2 pr-3">Placement</th>
                 <th className="py-2 pr-3">Points</th>
               </tr>

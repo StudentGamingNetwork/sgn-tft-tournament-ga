@@ -175,7 +175,7 @@ export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
                                                         <Award size={16} className="text-yellow-500" />
                                                     )}
                                                     {result.placement === 2 && (
-                                                        <Award size={16} className="text-gray-400" />
+                                                        <Award size={16} className="text-default-400" />
                                                     )}
                                                     {result.placement === 3 && (
                                                         <Award size={16} className="text-amber-700" />

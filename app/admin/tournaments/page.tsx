@@ -143,23 +143,23 @@ export default function TournamentsPage() {
 
             {/* Statistiques rapides */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="p-4 border-2 border-default-200 rounded-lg">
+                <div className="p-4 border-2 border-divider rounded-lg bg-secondary/40">
                     <p className="text-sm text-default-500">Total Tournois</p>
                     <p className="text-2xl font-bold">{optimisticTournaments.length}</p>
                 </div>
-                <div className="p-4 border-2 border-default-200 rounded-lg">
+                <div className="p-4 border-2 border-divider rounded-lg bg-secondary/40">
                     <p className="text-sm text-default-500">En Cours</p>
                     <p className="text-2xl font-bold text-success">
                         {optimisticTournaments.filter(t => t.status === "ongoing").length}
                     </p>
                 </div>
-                <div className="p-4 border-2 border-default-200 rounded-lg">
+                <div className="p-4 border-2 border-divider rounded-lg bg-secondary/40">
                     <p className="text-sm text-default-500">À Venir</p>
                     <p className="text-2xl font-bold text-warning">
                         {optimisticTournaments.filter(t => t.status === "upcoming").length}
                     </p>
                 </div>
-                <div className="p-4 border-2 border-default-200 rounded-lg">
+                <div className="p-4 border-2 border-divider rounded-lg bg-secondary/40">
                     <p className="text-sm text-default-500">Terminés</p>
                     <p className="text-2xl font-bold text-default-400">
                         {optimisticTournaments.filter(t => t.status === "completed").length}
@@ -169,7 +169,7 @@ export default function TournamentsPage() {
 
             {/* Tableau des tournois */}
             {optimisticTournaments.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-default-200 rounded-lg">
+                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-divider rounded-lg bg-secondary/30">
                     <AlertCircle size={48} className="text-default-300 mb-4" />
                     <h3 className="text-lg font-semibold mb-2">Aucun tournoi</h3>
                     <p className="text-default-500 mb-4">Créez votre premier tournoi pour commencer</p>

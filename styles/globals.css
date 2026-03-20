@@ -10,3 +10,46 @@
     --font-sans: "font", sans-serif;
     --font-mono: "monospace", monospace;
 }
+
+/* SGN Branding Colors - CSS Variables */
+:root {
+    /* Dark Theme */
+    --sgn-dark-bg: #212530;
+    --sgn-dark-bg-secondary: #282D3E;
+    --sgn-dark-surface: #2D3349;
+    --sgn-dark-text: #FFFFFF;
+    --sgn-dark-text-80: rgba(255, 255, 255, 0.8);
+    --sgn-dark-text-50: rgba(255, 255, 255, 0.5);
+    --sgn-dark-text-20: rgba(255, 255, 255, 0.2);
+
+    /* Light Theme */
+    --sgn-light-bg: #FFFFFF;
+    --sgn-light-bg-secondary: #F5F6F8;
+    --sgn-light-text: #212530;
+    --sgn-light-text-80: rgba(33, 37, 48, 0.8);
+    --sgn-light-text-50: rgba(33, 37, 48, 0.5);
+    --sgn-light-text-20: rgba(33, 37, 48, 0.2);
+
+    /* Brand Colors */
+    --sgn-primary: #E56F0B;
+    --sgn-primary-hover: #F28C2D;
+    --sgn-primary-gradient: linear-gradient(135deg, #EC7400, #F5CC3F);
+
+    /* Semantic Colors - Dark */
+    --sgn-success-dark: #549B33;
+    --sgn-warning-dark: #CBBD25;
+    --sgn-error-dark: #CD3333;
+    --sgn-info-dark: #3299CC;
+
+    /* Semantic Colors - Light */
+    --sgn-success-light: #40732E;
+    --sgn-warning-light: #D7C929;
+    --sgn-error-light: #9C2727;
+    --sgn-info-light: #29749C;
+
+    /* UI */
+    --sgn-border-dark: #2D3349;
+    --sgn-border-light: #E5E7EB;
+    --sgn-divider-dark: rgba(255, 255, 255, 0.1);
+    --sgn-divider-light: #D1D5DB;
+}

@@ -16,7 +16,7 @@ import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import Image from "next/image";
-import { Shield } from "lucide-react";
+import { ShieldCheck, LogOut } from "lucide-react";
 import { useState } from "react";
 
 import { siteConfig } from "@/config/site";
@@ -32,12 +32,12 @@ export const Navbar = () => {
 
     const handleAdminClick = () => {
         if (isLoggedIn) {
-            router.push("/admin");
+            router.push("/admin/tournaments");
         }
         else {
             authClient.signIn.oauth2({
                 providerId: "keycloak",
-                callbackURL: "http://localhost:3000/admin",
+                callbackURL: "http://localhost:3000/admin/tournaments",
             });
         }
     };
@@ -48,6 +48,7 @@ export const Navbar = () => {
             position="sticky"
             isMenuOpen={isMenuOpen}
             onMenuOpenChange={setIsMenuOpen}
+            className="border-b border-divider bg-background/90 backdrop-blur"
         >
             {/* Toggle menu mobile */}
             <NavbarContent className="sm:hidden" justify="start">
@@ -61,11 +62,18 @@ export const Navbar = () => {
                 <NavbarBrand className="gap-3 max-w-fit">
                     <NextLink className="flex items-center gap-3" href="/">
                         <Image
-                            src="/logos/sgn.svg"
+                            src="/logos/sgn_light.svg"
                             alt="Logo SGN"
                             width={40}
                             height={40}
-                            className="h-10 w-auto"
+                            className="h-10 w-auto dark:hidden"
+                        />
+                        <Image
+                            src="/logos/sgn_dark.svg"
+                            alt="Logo SGN"
+                            width={40}
+                            height={40}
+                            className="hidden h-10 w-auto dark:block"
                         />
                         <Image
                             src="/logos/ga.png"
@@ -103,8 +111,10 @@ export const Navbar = () => {
                 <NavbarItem>
                     <Button
                         color="primary"
-                        variant="flat"
-                        startContent={<Shield size={18} />}
+                        variant="solid"
+                        radius="sm"
+                        className="font-medium"
+                        startContent={<ShieldCheck size={24} />}
                         onPress={handleAdminClick}
                     >
                         Admin
@@ -114,7 +124,8 @@ export const Navbar = () => {
                     <Button
                         color="danger"
                         variant="flat"
-                        startContent={<Shield size={18} />}
+                        radius="sm"
+                        startContent={<LogOut size={16} />}
                         onPress={() => authClient.signOut()}
                     >
                         Déconnexion
@@ -128,7 +139,11 @@ export const Navbar = () => {
                 {siteConfig.navMenuItems.map((item, index) => (
                     <NavbarMenuItem key={`${item.label}-${index}`}>
                         <NextLink
-                            className="w-full"
+                            className={clsx(
+                                "w-full transition-colors",
+                                linkStyles({ color: "foreground" }),
+                                "hover:text-primary"
+                            )}
                             href={item.href}
                             onClick={() => setIsMenuOpen(false)}
                         >

@@ -4,17 +4,13 @@
  */
 
 import { db } from "@/lib/db";
-import { results, game, player, bracket } from "@/models/schema";
+import { results, game, bracket, tournament } from "@/models/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import {
   calculatePlayerStats as calculateStatsUtil,
   sortByTieBreakers,
 } from "@/utils/tie-breakers";
-import type {
-  PlayerStats,
-  RankedPlayer,
-  LeaderboardEntry,
-} from "@/types/tournament";
+import type { PlayerStats, LeaderboardEntry } from "@/types/tournament";
 
 export function calculatePlayerScores(
   results: { player_id: string; placement: number }[],
@@ -46,20 +42,40 @@ export async function calculatePlayerStatsForPhase(
   playerId: string,
   phaseId: string,
 ): Promise<PlayerStats> {
-  // Get all results for this player in this phase
-  const playerResults = await db.query.results.findMany({
-    where: eq(results.player_id, playerId),
-    with: {
-      game: {
-        where: eq(game.phase_id, phaseId),
-      },
+  // Query games first to avoid unsupported nested `where` in relation include.
+  const phaseGames = await db.query.game.findMany({
+    where: eq(game.phase_id, phaseId),
+    columns: {
+      id: true,
     },
   });
 
-  // Filter to only results from this phase
-  const phaseResults = playerResults.filter(
-    (r) => r.game?.phase_id === phaseId,
-  );
+  const phaseGameIds = phaseGames.map((g) => g.id);
+
+  if (phaseGameIds.length === 0) {
+    return {
+      player_id: playerId,
+      total_points: 0,
+      total_games: 0,
+      avg_placement: 0,
+      top1_count: 0,
+      top2_count: 0,
+      top3_count: 0,
+      top4_count: 0,
+      top5_count: 0,
+      top6_count: 0,
+      top7_count: 0,
+      top8_count: 0,
+      placements: [],
+    };
+  }
+
+  const phaseResults = await db.query.results.findMany({
+    where: and(
+      eq(results.player_id, playerId),
+      inArray(results.game_id, phaseGameIds),
+    ),
+  });
 
   if (phaseResults.length === 0) {
     return {
@@ -154,23 +170,40 @@ export async function getLeaderboard(
   // Group results by player
   const playerResultsMap = new Map<string, typeof allResults>();
   allResults.forEach((result) => {
+    if (!result.player_id) {
+      return;
+    }
+
     const existing = playerResultsMap.get(result.player_id) || [];
     playerResultsMap.set(result.player_id, [...existing, result]);
   });
 
   // Calculate stats for each player
-  const playerStatsArray = Array.from(playerResultsMap.entries()).map(
-    ([playerId, playerResults]) => {
+  const playerStatsArray = Array.from(playerResultsMap.entries())
+    .map(([playerId, playerResults]) => {
+      const firstPlayer = playerResults[0]?.player;
+
+      if (!firstPlayer) {
+        return null;
+      }
+
       const placements = playerResults.map((r) => r.placement);
       const totalPoints = playerResults.reduce((sum, r) => sum + r.points, 0);
       const stats = calculateStatsUtil(playerId, placements, totalPoints);
 
       return {
         stats,
-        player: playerResults[0].player, // Get player info from first result
+        player: firstPlayer,
       };
-    },
-  );
+    })
+    .filter(
+      (
+        entry,
+      ): entry is {
+        stats: PlayerStats;
+        player: NonNullable<(typeof allResults)[number]["player"]>;
+      } => entry !== null,
+    );
 
   // Sort by tie-breakers
   const sorted = sortByTieBreakers(
@@ -239,23 +272,40 @@ export async function getCumulativeLeaderboard(
   // Group results by player
   const playerResultsMap = new Map<string, typeof allResults>();
   allResults.forEach((result) => {
+    if (!result.player_id) {
+      return;
+    }
+
     const existing = playerResultsMap.get(result.player_id) || [];
     playerResultsMap.set(result.player_id, [...existing, result]);
   });
 
   // Calculate cumulative stats for each player
-  const playerStatsArray = Array.from(playerResultsMap.entries()).map(
-    ([playerId, playerResults]) => {
+  const playerStatsArray = Array.from(playerResultsMap.entries())
+    .map(([playerId, playerResults]) => {
+      const firstPlayer = playerResults[0]?.player;
+
+      if (!firstPlayer) {
+        return null;
+      }
+
       const placements = playerResults.map((r) => r.placement);
       const totalPoints = playerResults.reduce((sum, r) => sum + r.points, 0);
       const stats = calculateStatsUtil(playerId, placements, totalPoints);
 
       return {
         stats,
-        player: playerResults[0].player,
+        player: firstPlayer,
       };
-    },
-  );
+    })
+    .filter(
+      (
+        entry,
+      ): entry is {
+        stats: PlayerStats;
+        player: NonNullable<(typeof allResults)[number]["player"]>;
+      } => entry !== null,
+    );
 
   // Sort by tie-breakers
   const sorted = sortByTieBreakers(

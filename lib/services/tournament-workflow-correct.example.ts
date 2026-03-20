@@ -28,7 +28,8 @@ import {
 import { submitGameResults } from "./game-service";
 import { db } from "@/lib/db";
 import { phase } from "@/models/schema";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
+import type { PlayerCSVImport } from "@/types/tournament";
 
 export async function exampleFullTournamentWorkflow() {
   // ============================================
@@ -44,7 +45,7 @@ export async function exampleFullTournamentWorkflow() {
   // Récupérer les IDs des phases
   const phases = await db.query.phase.findMany({
     where: eq(phase.tournament_id, newTournament.id),
-    orderBy: [(phase, { asc }) => asc(phase.order_index)],
+    orderBy: asc(phase.order_index),
   });
 
   const [phase1, phase2, phase3, phase4, phase5] = phases;
@@ -53,14 +54,27 @@ export async function exampleFullTournamentWorkflow() {
   // ÉTAPE 2 : Importer les joueurs depuis CSV (64 à 128, multiple de 8)
   // ============================================
   console.log("📥 Import des joueurs...");
-  const csvContent = `
-riot_id,riot_tag,tier,division,league_points,team_name
-Player1,TAG1,CHALLENGER,I,1200,Team Alpha
-Player2,TAG2,GRANDMASTER,I,850,Team Beta
-... (N joueurs au total, entre 64 et 128, multiple de 8)
-`.trim();
+  const playersToImport: PlayerCSVImport[] = [
+    {
+      name: "Player 1",
+      riot_id: "Player1#TAG1",
+      tier: "CHALLENGER",
+      division: "I",
+      league_points: 1200,
+      team_name: "Team Alpha",
+    },
+    {
+      name: "Player 2",
+      riot_id: "Player2#TAG2",
+      tier: "GRANDMASTER",
+      division: "I",
+      league_points: 850,
+      team_name: "Team Beta",
+    },
+    // ... ajouter les joueurs requis (64-128, multiple de 8)
+  ];
 
-  const importedPlayers = await importPlayersFromCSV(csvContent);
+  const importedPlayers = await importPlayersFromCSV(playersToImport);
   console.log(`${importedPlayers.length} joueurs importés`);
 
   const allPlayerIds = importedPlayers.map((p) => p.id);
@@ -73,6 +87,11 @@ Player2,TAG2,GRANDMASTER,I,850,Team Beta
     autoSeed: true,
     playerIds: allPlayerIds,
   });
+
+  if (!("games" in phase1Result)) {
+    throw new Error("Le démarrage de la phase 1 n'a pas retourné de lobbies.");
+  }
+
   console.log(`Phase 1: ${phase1Result.games.length} lobbies créés`);
 
   // Simuler les résultats des 6 games de Phase 1

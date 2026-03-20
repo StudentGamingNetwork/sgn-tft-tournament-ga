@@ -46,7 +46,7 @@ export function PublicLeaderboardView() {
 
   if (isLoading) {
     return (
-      <Card className="p-6 mt-4">
+      <Card className="p-6 mt-4 border border-divider">
         <h1 className="text-2xl font-bold">Classements publics</h1>
         <p className="text-default-500 mt-3">Chargement des tournois...</p>
       </Card>
@@ -55,7 +55,7 @@ export function PublicLeaderboardView() {
 
   if (error) {
     return (
-      <Card className="p-6 mt-4">
+      <Card className="p-6 mt-4 border border-divider">
         <h1 className="text-2xl font-bold">Classements publics</h1>
         <p className="text-danger mt-3">
           Erreur lors du chargement des tournois.
@@ -66,7 +66,7 @@ export function PublicLeaderboardView() {
 
   if (!sortedTournaments.length) {
     return (
-      <Card className="p-6 mt-4">
+      <Card className="p-6 mt-4 border border-divider">
         <h1 className="text-2xl font-bold">Classements publics</h1>
         <p className="text-default-500 mt-3">Aucun tournoi disponible.</p>
       </Card>
@@ -75,7 +75,7 @@ export function PublicLeaderboardView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="p-4">
+      <Card className="p-4 border border-divider bg-secondary">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Classements publics</h1>

@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useCallback, memo } from "react";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from "@heroui/modal";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Card } from "@heroui/card";
-import type { GameWithResults } from "@/app/actions/tournaments";
+import type { GameWithResults, LobbyPlayerInfo } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
 
 interface EnterResultsModalProps {
@@ -13,6 +13,34 @@ interface EnterResultsModalProps {
     onSubmit: (results: GameResult[]) => Promise<void>;
 }
 
+interface PlayerInputProps {
+    player: LobbyPlayerInfo;
+    placement: string;
+    onChange: (value: string) => void;
+}
+
+const PlayerInputRow = memo(function PlayerInputRow({ player, placement, onChange }: PlayerInputProps) {
+    return (
+        <div className="flex items-center gap-4">
+            <div className="flex-1">
+                <p className="font-medium">{player.player_name}</p>
+                <p className="text-sm text-default-500">{player.riot_id}</p>
+            </div>
+            <Input
+                type="number"
+                label="Placement"
+                placeholder="1-8"
+                min={1}
+                max={8}
+                value={placement}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-32"
+                isRequired
+            />
+        </div>
+    );
+});
+
 export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResultsModalProps) {
     const [placements, setPlacements] = useState<Record<string, string>>(
         Object.fromEntries(game.assignedPlayers.map(p => [p.player_id, ""]))
@@ -20,10 +48,10 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const handlePlacementChange = (playerId: string, value: string) => {
+    const handlePlacementChange = useCallback((playerId: string, value: string) => {
         setPlacements(prev => ({ ...prev, [playerId]: value }));
         setError(null);
-    };
+    }, []);
 
     const validatePlacements = (): boolean => {
         const values = Object.values(placements);
@@ -93,23 +121,12 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
                         {game.assignedPlayers
                             .sort((a, b) => a.seed - b.seed)
                             .map((player) => (
-                                <div key={player.player_id} className="flex items-center gap-4">
-                                    <div className="flex-1">
-                                        <p className="font-medium">{player.player_name}</p>
-                                        <p className="text-sm text-default-500">{player.riot_id}</p>
-                                    </div>
-                                    <Input
-                                        type="number"
-                                        label="Placement"
-                                        placeholder="1-8"
-                                        min={1}
-                                        max={8}
-                                        value={placements[player.player_id]}
-                                        onChange={(e) => handlePlacementChange(player.player_id, e.target.value)}
-                                        className="w-32"
-                                        isRequired
-                                    />
-                                </div>
+                                <PlayerInputRow
+                                    key={player.player_id}
+                                    player={player}
+                                    placement={placements[player.player_id]}
+                                    onChange={(value) => handlePlacementChange(player.player_id, value)}
+                                />
                             ))}
                     </div>
                 </ModalBody>

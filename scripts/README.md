@@ -118,7 +118,7 @@ Le tournoi suit la structure officielle :
 
 ### Pendant la simulation
 
-- Gardez l'application web ouverte sur `http://localhost:3000/admin`
+- Gardez l'application web ouverte sur `http://localhost:3000/admin/tournaments`
 - Actualisez la page après chaque action pour voir les changements
 - Naviguez dans les différentes phases pour voir l'évolution
 

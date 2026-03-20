@@ -108,7 +108,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
 
     if (isLoading) {
         return (
-            <Card className="p-6 mt-4">
+            <Card className="p-6 mt-4 border border-divider">
                 <h2 className="text-2xl font-bold mb-4">Résultats et classements</h2>
                 <p className="text-default-500">Chargement des résultats...</p>
             </Card>
@@ -117,7 +117,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
 
     if (error) {
         return (
-            <Card className="p-6 mt-4">
+            <Card className="p-6 mt-4 border border-divider">
                 <h2 className="text-2xl font-bold mb-4">Résultats et classements</h2>
                 <p className="text-danger">Erreur lors du chargement des résultats.</p>
             </Card>
@@ -125,7 +125,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
     }
 
     return (
-        <Card className="p-6 mt-4">
+        <Card className="p-6 mt-4 border border-divider">
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-2xl font-bold">Résultats globaux</h2>
                 <Chip size="sm" color="primary" variant="dot">
@@ -139,7 +139,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                 </p>
             ) : (
                 <>
-                    <div className="mb-4 p-3 bg-default-100 rounded-lg text-sm text-default-700 flex flex-wrap items-center gap-3">
+                    <div className="mb-4 p-3 bg-secondary/40 border border-divider rounded-lg text-sm text-default-700 flex flex-wrap items-center gap-3">
                         <span className="font-semibold">
                             Phase active: {activePhase.name}
                         </span>
@@ -201,7 +201,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
-                                    <tr className="border-b border-default-200 text-left text-default-500">
+                                    <tr className="border-b border-divider text-left text-default-500">
                                         <th className="py-2 pr-3">#</th>
                                         <th className="py-2 pr-3">Joueur</th>
                                         <th className="py-2 pr-3">Riot ID</th>
@@ -234,7 +234,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                         return (
                                             <Fragment key={entry.player_id}>
                                                 {shouldShowSectionHeader && (
-                                                    <tr key={`section-${currentSectionLabel}-${entry.player_id}`} className="bg-default-100 border-y border-default-200">
+                                                    <tr key={`section-${currentSectionLabel}-${entry.player_id}`} className="bg-secondary/40 border-y border-divider">
                                                         <td colSpan={8} className="py-2 px-2 text-xs font-semibold uppercase tracking-wide text-default-700">
                                                             {currentSectionLabel}
                                                         </td>
@@ -271,7 +271,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                         size="sm"
                                     />
                                 ) : (
-                                    <span className="text-xs text-default-600">
+                                    <span className="text-xs text-default-500">
                                         Page 1 / 1
                                     </span>
                                 )}

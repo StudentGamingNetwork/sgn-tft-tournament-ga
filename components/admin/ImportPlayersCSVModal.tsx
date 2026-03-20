@@ -203,12 +203,12 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                 <ModalBody>
                     <div className="flex flex-col gap-4">
                         {/* Instructions */}
-                        <Card className="p-4 bg-default-50">
+                        <Card className="p-4 bg-secondary/30 border border-divider">
                             <h3 className="font-semibold mb-2">Format CSV attendu :</h3>
-                            <code className="text-xs bg-default-100 p-2 rounded block overflow-x-auto">
+                            <code className="text-xs bg-secondary/50 p-2 rounded block overflow-x-auto">
                                 name,riot_id,tier,division,league_points,discord_tag,team_name
                             </code>
-                            <ul className="text-sm mt-2 space-y-1 text-default-600">
+                            <ul className="text-sm mt-2 space-y-1 text-default-500">
                                 <li>• <strong>name</strong> : Nom du joueur (requis)</li>
                                 <li>• <strong>riot_id</strong> : Format Nom#TAG (requis)</li>
                                 <li>• <strong>tier</strong> : IRON à CHALLENGER (requis)</li>
@@ -234,10 +234,10 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                         <div className="flex flex-col gap-2">
                             <label
                                 htmlFor="csv-upload"
-                                className="flex items-center justify-center gap-2 p-8 border-2 border-dashed border-default-300 rounded-lg cursor-pointer hover:border-primary transition-colors"
+                                className="flex items-center justify-center gap-2 p-8 border-2 border-dashed border-divider rounded-lg cursor-pointer hover:border-primary transition-colors"
                             >
                                 <Upload size={24} className="text-default-400" />
-                                <span className="text-default-600">
+                                <span className="text-default-500">
                                     {file
                                         ? file.name
                                         : "Cliquez pour sélectionner un fichier CSV"}
@@ -254,9 +254,9 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
 
                         {/* Mapping des colonnes */}
                         {csvHeaders.length > 0 && columnMapping && (
-                            <Card className="p-4 bg-default-50">
+                            <Card className="p-4 bg-secondary/30 border border-divider">
                                 <h3 className="font-semibold mb-2">Mapping des colonnes CSV</h3>
-                                <p className="text-sm text-default-600 mb-3">
+                                <p className="text-sm text-default-500 mb-3">
                                     Associez les colonnes de votre fichier aux colonnes attendues.
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -270,7 +270,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                                 onChange={(event) =>
                                                     handleMappingChange(field.key, event.target.value)
                                                 }
-                                                className="w-full rounded-md border border-default-300 bg-default-100 text-foreground px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                                className="w-full rounded-md border border-divider bg-secondary/50 text-foreground px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
                                             >
                                                 <option value="">
                                                     {field.required ? "Sélectionner une colonne" : "Non mappé"}
@@ -333,7 +333,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                 </h3>
                                 <div className="max-h-60 overflow-y-auto">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-default-100 sticky top-0">
+                                        <thead className="bg-secondary/40 sticky top-0">
                                             <tr>
                                                 <th className="p-2 text-left">Nom</th>
                                                 <th className="p-2 text-left">Riot ID</th>
@@ -347,7 +347,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                             {csvData.map((player, index) => (
                                                 <tr
                                                     key={index}
-                                                    className="border-b border-default-200"
+                                                    className="border-b border-divider"
                                                 >
                                                     <td className="p-2">{player.name}</td>
                                                     <td className="p-2">{player.riot_id}</td>

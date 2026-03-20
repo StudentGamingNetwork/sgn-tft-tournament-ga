@@ -178,7 +178,7 @@ export function PublicResultsView() {
 
   if (tournamentsLoading) {
     return (
-      <Card className="p-6 mt-4">
+      <Card className="p-6 mt-4 border border-divider">
         <h1 className="text-2xl font-bold">Résultats des parties</h1>
         <p className="text-default-500 mt-3">Chargement des tournois...</p>
       </Card>
@@ -187,7 +187,7 @@ export function PublicResultsView() {
 
   if (tournamentsError) {
     return (
-      <Card className="p-6 mt-4">
+      <Card className="p-6 mt-4 border border-divider">
         <h1 className="text-2xl font-bold">Résultats des parties</h1>
         <p className="text-danger mt-3">Erreur lors du chargement des tournois.</p>
       </Card>
@@ -196,7 +196,7 @@ export function PublicResultsView() {
 
   if (!sortedTournaments.length) {
     return (
-      <Card className="p-6 mt-4">
+      <Card className="p-6 mt-4 border border-divider">
         <h1 className="text-2xl font-bold">Résultats des parties</h1>
         <p className="text-default-500 mt-3">Aucun tournoi disponible.</p>
       </Card>
@@ -205,7 +205,7 @@ export function PublicResultsView() {
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="p-4">
+      <Card className="p-4 border border-divider bg-secondary">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Select
             label="Tournoi"
@@ -251,13 +251,13 @@ export function PublicResultsView() {
       </Card>
 
       {phasesError ? (
-        <Card className="p-6">
+        <Card className="p-6 border border-divider">
           <p className="text-danger">Erreur lors du chargement des phases.</p>
         </Card>
       ) : null}
 
       {!phasesLoading && !startedPhases.length ? (
-        <Card className="p-6">
+        <Card className="p-6 border border-divider">
           <p className="text-default-500">
             Aucune phase démarrée pour ce tournoi.
           </p>
@@ -265,13 +265,13 @@ export function PublicResultsView() {
       ) : null}
 
       {detailsLoading ? (
-        <Card className="p-6">
+        <Card className="p-6 border border-divider">
           <p className="text-default-500">Chargement des résultats...</p>
         </Card>
       ) : null}
 
       {detailsError ? (
-        <Card className="p-6">
+        <Card className="p-6 border border-divider">
           <p className="text-danger">
             Erreur lors du chargement des détails de phase.
           </p>
@@ -300,7 +300,7 @@ export function PublicResultsView() {
                   onValueChange={setSearchText}
                 />
 
-                <Button variant="flat" onPress={resetFilters}>
+                <Button color="primary" variant="flat" onPress={resetFilters}>
                   Réinitialiser
                 </Button>
               </div>
@@ -328,7 +328,7 @@ export function PublicResultsView() {
           </Card>
 
           {displayedGames.length === 0 ? (
-            <Card className="p-6">
+            <Card className="p-6 border border-divider">
               <p className="text-default-500">
                 Aucune partie ne correspond aux critères sélectionnés.
               </p>
@@ -336,7 +336,7 @@ export function PublicResultsView() {
           ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayedGames.map((game) => (
-              <Card key={game.game_id} className="p-4">
+              <Card key={game.game_id} className="p-4 border border-divider">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
                   <h3 className="font-semibold">
                     {game.lobby_name} - Partie {game.game_number}

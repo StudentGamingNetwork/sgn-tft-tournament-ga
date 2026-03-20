@@ -48,7 +48,7 @@ export const siteConfig = {
     },
     {
       label: "Profil",
-      href: "/admin",
+      href: "/admin/tournaments",
     },
   ],
   links: {

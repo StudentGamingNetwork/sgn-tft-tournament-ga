@@ -320,7 +320,7 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
                                                     participant.current_rank === 1
                                                         ? "text-yellow-500"
                                                         : participant.current_rank === 2
-                                                            ? "text-gray-400"
+                                                            ? "text-default-400"
                                                             : "text-amber-700"
                                                 }
                                             />

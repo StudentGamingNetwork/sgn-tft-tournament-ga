@@ -351,7 +351,7 @@ export function PlayersTab({
             </div>
 
             {players.length > 0 && (
-                <div className="mb-4 p-4 bg-default-100 rounded-lg">
+                <div className="mb-4 p-4 bg-secondary/40 border border-divider rounded-lg">
                     <p className="text-sm font-semibold mb-2">Actions en masse :</p>
                     <div className="flex gap-2">
                         <Button
@@ -463,7 +463,7 @@ export function PlayersTab({
                             <TableRow key={player.id}>
                                 <TableCell>{player.name}</TableCell>
                                 <TableCell>
-                                    <code className="text-xs bg-default-100 px-2 py-1 rounded">
+                                    <code className="text-xs bg-secondary/50 px-2 py-1 rounded">
                                         {player.riot_id}
                                     </code>
                                 </TableCell>
