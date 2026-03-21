@@ -13,8 +13,9 @@ import {
     Users,
     TrendingUp,
     Play,
+    WandSparkles,
 } from "lucide-react";
-import { getPhaseDetails, startPhase1Action, getTournamentPlayers, getTournamentPhases, type PhaseDetails, startPhase2Action, startPhase3Action, startPhase4Action, startPhase5Action } from "@/app/actions/tournaments";
+import { getPhaseDetails, startPhase1Action, getTournamentPlayers, getTournamentPhases, type PhaseDetails, startPhase2Action, startPhase3Action, startPhase4Action, startPhase5Action, completePhaseGamesAutomaticallyAction, completeGameNumberAutomaticallyAction } from "@/app/actions/tournaments";
 import { OverviewTab } from "./OverviewTab";
 import { GamesTab } from "./GamesTab";
 
@@ -33,6 +34,9 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
     const [loading, setLoading] = useState(true);
     const [selectedTab, setSelectedTab] = useState("overview");
     const [isStartingPhase, setIsStartingPhase] = useState(false);
+    const [isAutoCompleting, setIsAutoCompleting] = useState(false);
+    const [selectedGameNumber, setSelectedGameNumber] = useState<number | null>(null);
+    const [isAutoCompletingGameNumber, setIsAutoCompletingGameNumber] = useState(false);
 
     useEffect(() => {
         if (session) {
@@ -253,6 +257,86 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
         }
     };
 
+    const handleAutoCompletePhaseGames = async () => {
+        if (!phaseDetails) return;
+
+        const pendingGames = phaseDetails.games.filter((g) => !g.hasResults).length;
+        if (pendingGames === 0) {
+            alert("Toutes les parties ont déjà des résultats.");
+            return;
+        }
+
+        const confirmed = confirm(
+            `Compléter automatiquement ${pendingGames} partie(s) sans résultat ?\n\nCette action génère des placements aléatoires pour chaque lobby.`,
+        );
+
+        if (!confirmed) return;
+
+        setIsAutoCompleting(true);
+        try {
+            const result = await completePhaseGamesAutomaticallyAction(phaseId);
+
+            if (!result.success) {
+                alert(`Erreur : ${result.error}`);
+                return;
+            }
+
+            alert(`Terminé : ${result.completed} partie(s) complétée(s), ${result.skipped} ignorée(s).`);
+            await loadPhaseDetails();
+        } catch (error) {
+            console.error("Error auto-completing phase games:", error);
+            alert("Erreur lors de la complétion automatique des parties");
+        } finally {
+            setIsAutoCompleting(false);
+        }
+    };
+
+    const handleAutoCompleteGameNumber = async () => {
+        const input = window.prompt("Numéro du game à compléter (ex: 1, 2, 3...)");
+        if (!input) return;
+
+        const gameNum = Number.parseInt(input, 10);
+        if (!Number.isInteger(gameNum) || gameNum <= 0) {
+            alert("Entrez un numéro de game valide.");
+            return;
+        }
+
+        const gamesForNumber = games.filter((g) => g.game_number === gameNum);
+        if (gamesForNumber.length === 0) {
+            alert(`Aucun game #${gameNum} trouvé dans cette phase.`);
+            return;
+        }
+
+        const withoutResults = gamesForNumber.filter((g) => !g.hasResults).length;
+        if (withoutResults === 0) {
+            alert(`Tous les lobbies du Game #${gameNum} ont déjà des résultats.`);
+            return;
+        }
+
+        const confirmed = confirm(
+            `Compléter automatiquement ${withoutResults} lobby(s) du Game #${gameNum} ?`,
+        );
+
+        if (!confirmed) return;
+
+        setIsAutoCompletingGameNumber(true);
+        try {
+            const result = await completeGameNumberAutomaticallyAction(phaseId, gameNum);
+
+            if (!result.success) {
+                alert(`Erreur : ${result.error}`);
+                return;
+            }
+
+            alert(`Terminé : ${result.completed} lobby(s) complété(s), ${result.skipped} ignoré(s).`);
+            await loadPhaseDetails();
+        } catch (error) {
+            console.error("Error auto-completing game number:", error);
+            alert("Erreur lors de la complétion automatique du game number");
+        } finally {
+            setIsAutoCompletingGameNumber(false);
+        }
+
     return (
         <div className="flex flex-col gap-6">
             {/* Header */}
@@ -282,17 +366,45 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                     </div>
                 </div>
                 {/* Bouton démarrer la phase */}
-                {games.length === 0 && (
-                    <Button
-                        color="primary"
-                        size="lg"
-                        startContent={<Play size={20} />}
-                        onPress={handleStartPhase}
-                        isLoading={isStartingPhase}
-                    >
-                        Démarrer {phase.name}
-                    </Button>
-                )}
+                <div className="flex items-center gap-2">
+                    {phase.tournament.is_simulation && games.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <Button
+                                color="secondary"
+                                variant="flat"
+                                size="sm"
+                                startContent={<WandSparkles size={16} />}
+                                onPress={handleAutoCompleteGameNumber}
+                                isLoading={isAutoCompletingGameNumber}
+                            >
+                                Compléter game #
+                            </Button>
+                            {partiesRestantes > 0 && (
+                                <Button
+                                    color="secondary"
+                                    variant="flat"
+                                    size="lg"
+                                    startContent={<WandSparkles size={20} />}
+                                    onPress={handleAutoCompletePhaseGames}
+                                    isLoading={isAutoCompleting}
+                                >
+                                    Auto-résoudre la phase
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                    {games.length === 0 && (
+                        <Button
+                            color="primary"
+                            size="lg"
+                            startContent={<Play size={20} />}
+                            onPress={handleStartPhase}
+                            isLoading={isStartingPhase}
+                        >
+                            Démarrer {phase.name}
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Statistiques rapides */}

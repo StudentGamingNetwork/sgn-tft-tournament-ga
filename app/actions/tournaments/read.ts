@@ -90,6 +90,7 @@ export async function getTournaments(): Promise<TournamentWithCount[]> {
         name: tournament.name,
         year: tournament.year,
         status: tournament.status,
+        is_simulation: tournament.is_simulation,
         createdAt: tournament.createdAt,
         updatedAt: tournament.updatedAt,
         registrationsCount: count(tournamentRegistration.id),
@@ -630,6 +631,7 @@ export interface PhaseDetails {
       name: string;
       year: string;
       status: "upcoming" | "ongoing" | "completed";
+      is_simulation: boolean;
       createdAt: Date;
       updatedAt: Date;
     };

@@ -14,7 +14,7 @@ import {
 } from "@heroui/table";
 import { Chip } from "@heroui/chip";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, useDisclosure } from "@heroui/modal";
-import { Trash2, Plus, Edit, Users, AlertCircle } from "lucide-react";
+import { Trash2, Plus, Edit, Users, AlertCircle, FlaskConical } from "lucide-react";
 import { CreateTournamentModal } from "@/components/admin/CreateTournamentModal";
 import { getTournaments, deleteTournament } from "@/app/actions/tournaments";
 import type { Tournament } from "@/types/tournament";
@@ -190,7 +190,14 @@ export default function TournamentsPage() {
                     <TableBody>
                         {optimisticTournaments.map((tournament) => (
                             <TableRow key={tournament.id}>
-                                <TableCell className="font-semibold">{tournament.name}</TableCell>
+                                <TableCell className="font-semibold flex items-center gap-2">
+                                    {tournament.name}
+                                    {tournament.is_simulation && (
+                                        <Chip color="secondary" variant="flat" size="sm" startContent={<FlaskConical size={12} />}>
+                                            Sim
+                                        </Chip>
+                                    )}
+                                </TableCell>
                                 <TableCell>{tournament.year}</TableCell>
                                 <TableCell>
                                     <Chip size="sm" variant="flat">

@@ -5,6 +5,7 @@ import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from "@herou
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Select, SelectItem } from "@heroui/select";
+import { Switch } from "@heroui/switch";
 import { createTournament } from "@/app/actions/tournaments";
 
 interface CreateTournamentModalProps {
@@ -18,6 +19,7 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
         name: "",
         year: new Date().getFullYear().toString(),
         status: "upcoming",
+        isSimulation: false,
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -42,6 +44,7 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                 name: formData.name.trim(),
                 year: formData.year,
                 status: formData.status as "upcoming" | "ongoing" | "completed",
+                isSimulation: formData.isSimulation,
             });
 
             // Reset form
@@ -49,6 +52,7 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                 name: "",
                 year: new Date().getFullYear().toString(),
                 status: "upcoming",
+                isSimulation: false,
             });
 
             onSuccess?.();
@@ -67,6 +71,7 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                 name: "",
                 year: new Date().getFullYear().toString(),
                 status: "upcoming",
+                isSimulation: false,
             });
             setError(null);
             onClose();
@@ -125,6 +130,20 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                                 Terminé
                             </SelectItem>
                         </Select>
+
+                        <Switch
+                            isSelected={formData.isSimulation}
+                            onValueChange={(v) => setFormData({ ...formData, isSimulation: v })}
+                            isDisabled={isSubmitting}
+                        >
+                            Mode simulation
+                        </Switch>
+
+                        {formData.isSimulation && (
+                            <div className="p-3 bg-primary-50 border border-primary-200 rounded-lg text-primary-700 text-sm">
+                                Le mode simulation débloque des actions d'administration avancées (ajout massif de joueurs et auto-résolution des parties) dans l'interface admin.
+                            </div>
+                        )}
 
                         <div className="text-sm text-default-500 mt-2">
                             <p className="font-semibold mb-1">Note:</p>

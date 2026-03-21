@@ -17,8 +17,9 @@ import {
     TrendingUp,
     Edit,
     Trash2,
+    FlaskConical,
 } from "lucide-react";
-import { getTournamentById, deleteTournament } from "@/app/actions/tournaments";
+import { getTournamentById, deleteTournament, createSimulationPlayersAction } from "@/app/actions/tournaments";
 import { useInvalidateTournamentData, useTournamentPlayers, useTournamentPhases } from "@/lib/hooks/useTournament";
 import { EditTournamentModal } from "@/components/admin/EditTournamentModal";
 import { RegisterPlayerModal } from "@/components/admin/RegisterPlayerModal";
@@ -49,6 +50,7 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
     const [openModal, setOpenModal] = useState<"edit" | "delete" | "register" | "import" | "editPlayer" | "createPhase" | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [selectedPlayer, setSelectedPlayer] = useState<PlayerWithRegistration | null>(null);
+    const [isGeneratingSimulationPlayers, setIsGeneratingSimulationPlayers] = useState(false);
 
     // Hooks TanStack Query pour récupérer les joueurs et phases
     const { data: players = [] } = useTournamentPlayers(tournamentId);
@@ -93,6 +95,41 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
             console.error("Error deleting tournament:", error);
             setIsDeleting(false);
             setOpenModal(null);
+        }
+    };
+
+    const handleAddSimulationPlayers = async () => {
+        const input = window.prompt("Nombre de joueurs à générer (multiple de 8)", "64");
+        if (!input) return;
+
+        const count = Number.parseInt(input, 10);
+        if (!Number.isInteger(count) || count <= 0) {
+            alert("Le nombre doit être un entier positif.");
+            return;
+        }
+
+        if (count % 8 !== 0) {
+            alert("Le nombre de joueurs doit être un multiple de 8.");
+            return;
+        }
+
+        setIsGeneratingSimulationPlayers(true);
+        try {
+            const result = await createSimulationPlayersAction(tournamentId, count);
+
+            if (!result.success) {
+                alert(result.error || "Erreur lors de la génération des joueurs simulés");
+                return;
+            }
+
+            alert(`${result.created} joueurs simulés ajoutés et confirmés.`);
+            invalidatePlayers();
+            await loadTournament();
+        } catch (error) {
+            console.error("Error generating simulation players:", error);
+            alert("Erreur lors de la génération des joueurs simulés");
+        } finally {
+            setIsGeneratingSimulationPlayers(false);
         }
     };
 
@@ -152,6 +189,11 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
                             <Chip color={getStatusColor(tournament.status)} variant="dot" size="lg">
                                 {getStatusLabel(tournament.status)}
                             </Chip>
+                            {tournament.is_simulation && (
+                                <Chip color="secondary" variant="flat" size="sm" startContent={<FlaskConical size={14} />}>
+                                    Simulation
+                                </Chip>
+                            )}
                         </div>
                         <div className="flex items-center gap-4 text-default-500">
                             <div className="flex items-center gap-2">
@@ -166,6 +208,17 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
                     </div>
                 </div>
                 <div className="flex gap-2">
+                    {tournament.is_simulation && (
+                        <Button
+                            color="secondary"
+                            variant="flat"
+                            startContent={<FlaskConical size={18} />}
+                            onPress={handleAddSimulationPlayers}
+                            isLoading={isGeneratingSimulationPlayers}
+                        >
+                            Ajouter joueurs simulés
+                        </Button>
+                    )}
                     <Button
                         color="primary"
                         variant="flat"

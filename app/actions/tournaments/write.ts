@@ -39,6 +39,42 @@ import { submitGameResults } from "@/lib/services/game-service";
 import { auth } from "@/lib/auth";
 import { getTournamentPhases } from "./read";
 
+const SIMULATION_TIERS: TierType[] = [
+  "IRON",
+  "BRONZE",
+  "SILVER",
+  "GOLD",
+  "PLATINUM",
+  "EMERALD",
+  "DIAMOND",
+  "MASTER",
+  "GRANDMASTER",
+  "CHALLENGER",
+];
+
+const SIMULATION_DIVISIONS: Array<"I" | "II" | "III" | "IV"> = [
+  "I",
+  "II",
+  "III",
+  "IV",
+];
+
+function randomInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function buildRandomGameResults(playerIds: string[]): GameResult[] {
+  const placements = Array.from(
+    { length: playerIds.length },
+    (_, i) => i + 1,
+  ).sort(() => Math.random() - 0.5);
+
+  return playerIds.map((playerId, idx) => ({
+    player_id: playerId,
+    placement: placements[idx],
+  }));
+}
+
 async function requireAuthenticatedUser(): Promise<void> {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -181,6 +217,7 @@ export async function createTournament(data: {
   name: string;
   year: string;
   status: "upcoming" | "ongoing" | "completed";
+  isSimulation?: boolean;
 }): Promise<Tournament> {
   try {
     await requireAuthenticatedUser();
@@ -190,13 +227,26 @@ export async function createTournament(data: {
       data.year,
     );
 
-    if (data.status !== "upcoming") {
+    if (data.status !== "upcoming" || data.isSimulation) {
+      const updateData: {
+        status?: "upcoming" | "ongoing" | "completed";
+        is_simulation?: boolean;
+        updatedAt: Date;
+      } = {
+        updatedAt: new Date(),
+      };
+
+      if (data.status !== "upcoming") {
+        updateData.status = data.status;
+      }
+
+      if (data.isSimulation) {
+        updateData.is_simulation = true;
+      }
+
       const updated = await db
         .update(tournament)
-        .set({
-          status: data.status,
-          updatedAt: new Date(),
-        })
+        .set(updateData)
         .where(eq(tournament.id, createdTournament.id))
         .returning();
 
@@ -1260,6 +1310,270 @@ export async function submitGameResultsAction(
         error instanceof Error
           ? error.message
           : "Erreur lors de la soumission des résultats",
+    };
+  }
+}
+
+/**
+ * Ajouter des joueurs simulés à un tournoi (option CLI 2)
+ */
+export async function createSimulationPlayersAction(
+  tournamentId: string,
+  playerCount: number,
+): Promise<{ success: boolean; created: number; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+    await requireTournamentNotStarted(tournamentId);
+
+    if (!Number.isInteger(playerCount) || playerCount <= 0) {
+      return {
+        success: false,
+        created: 0,
+        error: "Le nombre de joueurs doit etre un entier positif",
+      };
+    }
+
+    if (playerCount % 8 !== 0) {
+      return {
+        success: false,
+        created: 0,
+        error: "Le nombre de joueurs doit etre un multiple de 8",
+      };
+    }
+
+    const tournamentData = await db.query.tournament.findFirst({
+      where: eq(tournament.id, tournamentId),
+    });
+
+    if (!tournamentData) {
+      return { success: false, created: 0, error: "Tournoi introuvable" };
+    }
+
+    if (!tournamentData.is_simulation) {
+      return {
+        success: false,
+        created: 0,
+        error: "Cette action est reservee aux tournois en mode simulation",
+      };
+    }
+
+    const idPrefix = tournamentId.slice(0, 8);
+    const timestamp = Date.now();
+    let created = 0;
+
+    for (let i = 0; i < playerCount; i++) {
+      const tier = SIMULATION_TIERS[randomInt(0, SIMULATION_TIERS.length - 1)];
+      const division =
+        tier === "MASTER" || tier === "GRANDMASTER" || tier === "CHALLENGER"
+          ? null
+          : SIMULATION_DIVISIONS[randomInt(0, SIMULATION_DIVISIONS.length - 1)];
+
+      const playerIndex = i + 1;
+      const uniqueSuffix = `${timestamp}-${playerIndex}-${randomInt(100, 999)}`;
+
+      const newPlayer = await createPlayer({
+        name: `Sim Player ${playerIndex}`,
+        riot_id: `sim-${idPrefix}-${uniqueSuffix}#${randomInt(1000, 9999)}`,
+        tier,
+        division,
+        league_points: randomInt(0, 100),
+        discord_tag: `sim-${idPrefix}-${uniqueSuffix}`,
+      });
+
+      await db.insert(tournamentRegistration).values({
+        tournament_id: tournamentId,
+        player_id: newPlayer.id,
+        status: "confirmed",
+      });
+
+      created++;
+    }
+
+    return { success: true, created };
+  } catch (error) {
+    console.error("Error creating simulation players:", error);
+    return {
+      success: false,
+      created: 0,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors de la creation des joueurs simules",
+    };
+  }
+}
+
+/**
+ * Completer automatiquement tous les jeux d'un game number spécifique (option CLI A)
+ */
+export async function completeGameNumberAutomaticallyAction(
+  phaseId: string,
+  gameNumber: number,
+): Promise<{
+  success: boolean;
+  completed: number;
+  skipped: number;
+  error?: string;
+}> {
+  try {
+    await requireAuthenticatedUser();
+
+    const phaseData = await db.query.phase.findFirst({
+      where: eq(phase.id, phaseId),
+      with: {
+        tournament: true,
+      },
+    });
+
+    if (!phaseData?.tournament) {
+      return {
+        success: false,
+        completed: 0,
+        skipped: 0,
+        error: "Phase introuvable",
+      };
+    }
+
+    if (!phaseData.tournament.is_simulation) {
+      return {
+        success: false,
+        completed: 0,
+        skipped: 0,
+        error: "Cette action est reservee aux tournois en mode simulation",
+      };
+    }
+
+    const games = await db.query.game.findMany({
+      where: sql`${game.phase_id} = ${phaseId} AND ${game.game_number} = ${gameNumber}`,
+      with: {
+        results: true,
+        lobbyPlayers: true,
+      },
+    });
+
+    let completed = 0;
+    let skipped = 0;
+
+    for (const currentGame of games) {
+      if (currentGame.results.length > 0) {
+        skipped++;
+        continue;
+      }
+
+      const playerIds = currentGame.lobbyPlayers
+        .map((lp) => lp.player_id)
+        .filter((id): id is string => !!id);
+
+      if (playerIds.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      const results = buildRandomGameResults(playerIds);
+      await submitGameResults(currentGame.id, results);
+      completed++;
+    }
+
+    await syncTournamentStatusFromPhaseId(phaseId);
+
+    return { success: true, completed, skipped };
+  } catch (error) {
+    console.error("Error auto-completing game number:", error);
+    return {
+      success: false,
+      completed: 0,
+      skipped: 0,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors de la completion automatique du game number",
+    };
+  }
+}
+
+/**
+ * Completer automatiquement tous les jeux sans resultats d'une phase (option CLI 9)
+ */
+export async function completePhaseGamesAutomaticallyAction(
+  phaseId: string,
+): Promise<{
+  success: boolean;
+  completed: number;
+  skipped: number;
+  error?: string;
+}> {
+  try {
+    await requireAuthenticatedUser();
+
+    const phaseData = await db.query.phase.findFirst({
+      where: eq(phase.id, phaseId),
+      with: {
+        tournament: true,
+      },
+    });
+
+    if (!phaseData?.tournament) {
+      return {
+        success: false,
+        completed: 0,
+        skipped: 0,
+        error: "Phase introuvable",
+      };
+    }
+
+    if (!phaseData.tournament.is_simulation) {
+      return {
+        success: false,
+        completed: 0,
+        skipped: 0,
+        error: "Cette action est reservee aux tournois en mode simulation",
+      };
+    }
+
+    const games = await db.query.game.findMany({
+      where: eq(game.phase_id, phaseId),
+      with: {
+        results: true,
+        lobbyPlayers: true,
+      },
+    });
+
+    let completed = 0;
+    let skipped = 0;
+
+    for (const currentGame of games) {
+      if (currentGame.results.length > 0) {
+        skipped++;
+        continue;
+      }
+
+      const playerIds = currentGame.lobbyPlayers
+        .map((lp) => lp.player_id)
+        .filter((id): id is string => !!id);
+
+      if (playerIds.length === 0) {
+        skipped++;
+        continue;
+      }
+
+      const results = buildRandomGameResults(playerIds);
+      await submitGameResults(currentGame.id, results);
+      completed++;
+    }
+
+    await syncTournamentStatusFromPhaseId(phaseId);
+
+    return { success: true, completed, skipped };
+  } catch (error) {
+    console.error("Error auto-completing phase games:", error);
+    return {
+      success: false,
+      completed: 0,
+      skipped: 0,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors de la completion automatique des parties",
     };
   }
 }
