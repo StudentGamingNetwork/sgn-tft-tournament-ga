@@ -22,6 +22,7 @@ import { useState } from "react";
 import { siteConfig } from "@/config/site";
 import { ThemeSwitch } from "@/components/theme-switch";
 import { authClient } from "@/lib/auth-client";
+import { env } from "@/utils/environment";
 
 export const Navbar = () => {
     const router = useRouter();
@@ -37,7 +38,7 @@ export const Navbar = () => {
         else {
             authClient.signIn.oauth2({
                 providerId: "keycloak",
-                callbackURL: "http://localhost:3000/admin/tournaments",
+                callbackURL: `${env.FRONTEND_URL}/admin/tournaments`,
             });
         }
     };
