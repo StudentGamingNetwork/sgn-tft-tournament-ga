@@ -1,5 +1,5 @@
 export const env = {
-  FRONTEND_URL: process.env.FRONTEND_URL ?? "https://tft.tournament.sgnw.fr",
+  FRONTEND_URL: process.env.FRONTEND_URL ?? "https://ga.sgnw.fr",
   DATABASE_URL:
     process.env.DATABASE_URL ??
     "postgresql://postgres:postgres@127.0.0.1:5432/sgn-tft-tournamnent-ga",
