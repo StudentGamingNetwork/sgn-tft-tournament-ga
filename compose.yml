@@ -11,6 +11,7 @@ services:
       FRONTEND_URL: http://localhost:3000
       BACKEND_URL: http://localhost:3000
       DATABASE_URL: postgresql://postgres:postgres@db:5432/sgn_tft_tournament_ga
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-change-this-secret-in-production}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-}
       KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:-}

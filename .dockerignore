@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.vscode
+*.log
+coverage
+dist
+.cache
+.env
+.env.local
+.env.*.local
