@@ -3,6 +3,6 @@ import { genericOAuthClient } from "better-auth/client/plugins";
 import { env } from "@/utils/environment";
 
 export const authClient = createAuthClient({
-  baseURL: env.FRONTEND_URL,
+  baseURL: env.NEXT_PUBLIC_FRONTEND_URL,
   plugins: [genericOAuthClient()],
 });

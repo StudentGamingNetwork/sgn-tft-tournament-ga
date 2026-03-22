@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useCallback } from "react";
 import { authClient } from "@/lib/auth-client";
 import { redirect, useRouter } from "next/navigation";
 import { Button } from "@heroui/button";
@@ -15,7 +15,7 @@ import {
     Play,
     WandSparkles,
 } from "lucide-react";
-import { getPhaseDetails, startPhase1Action, getTournamentPlayers, getTournamentPhases, type PhaseDetails, startPhase2Action, startPhase3Action, startPhase4Action, startPhase5Action, completePhaseGamesAutomaticallyAction, completeGameNumberAutomaticallyAction } from "@/app/actions/tournaments";
+import { getPhaseDetails, startPhase1Action, getTournamentPlayers, getTournamentPhases, type PhaseDetails, startPhase2Action, startPhase3Action, startPhase4Action, startPhase5Action, completePhaseGamesAutomaticallyAction } from "@/app/actions/tournaments";
 import { OverviewTab } from "./OverviewTab";
 import { GamesTab } from "./GamesTab";
 
@@ -35,17 +35,11 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
     const [selectedTab, setSelectedTab] = useState("overview");
     const [isStartingPhase, setIsStartingPhase] = useState(false);
     const [isAutoCompleting, setIsAutoCompleting] = useState(false);
-    const [selectedGameNumber, setSelectedGameNumber] = useState<number | null>(null);
-    const [isAutoCompletingGameNumber, setIsAutoCompletingGameNumber] = useState(false);
 
-    useEffect(() => {
-        if (session) {
-            loadPhaseDetails();
+    const loadPhaseDetails = useCallback(async (showLoader = true) => {
+        if (showLoader) {
+            setLoading(true);
         }
-    }, [session, phaseId]);
-
-    const loadPhaseDetails = async () => {
-        setLoading(true);
         try {
             const data = await getPhaseDetails(phaseId);
             if (!data) {
@@ -57,9 +51,27 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
             console.error("Error loading phase details:", error);
             router.push(`/admin/tournaments/${tournamentId}`);
         } finally {
-            setLoading(false);
+            if (showLoader) {
+                setLoading(false);
+            }
         }
-    };
+    }, [phaseId, router, tournamentId]);
+
+    useEffect(() => {
+        if (session) {
+            void loadPhaseDetails();
+        }
+    }, [session, loadPhaseDetails]);
+
+    useEffect(() => {
+        if (!session) return;
+
+        const intervalId = setInterval(() => {
+            void loadPhaseDetails(false);
+        }, 30000);
+
+        return () => clearInterval(intervalId);
+    }, [session, loadPhaseDetails]);
 
     if (isPending || loading) {
         return <div className="flex items-center justify-center h-96">Chargement...</div>;
@@ -291,52 +303,6 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
         }
     };
 
-    const handleAutoCompleteGameNumber = async () => {
-        const input = window.prompt("Numéro du game à compléter (ex: 1, 2, 3...)");
-        if (!input) return;
-
-        const gameNum = Number.parseInt(input, 10);
-        if (!Number.isInteger(gameNum) || gameNum <= 0) {
-            alert("Entrez un numéro de game valide.");
-            return;
-        }
-
-        const gamesForNumber = games.filter((g) => g.game_number === gameNum);
-        if (gamesForNumber.length === 0) {
-            alert(`Aucun game #${gameNum} trouvé dans cette phase.`);
-            return;
-        }
-
-        const withoutResults = gamesForNumber.filter((g) => !g.hasResults).length;
-        if (withoutResults === 0) {
-            alert(`Tous les lobbies du Game #${gameNum} ont déjà des résultats.`);
-            return;
-        }
-
-        const confirmed = confirm(
-            `Compléter automatiquement ${withoutResults} lobby(s) du Game #${gameNum} ?`,
-        );
-
-        if (!confirmed) return;
-
-        setIsAutoCompletingGameNumber(true);
-        try {
-            const result = await completeGameNumberAutomaticallyAction(phaseId, gameNum);
-
-            if (!result.success) {
-                alert(`Erreur : ${result.error}`);
-                return;
-            }
-
-            alert(`Terminé : ${result.completed} lobby(s) complété(s), ${result.skipped} ignoré(s).`);
-            await loadPhaseDetails();
-        } catch (error) {
-            console.error("Error auto-completing game number:", error);
-            alert("Erreur lors de la complétion automatique du game number");
-        } finally {
-            setIsAutoCompletingGameNumber(false);
-        }
-
     return (
         <div className="flex flex-col gap-6">
             {/* Header */}
@@ -369,16 +335,6 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                 <div className="flex items-center gap-2">
                     {phase.tournament.is_simulation && games.length > 0 && (
                         <div className="flex items-center gap-2">
-                            <Button
-                                color="secondary"
-                                variant="flat"
-                                size="sm"
-                                startContent={<WandSparkles size={16} />}
-                                onPress={handleAutoCompleteGameNumber}
-                                isLoading={isAutoCompletingGameNumber}
-                            >
-                                Compléter game #
-                            </Button>
                             {partiesRestantes > 0 && (
                                 <Button
                                     color="secondary"
@@ -388,7 +344,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                                     onPress={handleAutoCompletePhaseGames}
                                     isLoading={isAutoCompleting}
                                 >
-                                    Auto-résoudre la phase
+                                    Auto-résoudre la manche
                                 </Button>
                             )}
                         </div>
@@ -503,5 +459,4 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
             </div>
         </div>
     );
-}
 }

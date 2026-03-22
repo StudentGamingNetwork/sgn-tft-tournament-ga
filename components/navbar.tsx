@@ -30,6 +30,7 @@ export const Navbar = () => {
     const { data: session } = authClient.useSession();
 
     const isLoggedIn = !!session;
+    console.log(env.NEXT_PUBLIC_FRONTEND_URL);
 
     const handleAdminClick = () => {
         if (isLoggedIn) {
@@ -38,7 +39,7 @@ export const Navbar = () => {
         else {
             authClient.signIn.oauth2({
                 providerId: "keycloak",
-                callbackURL: `${env.FRONTEND_URL}/admin/tournaments`,
+                callbackURL: `${env.NEXT_PUBLIC_FRONTEND_URL}/admin/tournaments`,
             });
         }
     };

@@ -347,7 +347,11 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
                         </div>
                     }
                 >
-                    <SettingsTab />
+                    <SettingsTab
+                        tournamentId={tournamentId}
+                        isSimulation={tournament.is_simulation}
+                        onSimulationChanged={loadTournament}
+                    />
                 </Tab>
             </Tabs>
 

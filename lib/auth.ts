@@ -5,7 +5,7 @@ import { env } from "@/utils/environment";
 import { genericOAuth, keycloak } from "better-auth/plugins";
 
 export const auth = betterAuth({
-  baseURL: env.FRONTEND_URL,
+  baseURL: env.NEXT_PUBLIC_FRONTEND_URL,
   basePath: "/api/auth",
   database: drizzleAdapter(db, { provider: "pg" }),
 
@@ -16,7 +16,7 @@ export const auth = betterAuth({
           clientId: env.KEYCLOAK_CLIENT_ID,
           clientSecret: env.KEYCLOAK_CLIENT_SECRET,
           issuer: env.KEYCLOAK_ISSUER_URL,
-          redirectURI: `${env.FRONTEND_URL}/api/auth/callback/keycloak`,
+          redirectURI: `${env.NEXT_PUBLIC_FRONTEND_URL}/api/auth/callback/keycloak`,
           pkce: true,
         }),
       ],
@@ -32,5 +32,5 @@ export const auth = betterAuth({
     updateAge: 60 * 60 * 24, // 1 day (every 1 day the session expiration is updated)
   },
 
-  trustedOrigins: ["http://localhost:3000", env.FRONTEND_URL],
+  trustedOrigins: ["http://localhost:3000", env.NEXT_PUBLIC_FRONTEND_URL],
 });
