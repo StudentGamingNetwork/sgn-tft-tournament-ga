@@ -1,5 +1,5 @@
-import { PublicScheduleView } from "@/components/public/PublicScheduleView";
+import { redirect } from "next/navigation";
 
 export default function SchedulePage() {
-  return <PublicScheduleView />;
+  redirect("/tournament");
 }

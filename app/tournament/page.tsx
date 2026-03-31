@@ -1,5 +1,5 @@
-import { PublicLeaderboardView } from "@/components/public/PublicLeaderboardView";
+import { PublicTournamentPhasesView } from "@/components/public/PublicTournamentPhasesView";
 
 export default function TournamentPage() {
-  return <PublicLeaderboardView />;
+  return <PublicTournamentPhasesView />;
 }

@@ -20,6 +20,8 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
         year: new Date().getFullYear().toString(),
         status: "upcoming",
         isSimulation: false,
+        structureImageUrl: "",
+        rulesUrl: "",
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -36,6 +38,11 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
             return;
         }
 
+        if (!formData.structureImageUrl.trim()) {
+            setError("L'image de structure est requise");
+            return;
+        }
+
         setIsSubmitting(true);
         setError(null);
 
@@ -45,6 +52,8 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                 year: formData.year,
                 status: formData.status as "upcoming" | "ongoing" | "completed",
                 isSimulation: formData.isSimulation,
+                structureImageUrl: formData.structureImageUrl.trim(),
+                rulesUrl: formData.rulesUrl.trim() || null,
             });
 
             // Reset form
@@ -53,6 +62,8 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                 year: new Date().getFullYear().toString(),
                 status: "upcoming",
                 isSimulation: false,
+                structureImageUrl: "",
+                rulesUrl: "",
             });
 
             onSuccess?.();
@@ -72,6 +83,8 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                 year: new Date().getFullYear().toString(),
                 status: "upcoming",
                 isSimulation: false,
+                structureImageUrl: "",
+                rulesUrl: "",
             });
             setError(null);
             onClose();
@@ -138,6 +151,23 @@ export function CreateTournamentModal({ isOpen, onClose, onSuccess }: CreateTour
                         >
                             Mode simulation
                         </Switch>
+
+                        <Input
+                            label="Image de structure (URL)"
+                            placeholder="https://.../structure.png"
+                            value={formData.structureImageUrl}
+                            onValueChange={(v) => setFormData({ ...formData, structureImageUrl: v })}
+                            isRequired
+                            isDisabled={isSubmitting}
+                        />
+
+                        <Input
+                            label="Lien externe règlement"
+                            placeholder="https://..."
+                            value={formData.rulesUrl}
+                            onValueChange={(v) => setFormData({ ...formData, rulesUrl: v })}
+                            isDisabled={isSubmitting}
+                        />
 
                         {formData.isSimulation && (
                             <div className="p-3 bg-primary-50 border border-primary-200 rounded-lg text-primary-700 text-sm">

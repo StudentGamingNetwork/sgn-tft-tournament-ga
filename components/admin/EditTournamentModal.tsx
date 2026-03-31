@@ -20,6 +20,8 @@ export function EditTournamentModal({ isOpen, onClose, onSuccess, tournament }: 
         name: tournament.name,
         year: tournament.year,
         status: tournament.status,
+        structure_image_url: tournament.structure_image_url || "",
+        rules_url: tournament.rules_url || "",
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -30,6 +32,8 @@ export function EditTournamentModal({ isOpen, onClose, onSuccess, tournament }: 
             name: tournament.name,
             year: tournament.year,
             status: tournament.status,
+            structure_image_url: tournament.structure_image_url || "",
+            rules_url: tournament.rules_url || "",
         });
         setError(null);
     }, [tournament]);
@@ -46,6 +50,11 @@ export function EditTournamentModal({ isOpen, onClose, onSuccess, tournament }: 
             return;
         }
 
+        if (!formData.structure_image_url.trim()) {
+            setError("L'image de structure est requise");
+            return;
+        }
+
         setIsSubmitting(true);
         setError(null);
 
@@ -54,6 +63,8 @@ export function EditTournamentModal({ isOpen, onClose, onSuccess, tournament }: 
                 name: formData.name.trim(),
                 year: formData.year,
                 status: formData.status as "upcoming" | "ongoing" | "completed",
+                structure_image_url: formData.structure_image_url.trim(),
+                rules_url: formData.rules_url.trim() || null,
             });
 
             onSuccess?.();
@@ -73,6 +84,8 @@ export function EditTournamentModal({ isOpen, onClose, onSuccess, tournament }: 
                 name: tournament.name,
                 year: tournament.year,
                 status: tournament.status,
+                structure_image_url: tournament.structure_image_url || "",
+                rules_url: tournament.rules_url || "",
             });
             setError(null);
             onClose();
@@ -131,6 +144,23 @@ export function EditTournamentModal({ isOpen, onClose, onSuccess, tournament }: 
                                 Terminé
                             </SelectItem>
                         </Select>
+
+                        <Input
+                            label="Image de structure (URL)"
+                            placeholder="https://.../structure.png"
+                            value={formData.structure_image_url}
+                            onValueChange={(v) => setFormData({ ...formData, structure_image_url: v })}
+                            isRequired
+                            isDisabled={isSubmitting}
+                        />
+
+                        <Input
+                            label="Lien externe règlement"
+                            placeholder="https://..."
+                            value={formData.rules_url}
+                            onValueChange={(v) => setFormData({ ...formData, rules_url: v })}
+                            isDisabled={isSubmitting}
+                        />
 
                         <div className="text-sm text-default-500 mt-2">
                             <p className="font-semibold mb-1">Note:</p>

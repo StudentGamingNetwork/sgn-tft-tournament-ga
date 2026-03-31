@@ -1,27 +1,19 @@
 export type SiteConfig = typeof siteConfig;
 
 export const siteConfig = {
-  name: "SGN TFT Tournament",
-  description: "Plateforme de gestion de tournois Teamfight Tactics",
+  name: "Spatula Tour - Teamfight Tactic",
+  description: "Gamers Assembly 2026 : Festival Edition",
   navItems: [
     {
       label: "Accueil",
       href: "/",
     },
     {
-      label: "Classements",
+      label: "Tournoi",
       href: "/tournament",
     },
     {
-      label: "Résultats",
-      href: "/results",
-    },
-    {
-      label: "Calendrier",
-      href: "/schedule",
-    },
-    {
-      label: "Règlement",
+      label: "Règlement officiel",
       href: "/rules",
     },
   ],
@@ -31,19 +23,11 @@ export const siteConfig = {
       href: "/",
     },
     {
-      label: "Classements",
+      label: "Tournoi",
       href: "/tournament",
     },
     {
-      label: "Résultats",
-      href: "/results",
-    },
-    {
-      label: "Calendrier",
-      href: "/schedule",
-    },
-    {
-      label: "Règlement",
+      label: "Règlement officiel",
       href: "/rules",
     },
     {
@@ -57,5 +41,6 @@ export const siteConfig = {
     docs: "https://heroui.com",
     discord: "https://discord.gg/9b6yyZKmH4",
     sponsor: "https://patreon.com/jrgarciadev",
+    rules: "https://www.gamersassembly.gg",
   },
 };

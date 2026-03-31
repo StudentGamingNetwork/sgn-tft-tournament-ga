@@ -84,13 +84,15 @@ function applyTieAwareRanks(entries: LeaderboardEntry[]): LeaderboardEntry[] {
  */
 export async function getTournaments(): Promise<TournamentWithCount[]> {
   try {
-    const tournamentsData = await db
+    let tournamentsData = await db
       .select({
         id: tournament.id,
         name: tournament.name,
         year: tournament.year,
         status: tournament.status,
         is_simulation: tournament.is_simulation,
+        structure_image_url: tournament.structure_image_url,
+        rules_url: tournament.rules_url,
         createdAt: tournament.createdAt,
         updatedAt: tournament.updatedAt,
         registrationsCount: count(tournamentRegistration.id),
@@ -102,6 +104,10 @@ export async function getTournaments(): Promise<TournamentWithCount[]> {
       )
       .groupBy(tournament.id)
       .orderBy(desc(tournament.createdAt));
+
+    if (!tournamentsData) {
+      tournamentsData = [];
+    }
 
     const tournamentsWithPhase = await Promise.all(
       tournamentsData.map(async (t) => {
@@ -123,6 +129,51 @@ export async function getTournaments(): Promise<TournamentWithCount[]> {
 
     return tournamentsWithPhase;
   } catch (error) {
+    const pgErrorCode = (error as { cause?: { code?: string } })?.cause?.code;
+
+    if (pgErrorCode === "42703") {
+      const tournamentsData = await db
+        .select({
+          id: tournament.id,
+          name: tournament.name,
+          year: tournament.year,
+          status: tournament.status,
+          is_simulation: tournament.is_simulation,
+          createdAt: tournament.createdAt,
+          updatedAt: tournament.updatedAt,
+          registrationsCount: count(tournamentRegistration.id),
+        })
+        .from(tournament)
+        .leftJoin(
+          tournamentRegistration,
+          eq(tournament.id, tournamentRegistration.tournament_id),
+        )
+        .groupBy(tournament.id)
+        .orderBy(desc(tournament.createdAt));
+
+      const tournamentsWithPhase = await Promise.all(
+        tournamentsData.map(async (t) => {
+          const currentPhaseResult = await db
+            .select({
+              name: phase.name,
+            })
+            .from(phase)
+            .where(eq(phase.tournament_id, t.id))
+            .orderBy(desc(phase.order_index))
+            .limit(1);
+
+          return {
+            ...t,
+            structure_image_url: null,
+            rules_url: null,
+            currentPhase: currentPhaseResult[0]?.name || null,
+          };
+        }),
+      );
+
+      return tournamentsWithPhase;
+    }
+
     console.error("Error fetching tournaments:", error);
     throw new Error("Impossible de récupérer les tournois");
   }

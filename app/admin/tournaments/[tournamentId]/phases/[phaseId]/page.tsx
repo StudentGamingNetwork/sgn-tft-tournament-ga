@@ -203,6 +203,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                 const message = `Démarrer la Phase 4 ?\n\n` +
                     `🏅 Bracket MASTER (32 joueurs):\n` +
                     `   - Top 32 du bracket Master P3\n\n` +
+                    `   - Top cut actif après les 2 premières parties (réduction à 16)\n\n` +
                     `🥈 Bracket AMATEUR (taille variable - RESET):\n` +
                     `   - Qualifiés du bracket Amateur P3\n` +
                     `   - Relégués du bas du bracket Master P3`;
@@ -235,7 +236,8 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                     `🏅 Bracket MASTER (8 joueurs):\n` +
                     `   - Rangs 9-16 du bracket Master P4\n\n` +
                     `🥈 Bracket AMATEUR (8 joueurs):\n` +
-                    `   - Top 8 du bracket Amateur P4`;
+                    `   - Top 8 du bracket Amateur P4\n\n` +
+                    `ℹ️ La finale reste fixe sur 3 brackets de 8 joueurs (pas de top cut supplémentaire).`;
 
                 if (!confirm(message)) {
                     setIsStartingPhase(false);

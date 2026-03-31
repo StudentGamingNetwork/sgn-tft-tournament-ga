@@ -61,6 +61,7 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
 
     // Calculer les counts à partir des données
     const playersCount = players.length;
+    const confirmedPlayersCount = players.filter((p) => p.registration.status === "confirmed").length;
     const phasesCount = phases.length;
 
     useEffect(() => {
@@ -285,6 +286,7 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
                 >
                     <OverviewTab
                         tournament={tournament}
+                        confirmedPlayersCount={confirmedPlayersCount}
                         getStatusColor={getStatusColor}
                         getStatusLabel={getStatusLabel}
                     />
@@ -350,6 +352,8 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
                     <SettingsTab
                         tournamentId={tournamentId}
                         isSimulation={tournament.is_simulation}
+                        structureImageUrl={tournament.structure_image_url}
+                        rulesUrl={tournament.rules_url}
                         onSimulationChanged={loadTournament}
                     />
                 </Tab>

@@ -314,12 +314,35 @@ describe("tournaments actions", () => {
           name: "Test",
           year: "2026",
           status: "upcoming",
+          structureImageUrl: "https://example.com/structure.png",
         }),
       ).rejects.toThrow("Impossible de créer le tournoi");
     });
 
     it("autorise createTournament avec session", async () => {
       mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      const returningMock = vi.fn().mockResolvedValue([
+        {
+          id: "t-1",
+          name: "Test",
+          year: "2026",
+          status: "upcoming",
+          structure_image_url: "https://example.com/structure.png",
+          rules_url: null,
+          is_simulation: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      vi.mocked(db.update).mockReturnValue({
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({
+            returning: returningMock,
+          })),
+        })),
+      } as any);
+
       mockCreateStandardTournament.mockResolvedValue({
         id: "t-1",
         name: "Test",
@@ -333,6 +356,7 @@ describe("tournaments actions", () => {
         name: "Test",
         year: "2026",
         status: "upcoming",
+        structureImageUrl: "https://example.com/structure.png",
       });
 
       expect(result.id).toBe("t-1");

@@ -136,6 +136,8 @@ export const tournament = pgTable("tournament", {
   year: text("year").notNull(),
   status: statusEnum("status").notNull().default("upcoming"),
   is_simulation: boolean("is_simulation").notNull().default(false),
+  structure_image_url: text("structure_image_url"),
+  rules_url: text("rules_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()

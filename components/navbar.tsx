@@ -84,6 +84,13 @@ export const Navbar = () => {
                             height={40}
                             className="h-10 w-auto"
                         />
+                        <Image
+                            src="/logos/spatula_tour.svg"
+                            alt="Logo Spatula Tour"
+                            width={40}
+                            height={40}
+                            className="h-10 w-auto text-yellow-500"
+                        />
                     </NextLink>
                 </NavbarBrand>
             </NavbarContent>

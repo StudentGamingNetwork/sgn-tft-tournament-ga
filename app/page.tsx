@@ -1,30 +1,100 @@
 import { Button } from "@heroui/button";
-import { Card, CardBody, CardHeader } from "@heroui/card";
-import { Chip } from "@heroui/chip";
+import { Card, CardBody } from "@heroui/card";
+import { Image } from "@heroui/image";
 import { Link } from "@heroui/link";
+import { count, desc, eq } from "drizzle-orm";
 
-import { title, subtitle } from "@/components/primitives";
+import { title } from "@/components/primitives";
+import { db } from "@/lib/db";
+import { tournament, tournamentRegistration } from "@/models/schema";
 
-export default function Home() {
+async function getFeaturedTournament() {
+    let tournaments: Array<{
+        id: string;
+        status: "upcoming" | "ongoing" | "completed";
+        structureImageUrl: string | null;
+        registrationsCount: number;
+    }> = [];
+
+    try {
+        tournaments = await db
+            .select({
+                id: tournament.id,
+                status: tournament.status,
+                structureImageUrl: tournament.structure_image_url,
+                registrationsCount: count(tournamentRegistration.id),
+            })
+            .from(tournament)
+            .leftJoin(
+                tournamentRegistration,
+                eq(tournament.id, tournamentRegistration.tournament_id),
+            )
+            .groupBy(tournament.id)
+            .orderBy(desc(tournament.createdAt));
+    } catch (error) {
+        const pgErrorCode = (error as { cause?: { code?: string } })?.cause?.code;
+        if (pgErrorCode !== "42703") {
+            throw error;
+        }
+
+        tournaments = await db
+            .select({
+                id: tournament.id,
+                status: tournament.status,
+                registrationsCount: count(tournamentRegistration.id),
+            })
+            .from(tournament)
+            .leftJoin(
+                tournamentRegistration,
+                eq(tournament.id, tournamentRegistration.tournament_id),
+            )
+            .groupBy(tournament.id)
+            .orderBy(desc(tournament.createdAt))
+            .then((rows) =>
+                rows.map((row) => ({
+                    ...row,
+                    structureImageUrl: null,
+                })),
+            );
+    }
+
+    const featuredTournament =
+        tournaments.find((item) => item.status === "ongoing") || tournaments[0] || null;
+
+    return {
+        participantsCount: featuredTournament?.registrationsCount || 0,
+        structureImageUrl: featuredTournament?.structureImageUrl || null,
+    };
+}
+
+export default async function Home() {
+    const featuredTournament = await getFeaturedTournament();
+
     return (
         <div className="flex flex-col gap-16 py-8 md:py-10">
             {/* Hero Section */}
             <section className="flex flex-col items-center justify-center gap-8 text-center">
+                {/* Spatula Tour Logo */}
+                <Image
+                    src="/logos/spatula_tour.svg"
+                    alt="Logo Spatula Tour"
+                    width={80}
+                    height={80}
+                    className="w-20 h-20 md:w-24 md:h-24 text-yellow-500"
+                />
+                
                 <div className="inline-block max-w-4xl">
                     <h1 className={title({ size: "lg" })}>
-                        Tournoi&nbsp;
-                    </h1>
-                    <h1 className={title({ color: "yellow", size: "lg" })}>
-                        TFT&nbsp;
+                        Gamers Assembly 2026 :&nbsp;
                     </h1>
                     <h1 className={title({ size: "lg" })}>
-                        Compétitif
+                        Festival Edition
+                    </h1>
+                    <br/><br/>
+                    <h1 className={title({ color: "yellow", size: "md" })}>
+                        Spatula Tour - Teamfight Tactic
                     </h1>
                 </div>
-
-                <p className={subtitle({ class: "text-center" })}>
-                    Tournoi officiel de la Gaming Assembly avec 5 phases progressives, brackets elites et systeme de promotion/relégation dynamique.
-                </p>
 
                 <div className="flex gap-4">
                     <Button
@@ -51,8 +121,8 @@ export default function Home() {
             <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card className="bg-primary/10 border border-primary/20">
                     <CardBody className="text-center py-6">
-                        <p className="text-4xl font-bold text-primary">64-128</p>
-                        <p className="text-sm text-default-500 mt-2">Joueurs au départ</p>
+                        <p className="text-4xl font-bold text-primary">{featuredTournament.participantsCount}</p>
+                        <p className="text-sm text-default-500 mt-2">Participants</p>
                     </CardBody>
                 </Card>
 
@@ -65,15 +135,15 @@ export default function Home() {
 
                 <Card className="bg-success/10 border border-success/20">
                     <CardBody className="text-center py-6">
-                        <p className="text-4xl font-bold text-success">3</p>
-                        <p className="text-sm text-default-500 mt-2">Brackets finales</p>
+                        <p className="text-4xl font-bold text-success">2</p>
+                        <p className="text-sm text-default-500 mt-2">Brackets</p>
                     </CardBody>
                 </Card>
 
                 <Card className="bg-warning/10 border border-warning/20">
                     <CardBody className="text-center py-6">
-                        <p className="text-4xl font-bold text-warning">24</p>
-                        <p className="text-sm text-default-500 mt-2">Finalistes</p>
+                        <p className="text-4xl font-bold text-warning">3</p>
+                        <p className="text-sm text-default-500 mt-2">Finales</p>
                     </CardBody>
                 </Card>
             </section>
@@ -85,129 +155,26 @@ export default function Home() {
                     <h2 className={title({ color: "yellow", size: "md" })}>Tournoi</h2>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-                    {/* Phase 1 */}
-                    <Card className="hover:scale-105 transition-transform">
-                        <CardHeader className="flex gap-3 pb-0">
-                            <Chip color="primary" variant="flat">Phase 1-2</Chip>
-                        </CardHeader>
-                        <CardBody className="pt-4">
-                            <h3 className="text-xl font-bold mb-2">Qualifications</h3>
-                            <ul className="text-sm text-default-500 space-y-2">
-                                <li>• De 64 à 128 joueurs → lobbies de 8</li>
-                                <li>• 6 parties par phase</li>
-                                <li>• Top 32 → Bracket Master</li>
-                                <li>• Slots manquants retirés par le bas</li>
-                            </ul>
+                {featuredTournament.structureImageUrl ? (
+                    <Card className="mt-4">
+                        <CardBody className="p-2 md:p-4">
+                            <Image
+                                src={featuredTournament.structureImageUrl}
+                                alt="Structure du tournoi"
+                                className="w-full h-auto max-h-[720px] object-contain"
+                            />
                         </CardBody>
                     </Card>
-
-                    {/* Phase 3-4 */}
-                    <Card className="hover:scale-105 transition-transform">
-                        <CardHeader className="flex gap-3 pb-0">
-                            <Chip color="secondary" variant="flat">Phase 3-4</Chip>
-                        </CardHeader>
-                        <CardBody className="pt-4">
-                            <h3 className="text-xl font-bold mb-2">Éliminations</h3>
-                            <ul className="text-sm text-default-500 space-y-2">
-                                <li>• 2 Brackets séparés</li>
-                                <li>• Système de relégation</li>
-                                <li>• Reset stratégique des points</li>
-                                <li>• Compétition intense</li>
-                            </ul>
+                ) : (
+                    <Card className="mt-4 border border-warning/30 bg-warning/10">
+                        <CardBody className="py-8 text-center">
+                            <p className="font-semibold text-warning">Image de structure manquante</p>
+                            <p className="text-sm text-default-500 mt-2">
+                                Configurez l'image de structure du tournoi dans les paramètres admin.
+                            </p>
                         </CardBody>
                     </Card>
-
-                    {/* Phase 5 */}
-                    <Card className="hover:scale-105 transition-transform">
-                        <CardHeader className="flex gap-3 pb-0">
-                            <Chip color="success" variant="flat">Phase 5</Chip>
-                        </CardHeader>
-                        <CardBody className="pt-4">
-                            <h3 className="text-xl font-bold mb-2">Finales</h3>
-                            <ul className="text-sm text-default-500 space-y-2">
-                                <li>• 24 joueurs → 3 brackets</li>
-                                <li>• Challenger (Top 8)</li>
-                                <li>• Master (8 joueurs)</li>
-                                <li>• Amateur (8 joueurs)</li>
-                            </ul>
-                        </CardBody>
-                    </Card>
-                </div>
-            </section>
-
-            {/* Caractéristiques Techniques */}
-            <section className="flex flex-col gap-6">
-                <div className="text-center">
-                    <h2 className={title({ size: "md" })}>Caractéristiques&nbsp;</h2>
-                    <h2 className={title({ color: "yellow", size: "md" })}>Techniques</h2>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                    <Card>
-                        <CardBody className="gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-info/10 flex items-center justify-center">
-                                    <span className="text-2xl">🧩</span>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold">Seeding Snake</h4>
-                                    <p className="text-sm text-default-500">
-                                        Algorithme de répartition équitable par serpentage
-                                    </p>
-                                </div>
-                            </div>
-                        </CardBody>
-                    </Card>
-
-                    <Card>
-                        <CardBody className="gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-secondary/50 flex items-center justify-center">
-                                    <span className="text-2xl">📊</span>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold">Système de Points</h4>
-                                    <p className="text-sm text-default-500">
-                                        8 pts (1er) à 1 pt (8e) + tie-breaks multiples
-                                    </p>
-                                </div>
-                            </div>
-                        </CardBody>
-                    </Card>
-
-                    <Card>
-                        <CardBody className="gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center">
-                                    <span className="text-2xl">🎬</span>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold">Matchs sur Scène</h4>
-                                    <p className="text-sm text-default-500">
-                                        Les phases finales diffusées en direct sur scène
-                                    </p>
-                                </div>
-                            </div>
-                        </CardBody>
-                    </Card>
-
-                    <Card>
-                        <CardBody className="gap-3">
-                            <div className="flex items-center gap-3">
-                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center">
-                                    <span className="text-2xl">🏆</span>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold">Format Compétitif</h4>
-                                    <p className="text-sm text-default-500">
-                                        Jusqu'à 7 parties par phase, 8 joueurs par lobby
-                                    </p>
-                                </div>
-                            </div>
-                        </CardBody>
-                    </Card>
-                </div>
+                )}
             </section>
 
             {/* Call to Action Final */}

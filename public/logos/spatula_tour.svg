@@ -1,0 +1,17 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="none" stroke="currentColor" stroke-width="3"/>
+  
+  <!-- Spatula shape (simple spoon-like) -->
+  <g fill="currentColor">
+    <!-- Handle -->
+    <rect x="85" y="130" width="30" height="50" rx="5" fill="currentColor"/>
+    <!-- Bowl -->
+    <ellipse cx="100" cy="70" rx="45" ry="55" fill="currentColor" opacity="0.8"/>
+  </g>
+  
+  <!-- TFT text indicator -->
+  <text x="100" y="155" font-size="12" font-weight="bold" text-anchor="middle" fill="currentColor">
+    TFT
+  </text>
+</svg>
