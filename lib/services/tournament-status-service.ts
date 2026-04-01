@@ -20,6 +20,14 @@ function calculateExpectedGamesForBracket(
     return game1LobbyCount * 2 + reducedLobbyCount * (totalGames - 2);
   }
 
+  if (phaseOrderIndex === 5) {
+    const cappedTotalGames =
+      bracketName === "challenger"
+        ? Math.min(totalGames, 7)
+        : Math.min(totalGames, 6);
+    return game1LobbyCount * cappedTotalGames;
+  }
+
   return game1LobbyCount * totalGames;
 }
 

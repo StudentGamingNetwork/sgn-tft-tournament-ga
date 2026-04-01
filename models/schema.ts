@@ -247,6 +247,7 @@ export const results = pgTable(
     }),
     placement: integer("placement").notNull(),
     points: integer("points").notNull(), // Calculated based on placement
+    result_status: resultStatusEnum("result_status").notNull().default("normal"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -256,7 +257,7 @@ export const results = pgTable(
   (table) => [
     check(
       "placement_valid",
-      sql`${table.placement} >= 1 AND ${table.placement} <= 8`,
+      sql`${table.placement} >= 0 AND ${table.placement} <= 8`,
     ),
     unique("unique_game_player_result").on(table.game_id, table.player_id),
   ],
@@ -293,6 +294,8 @@ export const registrationStatusEnum = pgEnum("registration_status", [
   "cancelled",
 ]);
 
+export const resultStatusEnum = pgEnum("result_status", ["normal", "forfeit"]);
+
 export const tournamentRegistration = pgTable(
   "tournament_registration",
   {
@@ -310,6 +313,7 @@ export const tournamentRegistration = pgTable(
       .defaultNow()
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
+    forfeited_at: timestamp("forfeited_at"),
   },
   (table) => [
     unique("unique_tournament_player").on(table.tournament_id, table.player_id),

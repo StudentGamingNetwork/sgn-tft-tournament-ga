@@ -115,7 +115,7 @@ describe("tournaments actions", () => {
   });
 
   describe("startPhase1Action", () => {
-    it("refuse moins de 64 joueurs confirmes", async () => {
+    it("accepte un nombre variable de joueurs confirmes", async () => {
       mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
       vi.mocked(db.query.phase.findFirst).mockResolvedValue({
         id: "p1",
@@ -127,6 +127,10 @@ describe("tournaments actions", () => {
           player_id: `p-${index}`,
         })) as any,
       );
+      vi.mocked(db.query.bracket.findMany).mockResolvedValue([
+        { id: "b1", phase_id: "p1", name: "common" },
+      ] as any);
+      mockStartPhase.mockResolvedValue({ phaseId: "p1" } as any);
       vi.mocked(db.query.phase.findMany).mockResolvedValue([
         {
           id: "p1",
@@ -142,11 +146,11 @@ describe("tournaments actions", () => {
 
       const result = await tournamentsActions.startPhase1Action("p1", "t-1");
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("minimum 64");
+      expect(result.success).toBe(true);
+      expect(result.lobbyCount).toBe(7);
     });
 
-    it("refuse un nombre de joueurs non multiple de 8", async () => {
+    it("accepte un nombre de joueurs non multiple de 8", async () => {
       mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
       vi.mocked(db.query.phase.findFirst).mockResolvedValue({
         id: "p1",
@@ -158,6 +162,10 @@ describe("tournaments actions", () => {
           player_id: `p-${index}`,
         })) as any,
       );
+      vi.mocked(db.query.bracket.findMany).mockResolvedValue([
+        { id: "b1", phase_id: "p1", name: "common" },
+      ] as any);
+      mockStartPhase.mockResolvedValue({ phaseId: "p1" } as any);
       vi.mocked(db.query.phase.findMany).mockResolvedValue([
         {
           id: "p1",
@@ -173,8 +181,8 @@ describe("tournaments actions", () => {
 
       const result = await tournamentsActions.startPhase1Action("p1", "t-1");
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("multiple de 8");
+      expect(result.success).toBe(true);
+      expect(result.lobbyCount).toBe(9);
     });
 
     it("passe le tournoi en ongoing quand la phase 1 démarre", async () => {
@@ -445,11 +453,11 @@ describe("tournaments actions", () => {
           player_id: `e-${i}`,
           rank: i + 1,
         })),
-        qualifiedPlayers: Array.from({ length: 96 }, (_, i) => ({
+        qualifiedPlayers: Array.from({ length: 48 }, (_, i) => ({
           player_id: `q-${i}`,
           rank: i + 33,
         })),
-        games: Array.from({ length: 12 }, (_, i) => ({ id: `g-${i}` })),
+        games: Array.from({ length: 6 }, (_, i) => ({ id: `g-${i}` })),
       } as any);
 
       vi.mocked(db.query.phase.findMany).mockResolvedValue([
@@ -485,15 +493,15 @@ describe("tournaments actions", () => {
 
       expect(result.success).toBe(true);
       expect(result.stats?.eliminatedCount).toBe(32);
-      expect(result.stats?.qualifiedCount).toBe(96);
-      expect(result.stats?.lobbyCount).toBe(12);
+      expect(result.stats?.qualifiedCount).toBe(48);
+      expect(result.stats?.lobbyCount).toBe(6);
     });
 
     it("startPhase3Action mappe correctement les stats", async () => {
       mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
       mockStartPhase3FromPhase1And2.mockResolvedValue({
-        masterBracket: { players: Array.from({ length: 64 }, () => ({})) },
-        amateurBracket: { players: Array.from({ length: 64 }, () => ({})) },
+        masterBracket: { players: Array.from({ length: 32 }, () => ({})) },
+        amateurBracket: { players: Array.from({ length: 32 }, () => ({})) },
       } as any);
 
       vi.mocked(db.query.phase.findMany).mockResolvedValue([
@@ -532,15 +540,15 @@ describe("tournaments actions", () => {
       );
 
       expect(result.success).toBe(true);
-      expect(result.stats?.masterCount).toBe(64);
-      expect(result.stats?.amateurCount).toBe(64);
+      expect(result.stats?.masterCount).toBe(32);
+      expect(result.stats?.amateurCount).toBe(32);
     });
 
     it("startPhase4Action mappe correctement les stats", async () => {
       mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
       mockStartPhase4FromPhase3.mockResolvedValue({
-        masterBracket: { players: Array.from({ length: 32 }, () => ({})) },
-        amateurBracket: { players: Array.from({ length: 64 }, () => ({})) },
+        masterBracket: { players: Array.from({ length: 16 }, () => ({})) },
+        amateurBracket: { players: Array.from({ length: 32 }, () => ({})) },
       } as any);
 
       vi.mocked(db.query.phase.findMany).mockResolvedValue([
@@ -575,8 +583,8 @@ describe("tournaments actions", () => {
       const result = await tournamentsActions.startPhase4Action("p3", "p4");
 
       expect(result.success).toBe(true);
-      expect(result.stats?.masterCount).toBe(32);
-      expect(result.stats?.amateurCount).toBe(64);
+      expect(result.stats?.masterCount).toBe(16);
+      expect(result.stats?.amateurCount).toBe(32);
     });
 
     it("startPhase5Action mappe correctement les stats", async () => {

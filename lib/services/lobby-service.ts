@@ -29,8 +29,8 @@ export async function getLobbyComposition(gameId: string) {
 /**
  * Validate lobby balance for a game
  * Checks:
- * - Exactly 8 players
- * - Seeds 1-8 are unique
+ * - At least 2 players
+ * - Seeds are unique and positive
  */
 export async function validateLobbyBalance(gameId: string): Promise<{
     valid: boolean;
@@ -40,8 +40,8 @@ export async function validateLobbyBalance(gameId: string): Promise<{
     const errors: string[] = [];
 
     // Check player count
-    if (composition.length !== 8) {
-        errors.push(`Expected 8 players, found ${composition.length}`);
+    if (composition.length < 2) {
+        errors.push(`Expected at least 2 players, found ${composition.length}`);
     }
 
     // Check seeds
@@ -52,7 +52,7 @@ export async function validateLobbyBalance(gameId: string): Promise<{
         errors.push('Duplicate seeds found');
     }
 
-    const invalidSeeds = seeds.filter(s => s < 1 || s > 8);
+    const invalidSeeds = seeds.filter(s => s < 1);
     if (invalidSeeds.length > 0) {
         errors.push(`Invalid seeds: ${invalidSeeds.join(', ')}`);
     }

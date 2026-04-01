@@ -116,9 +116,9 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                     return;
                 }
 
-                const lobbyCount = Math.floor(confirmedCount / 8);
+                const lobbyCount = Math.ceil(confirmedCount / 8);
                 const message = `Démarrer la Phase 1 avec ${confirmedCount} joueurs confirmés ?\n\n` +
-                    `Cela créera ${lobbyCount} lobby(s) de 8 joueurs pour le Game 1.\n` +
+                    `Cela créera ${lobbyCount} lobby(s) équilibré(s) pour le Game 1 (taille variable possible).\n` +
                     `Les joueurs seront automatiquement répartis selon leur classement.`;
 
                 if (!confirm(message)) {
@@ -171,11 +171,12 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
 
                 const message = `Démarrer la Phase 3 ?\n\n` +
                     `RESET des points - Nouveau départ pour tous !\n\n` +
-                    `🏅 Bracket MASTER (jusqu'à 64 joueurs):\n` +
-                    `   - Top 32 de la Phase 1\n` +
-                    `   - Top 32 de la Phase 2\n\n` +
-                    `🥈 Bracket AMATEUR (taille variable selon le palier):\n` +
-                    `   - Joueurs restants de la Phase 2`;
+                    `🏅 Bracket MASTER (objectif 32 joueurs):\n` +
+                    `   - Top 16 de la Phase 1\n` +
+                    `   - Top 16 de la Phase 2\n\n` +
+                    `🥈 Bracket AMATEUR (objectif 32 joueurs):\n` +
+                    `   - Bottom 32 de la Phase 2\n\n` +
+                    `ℹ️ Les quotas sont tronqués automatiquement si l'effectif est insuffisant.`;
 
                 if (!confirm(message)) {
                     setIsStartingPhase(false);
@@ -201,12 +202,13 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                 }
 
                 const message = `Démarrer la Phase 4 ?\n\n` +
-                    `🏅 Bracket MASTER (32 joueurs):\n` +
-                    `   - Top 32 du bracket Master P3\n\n` +
+                    `🏅 Bracket MASTER (objectif 16 joueurs):\n` +
+                    `   - Top 16 du bracket Master P3\n\n` +
                     `   - Top cut actif après les 2 premières parties (réduction à 16)\n\n` +
-                    `🥈 Bracket AMATEUR (taille variable - RESET):\n` +
-                    `   - Qualifiés du bracket Amateur P3\n` +
-                    `   - Relégués du bas du bracket Master P3`;
+                    `🥈 Bracket AMATEUR (objectif 32 joueurs - RESET):\n` +
+                    `   - Top 16 du bracket Amateur P3\n` +
+                    `   - Bottom 16 du bracket Master P3\n\n` +
+                    `ℹ️ Les quotas sont tronqués automatiquement si l'effectif est insuffisant.`;
 
                 if (!confirm(message)) {
                     setIsStartingPhase(false);
@@ -237,7 +239,10 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                     `   - Rangs 9-16 du bracket Master P4\n\n` +
                     `🥈 Bracket AMATEUR (8 joueurs):\n` +
                     `   - Top 8 du bracket Amateur P4\n\n` +
-                    `ℹ️ La finale reste fixe sur 3 brackets de 8 joueurs (pas de top cut supplémentaire).`;
+                    `⚡ Règle Checkmate:\n` +
+                    `   - Challenger: statut finaliste à 21 points, max 7 games\n` +
+                    `   - Master/Amateur: statut finaliste à 18 points, max 6 games\n` +
+                    `   - Un finaliste qui gagne une game remporte le bracket.`;
 
                 if (!confirm(message)) {
                     setIsStartingPhase(false);
@@ -457,7 +462,13 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
             {/* Tab Content */}
             <div className="flex flex-col gap-4">
                 {selectedTab === "overview" && <OverviewTab participants={participants} games={games} phaseOrderIndex={phase.order_index} />}
-                {selectedTab === "games" && <GamesTab games={games} onResultsSubmitted={loadPhaseDetails} />}
+                {selectedTab === "games" && (
+                    <GamesTab
+                        tournamentId={tournamentId}
+                        games={games}
+                        onResultsSubmitted={loadPhaseDetails}
+                    />
+                )}
             </div>
         </div>
     );

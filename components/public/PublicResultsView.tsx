@@ -357,8 +357,19 @@ export function PublicResultsView() {
                     <TableBody>
                       {game.results.map((result) => (
                         <TableRow key={result.player_id}>
-                          <TableCell>#{result.placement}</TableCell>
-                          <TableCell>{result.player_name}</TableCell>
+                          <TableCell>
+                            {result.result_status === "forfeit" ? "FORFAIT" : `#${result.placement}`}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span>{result.player_name}</span>
+                              {result.is_finalist ? (
+                                <Chip size="sm" color="warning" variant="flat">
+                                  Finaliste
+                                </Chip>
+                              ) : null}
+                            </div>
+                          </TableCell>
                           <TableCell>{result.riot_id}</TableCell>
                           <TableCell>{result.points}</TableCell>
                         </TableRow>
@@ -376,7 +387,16 @@ export function PublicResultsView() {
                       {game.assignedPlayers.map((assigned) => (
                         <TableRow key={assigned.player_id}>
                           <TableCell>#{assigned.seed}</TableCell>
-                          <TableCell>{assigned.player_name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span>{assigned.player_name}</span>
+                              {assigned.is_finalist ? (
+                                <Chip size="sm" color="warning" variant="flat">
+                                  Finaliste
+                                </Chip>
+                              ) : null}
+                            </div>
+                          </TableCell>
                           <TableCell>{assigned.riot_id}</TableCell>
                         </TableRow>
                       ))}

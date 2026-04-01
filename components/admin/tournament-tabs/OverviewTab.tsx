@@ -18,13 +18,18 @@ interface OverviewTabProps {
 
 function getDefaultSupportedCount(confirmedPlayersCount: number): number {
     const supportedCounts = getSupportedTournamentPlayerCounts();
-    const normalized = Math.max(64, Math.min(128, confirmedPlayersCount));
+    const minCount = supportedCounts[0] ?? 32;
+    const maxCount = supportedCounts[supportedCounts.length - 1] ?? 128;
+    const normalized = Math.max(minCount, Math.min(maxCount, confirmedPlayersCount));
 
     const exact = supportedCounts.find((count) => count === normalized);
     if (exact) return exact;
 
-    const floored = Math.floor(normalized / 8) * 8;
-    return supportedCounts.find((count) => count === floored) || 64;
+    const closest = supportedCounts.reduce((best, current) =>
+        Math.abs(current - normalized) < Math.abs(best - normalized) ? current : best,
+    supportedCounts[0]);
+
+    return closest;
 }
 
 export function OverviewTab({ tournament, confirmedPlayersCount, getStatusColor, getStatusLabel }: OverviewTabProps) {

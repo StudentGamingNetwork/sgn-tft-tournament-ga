@@ -79,6 +79,28 @@ function applyTieAwareRanks(entries: LeaderboardEntry[]): LeaderboardEntry[] {
   });
 }
 
+function getFinalistThresholdByBracketName(bracketName?: string): number | null {
+  if (bracketName === "challenger") return 21;
+  if (bracketName === "master" || bracketName === "amateur") return 18;
+  return null;
+}
+
+function markFinalistsByThreshold(
+  entries: LeaderboardEntry[],
+  bracketName?: string,
+): LeaderboardEntry[] {
+  const threshold = getFinalistThresholdByBracketName(bracketName);
+
+  if (!threshold) {
+    return entries.map((entry) => ({ ...entry, is_finalist: false }));
+  }
+
+  return entries.map((entry) => ({
+    ...entry,
+    is_finalist: entry.total_points >= threshold,
+  }));
+}
+
 /**
  * Récupérer tous les tournois avec le nombre d'inscrits et la phase actuelle
  */
@@ -234,6 +256,14 @@ function calculateExpectedGamesForBracket(
   if (phaseOrderIndex === 4 && bracketName === "master" && totalGames > 2) {
     const reducedLobbyCount = Math.floor(game1LobbyCount / 2);
     return game1LobbyCount * 2 + reducedLobbyCount * (totalGames - 2);
+  }
+
+  if (phaseOrderIndex === 5) {
+    const cappedTotalGames =
+      bracketName === "challenger"
+        ? Math.min(totalGames, 7)
+        : Math.min(totalGames, 6);
+    return game1LobbyCount * cappedTotalGames;
   }
 
   return game1LobbyCount * totalGames;
@@ -394,6 +424,7 @@ export async function getTournamentGlobalResults(
       .find((p) => p.order_index >= 4);
 
     let globalLeaderboard: LeaderboardEntry[];
+    let hierarchyPlayerBucket = new Map<string, string>();
 
     if (hierarchyPhase) {
       const hierarchyPhaseLeaderboard = await getLeaderboard(hierarchyPhase.id);
@@ -419,6 +450,7 @@ export async function getTournamentGlobalResults(
           }
         }
       }
+      hierarchyPlayerBucket = playerBucket;
 
       const priorityOrder =
         hierarchyPhase.order_index >= 5
@@ -484,6 +516,17 @@ export async function getTournamentGlobalResults(
       globalLeaderboard = applyTieAwareRanks(globalWithAllPlayers);
     }
 
+    if (bracketFilterPhase.order_index === 5) {
+      globalLeaderboard = globalLeaderboard.map((entry) => {
+        const bucket = hierarchyPlayerBucket.get(entry.player_id);
+        const threshold = getFinalistThresholdByBracketName(bucket);
+        return {
+          ...entry,
+          is_finalist: threshold ? entry.total_points >= threshold : false,
+        };
+      });
+    }
+
     const bracketNameToId = new Map(
       bracketFilterPhase.brackets.map((b) => [b.name, b.id]),
     );
@@ -500,9 +543,13 @@ export async function getTournamentGlobalResults(
     for (const bracketName of orderedBracketNames) {
       const bracketId = bracketNameToId.get(bracketName);
       if (!bracketId) continue;
-      leaderboardsByFilter[bracketName] = applyTieAwareRanks(
+      const bracketLeaderboard = applyTieAwareRanks(
         await getLeaderboard(bracketFilterPhase.id, bracketId),
       );
+      leaderboardsByFilter[bracketName] =
+        bracketFilterPhase.order_index === 5
+          ? markFinalistsByThreshold(bracketLeaderboard, bracketName)
+          : bracketLeaderboard;
     }
 
     const availableFilters = ["global", ...orderedBracketNames];
@@ -576,6 +623,7 @@ export async function getTournamentPlayers(
         tournament_id: reg.tournament_id,
         player_id: reg.player_id,
         status: reg.status,
+        forfeited_at: reg.forfeited_at,
         registered_at: reg.registered_at,
         createdAt: reg.createdAt,
         updatedAt: reg.updatedAt,
@@ -629,6 +677,7 @@ export interface PhasePlayerStats extends PlayerStats {
   seed?: number;
   current_rank: number;
   top4_or_better_count: number;
+  is_finalist?: boolean;
 }
 
 /**
@@ -640,6 +689,8 @@ export interface GamePlayerResult {
   riot_id: string;
   placement: number;
   points: number;
+  result_status: "normal" | "forfeit";
+  is_finalist?: boolean;
 }
 
 /**
@@ -650,6 +701,7 @@ export interface LobbyPlayerInfo {
   player_name: string;
   riot_id: string;
   seed: number;
+  is_finalist?: boolean;
 }
 
 /**
@@ -816,6 +868,28 @@ export async function getPhaseDetails(
 
     const participants = Array.from(participantsMap.values());
 
+    const finalistByPlayerId = new Map<string, boolean>();
+    if (phaseData.order_index === 5) {
+      const phase5PlayerBucket = new Map<string, string>();
+      for (const g of gamesData) {
+        const bracketName = g.bracket?.name;
+        for (const lp of g.lobbyPlayers) {
+          if (!lp.player_id || !bracketName || phase5PlayerBucket.has(lp.player_id)) {
+            continue;
+          }
+          phase5PlayerBucket.set(lp.player_id, bracketName);
+        }
+      }
+
+      for (const participant of participants) {
+        const bucket = phase5PlayerBucket.get(participant.player_id);
+        const threshold = getFinalistThresholdByBracketName(bucket);
+        const isFinalist = threshold ? participant.total_points >= threshold : false;
+        participant.is_finalist = isFinalist;
+        finalistByPlayerId.set(participant.player_id, isFinalist);
+      }
+    }
+
     const games: GameWithResults[] = gamesData.map((g) => ({
       game_id: g.id,
       lobby_name: g.lobby_name,
@@ -831,8 +905,18 @@ export async function getPhaseDetails(
           riot_id: r.player!.riot_id,
           placement: r.placement,
           points: r.points,
+          result_status: r.result_status,
+          is_finalist: finalistByPlayerId.get(r.player_id as string) ?? false,
         }))
-        .sort((a, b) => a.placement - b.placement),
+        .sort((a, b) => {
+          if (a.result_status === "forfeit" && b.result_status !== "forfeit") {
+            return 1;
+          }
+          if (b.result_status === "forfeit" && a.result_status !== "forfeit") {
+            return -1;
+          }
+          return a.placement - b.placement;
+        }),
       assignedPlayers: (g.lobbyPlayers || [])
         .filter((lp: any) => lp.player && lp.player_id)
         .map((lp: any) => ({
@@ -840,6 +924,7 @@ export async function getPhaseDetails(
           player_name: lp.player.name,
           riot_id: lp.player.riot_id,
           seed: lp.seed,
+          is_finalist: finalistByPlayerId.get(lp.player_id as string) ?? false,
         }))
         .sort((a: any, b: any) => a.seed - b.seed),
     }));

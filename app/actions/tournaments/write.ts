@@ -34,8 +34,10 @@ import {
   startPhase4FromPhase3,
   startPhase5FromPhase4,
 } from "@/lib/services/tournament-service";
-import { validateTournamentPlayerCount } from "@/lib/services/tournament-structure";
-import { submitGameResults } from "@/lib/services/game-service";
+import {
+  submitGameResults,
+  forfeitPlayerFromTournament,
+} from "@/lib/services/game-service";
 import { auth } from "@/lib/auth";
 import { getTournamentPhases } from "./read";
 
@@ -959,16 +961,7 @@ export async function startPhase1Action(
       };
     }
 
-    if (confirmedPlayers.length < 64) {
-      return {
-        success: false,
-        error: `Pas assez de joueurs confirmés (minimum 64, actuellement ${confirmedPlayers.length})`,
-      };
-    }
-
-    validateTournamentPlayerCount(confirmedPlayers.length);
-
-    const lobbyCount = Math.floor(confirmedPlayers.length / 8);
+    const lobbyCount = Math.ceil(confirmedPlayers.length / 8);
     const playerIds = confirmedPlayers.map((p) => p.player_id);
 
     const existingBrackets = await db.query.bracket.findMany({
@@ -1077,7 +1070,6 @@ export async function startPhase3Action(
       phase1Id,
       phase2Id,
       phase3Id,
-      8,
     );
 
     await syncTournamentStatusFromPhaseId(phase3Id);
@@ -1328,6 +1320,30 @@ export async function submitGameResultsAction(
         error instanceof Error
           ? error.message
           : "Erreur lors de la soumission des résultats",
+    };
+  }
+}
+
+/**
+ * Déclarer le forfait d'un joueur sur un tournoi.
+ */
+export async function forfeitPlayerAction(
+  tournamentId: string,
+  playerId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+    await forfeitPlayerFromTournament(tournamentId, playerId);
+    await syncTournamentStatusFromPhases(tournamentId);
+    return { success: true };
+  } catch (error) {
+    console.error("Error forfeiting player:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors du forfait du joueur",
     };
   }
 }

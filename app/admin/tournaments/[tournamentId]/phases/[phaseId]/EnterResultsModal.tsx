@@ -1,8 +1,9 @@
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, memo, useMemo, useEffect } from "react";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from "@heroui/modal";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Card } from "@heroui/card";
+import { Checkbox } from "@heroui/checkbox";
 import type { GameWithResults, LobbyPlayerInfo } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
 
@@ -16,25 +17,39 @@ interface EnterResultsModalProps {
 interface PlayerInputProps {
     player: LobbyPlayerInfo;
     placement: string;
+    isForfeit: boolean;
+    maxPlacement: number;
     onChange: (value: string) => void;
+    onForfeitChange: (value: boolean) => void;
 }
 
-const PlayerInputRow = memo(function PlayerInputRow({ player, placement, onChange }: PlayerInputProps) {
+const PlayerInputRow = memo(function PlayerInputRow({
+    player,
+    placement,
+    isForfeit,
+    maxPlacement,
+    onChange,
+    onForfeitChange,
+}: PlayerInputProps) {
     return (
         <div className="flex items-center gap-4">
             <div className="flex-1">
                 <p className="font-medium">{player.player_name}</p>
                 <p className="text-sm text-default-500">{player.riot_id}</p>
             </div>
+            <Checkbox isSelected={isForfeit} onValueChange={onForfeitChange}>
+                Forfait
+            </Checkbox>
             <Input
                 type="number"
                 label="Placement"
-                placeholder="1-8"
+                placeholder={`1-${maxPlacement}`}
                 min={1}
-                max={8}
+                max={maxPlacement}
                 value={placement}
                 onChange={(e) => onChange(e.target.value)}
                 className="w-32"
+                isDisabled={isForfeit}
                 isRequired
             />
         </div>
@@ -42,39 +57,80 @@ const PlayerInputRow = memo(function PlayerInputRow({ player, placement, onChang
 });
 
 export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResultsModalProps) {
-    const [placements, setPlacements] = useState<Record<string, string>>(
-        Object.fromEntries(game.assignedPlayers.map(p => [p.player_id, ""]))
-    );
+    const initialState = useCallback(() => {
+        const resultMap = new Map(game.results.map((result) => [result.player_id, result]));
+
+        return {
+            placements: Object.fromEntries(
+                game.assignedPlayers.map((player) => {
+                    const existing = resultMap.get(player.player_id);
+                    return [
+                        player.player_id,
+                        existing && existing.result_status !== "forfeit"
+                            ? String(existing.placement)
+                            : "",
+                    ];
+                }),
+            ),
+            forfeits: Object.fromEntries(
+                game.assignedPlayers.map((player) => {
+                    const existing = resultMap.get(player.player_id);
+                    return [player.player_id, existing?.result_status === "forfeit"];
+                }),
+            ),
+        };
+    }, [game.assignedPlayers, game.results]);
+
+    const [placements, setPlacements] = useState<Record<string, string>>(() => initialState().placements);
+    const [forfeits, setForfeits] = useState<Record<string, boolean>>(() => initialState().forfeits);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const next = initialState();
+        setPlacements(next.placements);
+        setForfeits(next.forfeits);
+        setError(null);
+    }, [initialState, isOpen]);
 
     const handlePlacementChange = useCallback((playerId: string, value: string) => {
         setPlacements(prev => ({ ...prev, [playerId]: value }));
         setError(null);
     }, []);
 
+    const handleForfeitChange = useCallback((playerId: string, value: boolean) => {
+        setForfeits((prev) => ({ ...prev, [playerId]: value }));
+        if (value) {
+            setPlacements((prev) => ({ ...prev, [playerId]: "" }));
+        }
+        setError(null);
+    }, []);
+
+    const activePlayersCount = useMemo(
+        () => game.assignedPlayers.filter((player) => !forfeits[player.player_id]).length,
+        [forfeits, game.assignedPlayers],
+    );
+
     const validatePlacements = (): boolean => {
-        const values = Object.values(placements);
+        const activePlacements = game.assignedPlayers
+            .filter((player) => !forfeits[player.player_id])
+            .map((player) => placements[player.player_id]);
 
-        // Vérifier que tous les champs sont remplis
-        if (values.some(v => v === "")) {
-            setError("Tous les placements doivent être remplis");
+        if (activePlacements.some((value) => value === "")) {
+            setError("Tous les placements des joueurs actifs doivent être remplis");
             return false;
         }
 
-        // Convertir en nombres
-        const numbers = values.map(v => parseInt(v, 10));
+        const numbers = activePlacements.map((value) => parseInt(value, 10));
 
-        // Vérifier que tous sont des nombres valides entre 1 et 8
-        if (numbers.some(n => isNaN(n) || n < 1 || n > 8)) {
-            setError("Les placements doivent être entre 1 et 8");
+        if (numbers.some((number) => isNaN(number) || number < 1 || number > activePlayersCount)) {
+            setError(`Les placements doivent être entre 1 et ${activePlayersCount}`);
             return false;
         }
 
-        // Vérifier qu'il n'y a pas de doublons
         const uniqueNumbers = new Set(numbers);
-        if (uniqueNumbers.size !== 8) {
-            setError("Tous les placements doivent être uniques (1-8)");
+        if (uniqueNumbers.size !== activePlayersCount) {
+            setError("Tous les placements des joueurs actifs doivent être uniques");
             return false;
         }
 
@@ -88,10 +144,14 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
 
         setIsSubmitting(true);
         try {
-            const results: GameResult[] = Object.entries(placements).map(([player_id, placement]) => ({
-                player_id,
-                placement: parseInt(placement, 10),
-            }));
+            const results: GameResult[] = game.assignedPlayers.map((player) => {
+                const isForfeit = forfeits[player.player_id];
+                return {
+                    player_id: player.player_id,
+                    placement: isForfeit ? 0 : parseInt(placements[player.player_id], 10),
+                    result_status: isForfeit ? "forfeit" : "normal",
+                };
+            });
 
             await onSubmit(results);
             onClose();
@@ -106,11 +166,11 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
         <Modal isOpen={isOpen} onClose={onClose} size="3xl" scrollBehavior="inside">
             <ModalContent>
                 <ModalHeader className="flex flex-col gap-1">
-                    Saisir les résultats - {game.lobby_name} (Partie #{game.game_number})
+                    {game.hasResults ? "Modifier" : "Saisir"} les résultats - {game.lobby_name} (Partie #{game.game_number})
                 </ModalHeader>
                 <ModalBody>
                     <p className="text-sm text-default-500 mb-4">
-                        Entrez le placement final de chaque joueur (1 = 1er, 8 = 8ème)
+                        Entrez le placement final des joueurs actifs ({activePlayersCount} joueurs actifs).
                     </p>
                     {error && (
                         <Card className="p-3 bg-danger-50 border border-danger-200 mb-4">
@@ -125,7 +185,10 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
                                     key={player.player_id}
                                     player={player}
                                     placement={placements[player.player_id]}
+                                    isForfeit={forfeits[player.player_id]}
+                                    maxPlacement={Math.max(activePlayersCount, 1)}
                                     onChange={(value) => handlePlacementChange(player.player_id, value)}
+                                    onForfeitChange={(value) => handleForfeitChange(player.player_id, value)}
                                 />
                             ))}
                     </div>

@@ -1,11 +1,10 @@
 /**
- * Dynamic snake draft seeding utilities for TFT tournament
+ * Dynamic Swiss-style contiguous seeding utilities for TFT tournament
  *
- * This module provides flexible, dynamically generated seeding matrices using the snake draft algorithm.
+ * This module provides flexible, dynamically generated seeding matrices using contiguous seed blocks.
  * All seeding is now done through generateSnakeDraftMatrix() for consistency and flexibility.
  *
- * The snake draft pattern ensures fair distribution by alternating between ascending and descending
- * seed assignments across lobbies, preventing clusters of strong or weak players.
+ * Seeds remain contiguous by lobby while lobby sizes stay balanced (size difference <= 1).
  */
 
 /**
@@ -38,35 +37,34 @@ export function applySeedingMatrix(
 }
 
 /**
- * Generate a snake draft seeding matrix dynamically for any multiple of 8 players
+ * Generate a Swiss-style contiguous seeding matrix dynamically for any player count >= 8
  *
  * This is the PRIMARY and ONLY method to use for generating seeding matrices.
- * It ensures fair distribution of players across lobbies using the snake draft pattern.
+ * It ensures contiguous seed ranges per lobby and balanced lobby sizes.
  *
- * @param playerCount - Total number of players (MUST be a multiple of 8)
+ * @param playerCount - Total number of players (>= 8)
  * @param startSeed - Starting seed number (default: 1). Use this for non-consecutive seeds (e.g., Phase 2 starts at seed 33)
- * @returns Matrix of seed assignments (lobbyCount × 8) compatible with applySeedingMatrix()
- * @throws Error if playerCount is not a multiple of 8
+ * @returns Matrix of seed assignments with balanced lobby sizes (difference <= 1)
  *
  * @example
  * // Phase 1: 128 players starting at seed 1 → 16 lobbies
  * const matrix = generateSnakeDraftMatrix(128, 1);
- * // Returns: [[1, 32, 33, 64, 65, 96, 97, 128], [2, 31, 34, 63, ...], ...]
+ * // Returns lobbies of size 8 for this exact case
  *
  * @example
  * // Phase 2: 96 players starting at seed 33 → 12 lobbies
  * const matrix = generateSnakeDraftMatrix(96, 33);
- * // Returns: [[33, 56, 57, 80, 81, 104, 105, 128], [34, 55, 58, 79, ...], ...]
+ * // Returns lobbies of size 8 for this exact case
  *
  * @example
  * // Phase 3: 64 players per bracket → 8 lobbies
  * const matrix = generateSnakeDraftMatrix(64);
- * // Returns: [[1, 16, 17, 32, 33, 48, 49, 64], [2, 15, 18, 31, ...], ...]
+ * // Returns lobbies of size 8 for this exact case
  *
  * @example
  * // Phase 4 Master: 32 players → 4 lobbies
  * const matrix = generateSnakeDraftMatrix(32);
- * // Returns: [[1, 8, 9, 16, 17, 24, 25, 32], [2, 7, 10, 15, ...], ...]
+ * // Returns lobbies of size 8 for this exact case
  */
 export function generateSnakeDraftMatrix(
   playerCount: number,
@@ -77,40 +75,26 @@ export function generateSnakeDraftMatrix(
     throw new Error(`playerCount must be at least 8, got ${playerCount}`);
   }
 
-  if (playerCount % 8 !== 0) {
-    throw new Error(`playerCount must be a multiple of 8, got ${playerCount}`);
-  }
-
   if (startSeed < 1) {
     throw new Error(`startSeed must be at least 1, got ${startSeed}`);
   }
 
-  const lobbyCount = playerCount / 8;
-  const matrix: number[][] = [];
-  const offset = startSeed - 1; // Offset to add to all seeds
+  const lobbyCount = Math.ceil(playerCount / 8);
+  const baseLobbySize = Math.floor(playerCount / lobbyCount);
+  const extraPlayers = playerCount % lobbyCount;
 
-  // Generate matrix using snake draft pattern
-  // Pattern: 4 pairs of columns (8 columns total)
-  // Each pair alternates between ascending and descending order
+  const lobbySizes = Array.from({ length: lobbyCount }, (_, index) =>
+    baseLobbySize + (index < extraPlayers ? 1 : 0),
+  );
+
+  const matrix: number[][] = Array.from({ length: lobbyCount }, () => []);
+
+  let nextSeed = startSeed;
   for (let lobbyIndex = 0; lobbyIndex < lobbyCount; lobbyIndex++) {
-    const lobby: number[] = [];
-
-    for (let columnIndex = 0; columnIndex < 8; columnIndex++) {
-      const pairIndex = Math.floor(columnIndex / 2); // 0, 0, 1, 1, 2, 2, 3, 3
-      const isEvenColumn = columnIndex % 2 === 0;
-
-      // Each pair contains 2 * lobbyCount seeds
-      const pairStart = pairIndex * 2 * lobbyCount + 1;
-      const pairEnd = pairStart + 2 * lobbyCount - 1;
-
-      // Snake draft: even columns ascending, odd columns descending
-      const seed = isEvenColumn ? pairStart + lobbyIndex : pairEnd - lobbyIndex;
-
-      // Apply offset for non-consecutive seeds
-      lobby.push(seed + offset);
+    for (let slot = 0; slot < lobbySizes[lobbyIndex]; slot++) {
+      matrix[lobbyIndex].push(nextSeed);
+      nextSeed++;
     }
-
-    matrix.push(lobby);
   }
 
   return matrix;

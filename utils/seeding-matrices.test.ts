@@ -1,5 +1,5 @@
 /**
- * Tests for snake draft seeding algorithm
+ * Tests for Swiss contiguous balanced seeding algorithm
  */
 
 import { describe, it, expect } from "vitest";
@@ -7,28 +7,15 @@ import { generateSnakeDraftMatrix } from "./seeding-matrices";
 
 describe("generateSnakeDraftMatrix", () => {
   describe("validation", () => {
-    it("should throw error if playerCount is not a multiple of 8", () => {
-      expect(() => generateSnakeDraftMatrix(10)).toThrow(
-        "must be a multiple of 8",
-      );
-      expect(() => generateSnakeDraftMatrix(15)).toThrow(
-        "must be a multiple of 8",
-      );
-      expect(() => generateSnakeDraftMatrix(100)).toThrow(
-        "must be a multiple of 8",
-      );
-      expect(() => generateSnakeDraftMatrix(127)).toThrow(
-        "must be a multiple of 8",
-      );
-    });
-
     it("should throw error if playerCount is less than 8", () => {
       expect(() => generateSnakeDraftMatrix(0)).toThrow("must be at least 8");
       expect(() => generateSnakeDraftMatrix(4)).toThrow("must be at least 8");
     });
 
-    it("should accept valid multiples of 8", () => {
+    it("should accept any player count >= 8", () => {
       expect(() => generateSnakeDraftMatrix(8)).not.toThrow();
+      expect(() => generateSnakeDraftMatrix(10)).not.toThrow();
+      expect(() => generateSnakeDraftMatrix(52)).not.toThrow();
       expect(() => generateSnakeDraftMatrix(16)).not.toThrow();
       expect(() => generateSnakeDraftMatrix(128)).not.toThrow();
     });
@@ -38,19 +25,19 @@ describe("generateSnakeDraftMatrix", () => {
     it("should generate correct number of lobbies", () => {
       expect(generateSnakeDraftMatrix(8)).toHaveLength(1);
       expect(generateSnakeDraftMatrix(16)).toHaveLength(2);
-      expect(generateSnakeDraftMatrix(24)).toHaveLength(3);
+      expect(generateSnakeDraftMatrix(50)).toHaveLength(7);
+      expect(generateSnakeDraftMatrix(52)).toHaveLength(7);
       expect(generateSnakeDraftMatrix(64)).toHaveLength(8);
       expect(generateSnakeDraftMatrix(128)).toHaveLength(16);
     });
 
-    it("should have exactly 8 players per lobby", () => {
-      const testCases = [8, 16, 24, 32, 64, 96, 104, 128, 256];
+    it("should keep lobby sizes balanced (difference <= 1)", () => {
+      const testCases = [8, 9, 10, 15, 17, 49, 50, 52, 64, 96, 104, 128];
 
       testCases.forEach((playerCount) => {
         const matrix = generateSnakeDraftMatrix(playerCount);
-        matrix.forEach((lobby, index) => {
-          expect(lobby).toHaveLength(8);
-        });
+        const lobbySizes = matrix.map((lobby) => lobby.length);
+        expect(Math.max(...lobbySizes) - Math.min(...lobbySizes)).toBeLessThanOrEqual(1);
       });
     });
   });
@@ -87,35 +74,26 @@ describe("generateSnakeDraftMatrix", () => {
   });
 
   describe("snake draft pattern", () => {
-    it("should follow snake draft pattern for 8 players (1 lobby)", () => {
+    it("should generate contiguous blocks for 8 players", () => {
       const matrix = generateSnakeDraftMatrix(8);
-
-      // Single lobby should be: [1, 2, 3, 4, 5, 6, 7, 8]
       expect(matrix).toEqual([[1, 2, 3, 4, 5, 6, 7, 8]]);
     });
 
-    it("should follow snake draft pattern for 16 players (2 lobbies)", () => {
+    it("should generate contiguous blocks for 16 players", () => {
       const matrix = generateSnakeDraftMatrix(16);
-
-      // Expected pattern with 2 lobbies:
-      // Lobby A: [1, 4, 5, 8, 9, 12, 13, 16]
-      // Lobby B: [2, 3, 6, 7, 10, 11, 14, 15]
       expect(matrix).toEqual([
-        [1, 4, 5, 8, 9, 12, 13, 16],
-        [2, 3, 6, 7, 10, 11, 14, 15],
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        [9, 10, 11, 12, 13, 14, 15, 16],
       ]);
     });
 
-    it("should follow snake draft pattern for 32 players (4 lobbies)", () => {
-      const matrix = generateSnakeDraftMatrix(32);
+    it("should generate contiguous balanced blocks for 52 players", () => {
+      const matrix = generateSnakeDraftMatrix(52);
 
-      // Verify first and last lobby structure
-      expect(matrix[0]).toEqual([1, 8, 9, 16, 17, 24, 25, 32]);
-      expect(matrix[3]).toEqual([4, 5, 12, 13, 20, 21, 28, 29]);
-
-      // Verify all seeds are covered
-      const allSeeds = matrix.flat().sort((a, b) => a - b);
-      expect(allSeeds).toEqual(Array.from({ length: 32 }, (_, i) => i + 1));
+      expect(matrix).toHaveLength(7);
+      expect(matrix[0]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(matrix[1]).toEqual([9, 10, 11, 12, 13, 14, 15, 16]);
+      expect(matrix[6]).toEqual([46, 47, 48, 49, 50, 51, 52]);
     });
   });
 
@@ -124,8 +102,8 @@ describe("generateSnakeDraftMatrix", () => {
       const matrix = generateSnakeDraftMatrix(104);
 
       expect(matrix).toHaveLength(13);
-      expect(matrix[0]).toEqual([1, 26, 27, 52, 53, 78, 79, 104]);
-      expect(matrix[12]).toEqual([13, 14, 39, 40, 65, 66, 91, 92]);
+      expect(matrix[0]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(matrix[12]).toEqual([97, 98, 99, 100, 101, 102, 103, 104]);
 
       // Verify all seeds covered
       const allSeeds = matrix.flat().sort((a, b) => a - b);
@@ -136,8 +114,8 @@ describe("generateSnakeDraftMatrix", () => {
       const matrix = generateSnakeDraftMatrix(96);
 
       expect(matrix).toHaveLength(12);
-      expect(matrix[0]).toEqual([1, 24, 25, 48, 49, 72, 73, 96]);
-      expect(matrix[11]).toEqual([12, 13, 36, 37, 60, 61, 84, 85]);
+      expect(matrix[0]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(matrix[11]).toEqual([89, 90, 91, 92, 93, 94, 95, 96]);
 
       // Verify all seeds covered
       const allSeeds = matrix.flat().sort((a, b) => a - b);
@@ -148,8 +126,8 @@ describe("generateSnakeDraftMatrix", () => {
       const matrix = generateSnakeDraftMatrix(64);
 
       expect(matrix).toHaveLength(8);
-      expect(matrix[0]).toEqual([1, 16, 17, 32, 33, 48, 49, 64]);
-      expect(matrix[7]).toEqual([8, 9, 24, 25, 40, 41, 56, 57]);
+      expect(matrix[0]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(matrix[7]).toEqual([57, 58, 59, 60, 61, 62, 63, 64]);
 
       // Verify all seeds covered
       const allSeeds = matrix.flat().sort((a, b) => a - b);
@@ -160,8 +138,8 @@ describe("generateSnakeDraftMatrix", () => {
       const matrix = generateSnakeDraftMatrix(32);
 
       expect(matrix).toHaveLength(4);
-      expect(matrix[0]).toEqual([1, 8, 9, 16, 17, 24, 25, 32]);
-      expect(matrix[3]).toEqual([4, 5, 12, 13, 20, 21, 28, 29]);
+      expect(matrix[0]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(matrix[3]).toEqual([25, 26, 27, 28, 29, 30, 31, 32]);
 
       // Verify all seeds covered
       const allSeeds = matrix.flat().sort((a, b) => a - b);
@@ -175,11 +153,9 @@ describe("generateSnakeDraftMatrix", () => {
 
       expect(matrix).toHaveLength(16);
 
-      // Verify first lobby
-      expect(matrix[0]).toEqual([1, 32, 33, 64, 65, 96, 97, 128]);
-
-      // Verify last lobby
-      expect(matrix[15]).toEqual([16, 17, 48, 49, 80, 81, 112, 113]);
+      // Verify first and last lobbies
+      expect(matrix[0]).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(matrix[15]).toEqual([121, 122, 123, 124, 125, 126, 127, 128]);
 
       // Verify all seeds present
       const allSeeds = new Set(matrix.flat());
@@ -216,22 +192,16 @@ describe("generateSnakeDraftMatrix", () => {
   });
 
   describe("edge cases", () => {
-    it("should distribute evenly for all valid multiples of 8", () => {
-      // Test various multiples of 8
+    it("should distribute evenly for a wide range of counts", () => {
       const testCases = [
-        8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128,
+        8, 9, 10, 11, 12, 16, 24, 25, 32, 40, 48, 49, 50, 52, 56, 64, 72,
+        80, 88, 96, 104, 112, 120, 128,
       ];
 
       testCases.forEach((playerCount) => {
         const matrix = generateSnakeDraftMatrix(playerCount);
-        const lobbyCount = playerCount / 8;
-
-        expect(matrix.length).toBe(lobbyCount);
-
-        // Each lobby should have exactly 8 players
-        matrix.forEach((lobby) => {
-          expect(lobby.length).toBe(8);
-        });
+        const sizes = matrix.map((lobby) => lobby.length);
+        expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
 
         // All seeds should be present and unique
         const allSeeds = matrix.flat();
@@ -257,11 +227,8 @@ describe("generateSnakeDraftMatrix", () => {
 
       expect(matrix).toHaveLength(12);
 
-      // First lobby should start at 33 and end at 128 (33 + 96 - 1)
-      expect(matrix[0]).toEqual([33, 56, 57, 80, 81, 104, 105, 128]);
-
-      // Last lobby
-      expect(matrix[11]).toEqual([44, 45, 68, 69, 92, 93, 116, 117]);
+      expect(matrix[0]).toEqual([33, 34, 35, 36, 37, 38, 39, 40]);
+      expect(matrix[11]).toEqual([121, 122, 123, 124, 125, 126, 127, 128]);
 
       // Verify all seeds are in range 33-128
       const allSeeds = matrix.flat().sort((a, b) => a - b);
@@ -275,8 +242,7 @@ describe("generateSnakeDraftMatrix", () => {
 
       expect(matrix).toHaveLength(4);
 
-      // First lobby: starting at 10, ending at 41 (10 + 32 - 1)
-      expect(matrix[0]).toEqual([10, 17, 18, 25, 26, 33, 34, 41]);
+      expect(matrix[0]).toEqual([10, 11, 12, 13, 14, 15, 16, 17]);
 
       // Verify all seeds are in range 10-41
       const allSeeds = matrix.flat().sort((a, b) => a - b);
@@ -294,7 +260,7 @@ describe("generateSnakeDraftMatrix", () => {
       );
     });
 
-    it("should preserve snake draft pattern with non-default startSeed", () => {
+    it("should preserve contiguous pattern with non-default startSeed", () => {
       const matrixDefault = generateSnakeDraftMatrix(16, 1);
       const matrixOffset = generateSnakeDraftMatrix(16, 100);
 

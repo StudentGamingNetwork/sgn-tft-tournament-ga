@@ -11,6 +11,7 @@ import {
   player,
   phase,
   bracket,
+  tournamentRegistration,
 } from "@/models/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import type { GameResult, StatusType, SeededPlayer } from "@/types/tournament";
@@ -21,6 +22,17 @@ import {
   applySeedingMatrix,
 } from "@/utils/seeding-matrices";
 import { syncTournamentStatusByPhaseId } from "@/lib/services/tournament-status-service";
+
+function getCheckmateThreshold(bracketName?: string): number | null {
+  if (bracketName === "challenger") return 21;
+  if (bracketName === "master" || bracketName === "amateur") return 18;
+  return null;
+}
+
+function getFinalsMaxGames(bracketName?: string): number {
+  if (bracketName === "challenger") return 7;
+  return 6;
+}
 
 /**
  * Create a new game
@@ -110,39 +122,30 @@ export async function submitGameResults(
     throw new Error("Game not found");
   }
 
-  // Validation: Check we have exactly 8 results
-  if (gameResults.length !== 8) {
-    throw new Error(`Expected 8 results, got ${gameResults.length}`);
-  }
-
-  // Validation: Check all placements are 1-8
-  const placements = gameResults.map((r) => r.placement);
-  const invalidPlacements = placements.filter((p) => p < 1 || p > 8);
-  if (invalidPlacements.length > 0) {
-    throw new Error(
-      `Invalid placements: ${invalidPlacements.join(", ")}. Must be between 1 and 8.`,
-    );
-  }
-
-  // Validation: Check all placements are unique
-  const uniquePlacements = new Set(placements);
-  if (uniquePlacements.size !== 8) {
-    throw new Error("All placements must be unique (1-8)");
-  }
-
-  // Validation: Check all player_ids are valid
+  // Validation: Check all player_ids are unique
   const playerIds = gameResults.map((r) => r.player_id);
   const uniquePlayerIds = new Set(playerIds);
-  if (uniquePlayerIds.size !== 8) {
+  if (uniquePlayerIds.size !== gameResults.length) {
     throw new Error("All player_ids must be unique");
   }
 
-  // Validation: Check that all players are assigned to this game
-  const lobbyPlayers = await db.query.lobbyPlayer.findMany({
+  const assignedLobbyPlayers = await db.query.lobbyPlayer.findMany({
     where: eq(lobbyPlayer.game_id, gameId),
   });
 
-  const assignedPlayerIds = new Set(lobbyPlayers.map((lp) => lp.player_id));
+  const expectedPlayersCount = assignedLobbyPlayers.length;
+
+  // Validation: Check we have exactly one result per assigned player
+  if (gameResults.length !== expectedPlayersCount) {
+    throw new Error(
+      `Expected ${expectedPlayersCount} results, got ${gameResults.length}`,
+    );
+  }
+
+  // Validation: Check that all players are assigned to this game
+  const assignedPlayerIds = new Set(
+    assignedLobbyPlayers.map((lp) => lp.player_id),
+  );
   const invalidPlayerIds = playerIds.filter((id) => !assignedPlayerIds.has(id));
   if (invalidPlayerIds.length > 0) {
     throw new Error(
@@ -150,12 +153,48 @@ export async function submitGameResults(
     );
   }
 
+  const normalResults = gameResults.filter(
+    (result) => (result.result_status ?? "normal") !== "forfeit",
+  );
+  const forfeitResults = gameResults.filter(
+    (result) => (result.result_status ?? "normal") === "forfeit",
+  );
+
+  // Validation: normal placements must be in [1..normalPlayersCount]
+  const normalPlayersCount = normalResults.length;
+  const invalidPlacements = normalResults
+    .map((r) => r.placement)
+    .filter((placement) => placement < 1 || placement > normalPlayersCount);
+  if (invalidPlacements.length > 0) {
+    throw new Error(
+      `Invalid placements: ${invalidPlacements.join(", ")}. Must be between 1 and ${normalPlayersCount}.`,
+    );
+  }
+
+  // Validation: forfeits must use placement 0
+  const invalidForfeitPlacements = forfeitResults
+    .map((r) => r.placement)
+    .filter((placement) => placement !== 0);
+  if (invalidForfeitPlacements.length > 0) {
+    throw new Error("Forfeit results must use placement 0");
+  }
+
+  // Validation: normal placements are unique
+  const normalPlacements = normalResults.map((r) => r.placement);
+  if (new Set(normalPlacements).size !== normalPlacements.length) {
+    throw new Error("All non-forfeit placements must be unique");
+  }
+
   // Calculate points for each result (if not provided)
   const resultsWithPoints = gameResults.map((result) => ({
     game_id: gameId,
     player_id: result.player_id,
     placement: result.placement,
-    points: result.points ?? calculatePoints(result.placement),
+    points:
+      (result.result_status ?? "normal") === "forfeit"
+        ? 0
+        : result.points ?? calculatePoints(result.placement),
+    result_status: result.result_status ?? "normal",
   }));
 
   // Use transaction to ensure atomicity
@@ -180,6 +219,61 @@ export async function submitGameResults(
   }
 
   return resultsWithPoints;
+}
+
+/**
+ * Mark a player as forfeited in a tournament and remove them from non-completed games.
+ */
+export async function forfeitPlayerFromTournament(
+  tournamentId: string,
+  playerId: string,
+) {
+  const phaseRows = await db.query.phase.findMany({
+    where: eq(phase.tournament_id, tournamentId),
+    columns: { id: true },
+  });
+
+  const phaseIds = phaseRows.map((p) => p.id);
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(tournamentRegistration)
+      .set({ forfeited_at: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(tournamentRegistration.tournament_id, tournamentId),
+          eq(tournamentRegistration.player_id, playerId),
+        ),
+      );
+
+    if (phaseIds.length === 0) {
+      return;
+    }
+
+    const pendingGames = await tx.query.game.findMany({
+      where: and(inArray(game.phase_id, phaseIds), sql`${game.status} != 'completed'`),
+      with: {
+        lobbyPlayers: true,
+      },
+    });
+
+    const targetGameIds = pendingGames
+      .filter((g) => g.lobbyPlayers.some((lp) => lp.player_id === playerId))
+      .map((g) => g.id);
+
+    if (targetGameIds.length === 0) {
+      return;
+    }
+
+    await tx
+      .delete(lobbyPlayer)
+      .where(
+        and(
+          inArray(lobbyPlayer.game_id, targetGameIds),
+          eq(lobbyPlayer.player_id, playerId),
+        ),
+      );
+  });
 }
 
 /**
@@ -435,6 +529,38 @@ async function createNextGameWithReseed(
   currentGames: any[],
   phaseOrderIndex: number,
 ): Promise<{ created: boolean; gamesCreated?: number }> {
+  const bracketName = currentGames[0]?.bracket?.name;
+
+  if (phaseOrderIndex === 5) {
+    const finalsMaxGames = getFinalsMaxGames(bracketName);
+    if (currentGameNumber >= finalsMaxGames) {
+      return { created: false, gamesCreated: 0 };
+    }
+
+    const checkmateThreshold = getCheckmateThreshold(bracketName);
+    if (checkmateThreshold) {
+      const bracketLeaderboard = await getLeaderboard(phaseId, bracketId);
+      const finalists = new Set(
+        bracketLeaderboard
+          .filter((entry) => entry.total_points >= checkmateThreshold)
+          .map((entry) => entry.player_id),
+      );
+
+      if (finalists.size > 0) {
+        const finalistWonCurrentGame = currentGames.some((g) =>
+          g.results.some(
+            (result: { player_id: string | null; placement: number }) =>
+              !!result.player_id && result.placement === 1 && finalists.has(result.player_id),
+          ),
+        );
+
+        if (finalistWonCurrentGame) {
+          return { created: false, gamesCreated: 0 };
+        }
+      }
+    }
+  }
+
   const nextGameNumber = currentGameNumber + 1;
 
   // Guard against duplicate next-game creation.

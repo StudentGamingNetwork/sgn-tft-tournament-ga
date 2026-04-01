@@ -184,8 +184,9 @@ export enum TieBreakerCriteria {
  */
 export interface GameResult {
   player_id: string;
-  placement: number; // 1-8
+  placement: number; // 0 (forfait) or rank in lobby (1..N)
   points?: number; // Optional, can be calculated from placement
+  result_status?: "normal" | "forfeit";
 }
 
 /**
@@ -227,6 +228,7 @@ export interface LeaderboardEntry {
   avg_placement: number;
   top1_count: number;
   top4_count: number;
+  is_finalist?: boolean;
 }
 
 /**

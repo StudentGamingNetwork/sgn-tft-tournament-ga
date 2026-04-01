@@ -242,7 +242,16 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                                 )}
                                                 <tr className="border-b border-default-100">
                                                     <td className="py-2 pr-3 font-semibold">{entry.rank}</td>
-                                                    <td className="py-2 pr-3">{entry.player_name}</td>
+                                                    <td className="py-2 pr-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <span>{entry.player_name}</span>
+                                                            {entry.is_finalist && (
+                                                                <Chip size="sm" color="warning" variant="flat">
+                                                                    Finaliste
+                                                                </Chip>
+                                                            )}
+                                                        </div>
+                                                    </td>
                                                     <td className="py-2 pr-3 text-default-500">{entry.riot_id}</td>
                                                     <td className="py-2 pr-3 font-semibold">{entry.total_points}</td>
                                                     <td className="py-2 pr-3">{entry.games_played}</td>

@@ -7,6 +7,7 @@ import { count, desc, eq } from "drizzle-orm";
 import { title } from "@/components/primitives";
 import { db } from "@/lib/db";
 import { tournament, tournamentRegistration } from "@/models/schema";
+import { env } from "@/utils/environment";
 
 async function getFeaturedTournament() {
     let tournaments: Array<{
@@ -69,6 +70,14 @@ async function getFeaturedTournament() {
 
 export default async function Home() {
     const featuredTournament = await getFeaturedTournament();
+    const twitchParent = (() => {
+        try {
+            return new URL(env.NEXT_PUBLIC_FRONTEND_URL).hostname;
+        } catch {
+            return "localhost";
+        }
+    })();
+    const twitchPlayerUrl = `https://player.twitch.tv/?channel=merci_raph&parent=${twitchParent}&autoplay=false&muted=true`;
 
     return (
         <div className="flex flex-col gap-16 py-8 md:py-10">
@@ -191,6 +200,16 @@ export default async function Home() {
                         <p className="text-default-500 max-w-2xl mx-auto">
                             Consultez les classements en temps réel, les résultats des matchs et suivez la progression de vos joueurs préférés tout au long du tournoi.
                         </p>
+                        <div className="w-full max-w-2xl mx-auto mt-2 rounded-xl overflow-hidden border border-primary/20 bg-black">
+                            <div className="aspect-video w-full">
+                                <iframe
+                                    src={twitchPlayerUrl}
+                                    title="Stream Twitch Merci Raph"
+                                    allowFullScreen
+                                    className="h-full w-full"
+                                />
+                            </div>
+                        </div>
                         <div className="flex gap-4 justify-center mt-4">
                             <Button
                                 as={Link}
@@ -208,6 +227,16 @@ export default async function Home() {
                                 variant="flat"
                             >
                                 Résultats des matchs
+                            </Button>
+                            <Button
+                                as={Link}
+                                href="https://www.twitch.tv/merci_raph"
+                                size="lg"
+                                variant="bordered"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Ouvrir Twitch
                             </Button>
                         </div>
                     </CardBody>

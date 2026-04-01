@@ -7,16 +7,17 @@ import { Tabs, Tab } from "@heroui/tabs";
 import { Gamepad2, Target, Award, Edit } from "lucide-react";
 import type { GameWithResults } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
-import { submitGameResultsAction } from "@/app/actions/tournaments";
+import { forfeitPlayerAction, submitGameResultsAction } from "@/app/actions/tournaments";
 import { EnterResultsModal } from "./EnterResultsModal";
 import { getBracketChipColor } from "@/utils/bracket-colors";
 
 interface GamesTabProps {
+    tournamentId: string;
     games: GameWithResults[];
     onResultsSubmitted?: () => void;
 }
 
-export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
+export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabProps) {
     const [selectedGame, setSelectedGame] = useState<GameWithResults | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedGameNumber, setSelectedGameNumber] = useState<number>(1);
@@ -44,6 +45,25 @@ export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
             }
         } else {
             throw new Error(result.error || "Erreur lors de la soumission");
+        }
+    };
+
+    const handleForfeitPlayer = async (playerId: string, playerName: string) => {
+        const accepted = window.confirm(
+            `Confirmer le forfait de ${playerName} ?\n\nLe joueur sera retiré des matchs non terminés.`,
+        );
+
+        if (!accepted) {
+            return;
+        }
+
+        const result = await forfeitPlayerAction(tournamentId, playerId);
+        if (!result.success) {
+            throw new Error(result.error || "Erreur lors du forfait joueur");
+        }
+
+        if (onResultsSubmitted) {
+            onResultsSubmitted();
         }
     };
 
@@ -146,16 +166,14 @@ export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
                                 >
                                     {game.bracket_name.toUpperCase()}
                                 </Chip>
-                                {!game.hasResults && (
-                                    <Button
-                                        color="primary"
-                                        size="sm"
-                                        startContent={<Edit size={16} />}
-                                        onPress={() => handleOpenModal(game)}
-                                    >
-                                        Saisir résultats
-                                    </Button>
-                                )}
+                                <Button
+                                    color={game.hasResults ? "warning" : "primary"}
+                                    size="sm"
+                                    startContent={<Edit size={16} />}
+                                    onPress={() => handleOpenModal(game)}
+                                >
+                                    {game.hasResults ? "Modifier résultats" : "Saisir résultats"}
+                                </Button>
                             </div>
                         </div>
                         {game.hasResults ? (
@@ -171,20 +189,29 @@ export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
                                         <TableRow key={result.player_id}>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
-                                                    {result.placement === 1 && (
+                                                    {result.result_status !== "forfeit" && result.placement === 1 && (
                                                         <Award size={16} className="text-yellow-500" />
                                                     )}
-                                                    {result.placement === 2 && (
+                                                    {result.result_status !== "forfeit" && result.placement === 2 && (
                                                         <Award size={16} className="text-default-400" />
                                                     )}
-                                                    {result.placement === 3 && (
+                                                    {result.result_status !== "forfeit" && result.placement === 3 && (
                                                         <Award size={16} className="text-amber-700" />
                                                     )}
-                                                    <span className="font-bold">#{result.placement}</span>
+                                                    <span className="font-bold">
+                                                        {result.result_status === "forfeit" ? "FORFAIT" : `#${result.placement}`}
+                                                    </span>
                                                 </div>
                                             </TableCell>
                                             <TableCell className="font-medium">
-                                                {result.player_name}
+                                                <div className="flex items-center gap-2">
+                                                    <span>{result.player_name}</span>
+                                                    {result.is_finalist && (
+                                                        <Chip size="sm" color="warning" variant="flat">
+                                                            Finaliste
+                                                        </Chip>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-default-500">
                                                 {result.riot_id}
@@ -192,7 +219,9 @@ export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
                                             <TableCell>
                                                 <span
                                                     className={
-                                                        result.placement <= 4
+                                                        result.result_status === "forfeit"
+                                                            ? "font-semibold text-danger"
+                                                            : result.placement <= 4
                                                             ? "font-bold text-success"
                                                             : "text-default-500"
                                                     }
@@ -211,6 +240,7 @@ export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
                                     <TableColumn>JOUEUR</TableColumn>
                                     <TableColumn>RIOT ID</TableColumn>
                                     <TableColumn>STATUT</TableColumn>
+                                    <TableColumn>ACTION</TableColumn>
                                 </TableHeader>
                                 <TableBody>
                                     {game.assignedPlayers.map((player) => (
@@ -219,13 +249,40 @@ export function GamesTab({ games, onResultsSubmitted }: GamesTabProps) {
                                                 <span className="text-default-400">Seed #{player.seed}</span>
                                             </TableCell>
                                             <TableCell className="font-medium">
-                                                {player.player_name}
+                                                <div className="flex items-center gap-2">
+                                                    <span>{player.player_name}</span>
+                                                    {player.is_finalist && (
+                                                        <Chip size="sm" color="warning" variant="flat">
+                                                            Finaliste
+                                                        </Chip>
+                                                    )}
+                                                </div>
                                             </TableCell>
                                             <TableCell className="text-default-500">
                                                 {player.riot_id}
                                             </TableCell>
                                             <TableCell>
                                                 <span className="text-default-400 italic">En attente</span>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Button
+                                                    size="sm"
+                                                    color="danger"
+                                                    variant="flat"
+                                                    onPress={async () => {
+                                                        try {
+                                                            await handleForfeitPlayer(player.player_id, player.player_name);
+                                                        } catch (error) {
+                                                            alert(
+                                                                error instanceof Error
+                                                                    ? error.message
+                                                                    : "Erreur lors du forfait",
+                                                            );
+                                                        }
+                                                    }}
+                                                >
+                                                    Forfait
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
                                     ))}
