@@ -94,10 +94,6 @@ function validateSimulatedPlayerCount(playerCount: number): string | null {
     return "Le nombre de joueurs doit etre un entier positif.";
   }
 
-  if (playerCount % 8 !== 0) {
-    return "Le nombre de joueurs doit etre un multiple de 8.";
-  }
-
   return null;
 }
 
@@ -146,7 +142,7 @@ async function displayMenu() {
   log("Actions disponibles:", "bright");
   log("1️⃣  - Créer un nouveau tournoi", "blue");
   log("S - Sélectionner un tournoi existant", "blue");
-  log("2️⃣  - Générer et ajouter des joueurs (multiple de 8)", "blue");
+  log("2️⃣  - Générer et ajouter des joueurs", "blue");
   log("3️⃣  - Démarrer la Phase 1", "blue");
   log("4️⃣  - Soumettre les résultats d'un jeu", "blue");
   log("5️⃣  - Voir le leaderboard actuel", "blue");
@@ -301,9 +297,7 @@ async function generatePlayersAction() {
   }
 
   const defaultCount = simulatedPlayerCount.toString();
-  const countInput = await question(
-    `Nombre de joueurs (multiple de 8) [${defaultCount}]: `,
-  );
+  const countInput = await question(`Nombre de joueurs [${defaultCount}]: `);
 
   const targetCount = Number.parseInt(countInput.trim() || defaultCount, 10);
 

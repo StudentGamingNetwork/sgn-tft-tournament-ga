@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card } from "@heroui/card";
 import { Chip } from "@heroui/chip";
 import { Button } from "@heroui/button";
@@ -20,6 +20,7 @@ interface GamesTabProps {
 export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabProps) {
     const [selectedGame, setSelectedGame] = useState<GameWithResults | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [selectedBracket, setSelectedBracket] = useState<string>("all");
     const [selectedGameNumber, setSelectedGameNumber] = useState<number>(1);
 
     const handleOpenModal = (game: GameWithResults) => {
@@ -50,7 +51,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
 
     const handleForfeitPlayer = async (playerId: string, playerName: string) => {
         const accepted = window.confirm(
-            `Confirmer le forfait de ${playerName} ?\n\nLe joueur sera retiré des matchs non terminés.`,
+            `Confirmer le forfait de ${playerName} ?\n\nUtiliser ce bouton uniquement si le joueur apparaît encore dans un match alors qu'il a déjà forfait.\nCette action le retire des matchs non terminés, sans modifier les matchs déjà terminés.`,
         );
 
         if (!accepted) {
@@ -67,29 +68,86 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         }
     };
 
-    // Calculer les numéros de game uniques et trier
-    const gameNumbers = useMemo(() => {
-        const numbers = Array.from(new Set(games.map(g => g.game_number))).sort((a, b) => a - b);
-        return numbers;
+    const bracketTabs = useMemo(() => {
+        const bracketOrder = ["master", "amateur", "challenger", "common"];
+        const bracketNames = Array.from(new Set(games.map((g) => g.bracket_name)));
+
+        const sortedBracketNames = bracketNames.sort((a, b) => {
+            const indexA = bracketOrder.indexOf(a);
+            const indexB = bracketOrder.indexOf(b);
+            if (indexA === -1 && indexB === -1) {
+                return a.localeCompare(b);
+            }
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+        });
+
+        return ["all", ...sortedBracketNames];
     }, [games]);
+
+    const gamesForSelectedBracket = useMemo(() => {
+        if (selectedBracket === "all") {
+            return games;
+        }
+        return games.filter((g) => g.bracket_name === selectedBracket);
+    }, [games, selectedBracket]);
+
+    // Calculer les numéros de game uniques et trier (dans le bracket sélectionné)
+    const gameNumbers = useMemo(() => {
+        const numbers = Array.from(
+            new Set(gamesForSelectedBracket.map((g) => g.game_number)),
+        ).sort((a, b) => a - b);
+        return numbers;
+    }, [gamesForSelectedBracket]);
+
+    useEffect(() => {
+        if (gameNumbers.length === 0) {
+            setSelectedGameNumber(1);
+            return;
+        }
+
+        if (!gameNumbers.includes(selectedGameNumber)) {
+            setSelectedGameNumber(gameNumbers[0]);
+        }
+    }, [gameNumbers, selectedGameNumber]);
 
     // Filtrer les games par le numéro sélectionné
     const filteredGames = useMemo(() => {
-        return games.filter(g => g.game_number === selectedGameNumber).sort((a, b) => {
+        return gamesForSelectedBracket.filter(g => g.game_number === selectedGameNumber).sort((a, b) => {
             // Trier par lobby name pour un affichage cohérent
             return a.lobby_name.localeCompare(b.lobby_name);
         });
-    }, [games, selectedGameNumber]);
+    }, [gamesForSelectedBracket, selectedGameNumber]);
 
     // Calculer les stats pour chaque game number
     const gameStats = useMemo(() => {
         return gameNumbers.map(num => {
-            const gamesForNumber = games.filter(g => g.game_number === num);
+            const gamesForNumber = gamesForSelectedBracket.filter(g => g.game_number === num);
             const withResults = gamesForNumber.filter(g => g.hasResults).length;
             const total = gamesForNumber.length;
             return { gameNumber: num, withResults, total };
         });
-    }, [games, gameNumbers]);
+    }, [gamesForSelectedBracket, gameNumbers]);
+
+    const bracketStats = useMemo(() => {
+        return bracketTabs
+            .filter((bracket) => bracket !== "all")
+            .map((bracket) => {
+                const bracketGames = games.filter((g) => g.bracket_name === bracket);
+                const withResults = bracketGames.filter((g) => g.hasResults).length;
+                return {
+                    bracket,
+                    withResults,
+                    total: bracketGames.length,
+                };
+            });
+    }, [games, bracketTabs]);
+
+    const totalGamesWithResults = useMemo(
+        () => games.filter((g) => g.hasResults).length,
+        [games],
+    );
 
     if (games.length === 0) {
         return (
@@ -104,6 +162,63 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
 
     return (
         <div className="flex flex-col gap-6">
+            {/* Tabs pour filtrer par bracket */}
+            <Card>
+                <div className="p-4">
+                    <Tabs
+                        selectedKey={selectedBracket}
+                        onSelectionChange={(key) => setSelectedBracket(String(key))}
+                        aria-label="Brackets"
+                        color="primary"
+                        variant="underlined"
+                        classNames={{
+                            tabList: "gap-6 w-full relative rounded-none p-0 border-b border-divider",
+                            cursor: "w-full bg-primary",
+                            tab: "max-w-fit px-0 h-12",
+                        }}
+                    >
+                        <Tab
+                            key="all"
+                            title={
+                                <div className="flex items-center gap-2">
+                                    <span>Tous</span>
+                                    <Chip
+                                        size="sm"
+                                        variant="flat"
+                                        color={totalGamesWithResults === games.length ? "success" : "secondary"}
+                                    >
+                                        {totalGamesWithResults}/{games.length}
+                                    </Chip>
+                                </div>
+                            }
+                        />
+                        {bracketStats.map((stat) => (
+                            <Tab
+                                key={stat.bracket}
+                                title={
+                                    <div className="flex items-center gap-2">
+                                        <Chip
+                                            size="sm"
+                                            color={getBracketChipColor(stat.bracket)}
+                                            variant="flat"
+                                        >
+                                            {stat.bracket.toUpperCase()}
+                                        </Chip>
+                                        <Chip
+                                            size="sm"
+                                            variant="flat"
+                                            color={stat.withResults === stat.total ? "success" : "secondary"}
+                                        >
+                                            {stat.withResults}/{stat.total}
+                                        </Chip>
+                                    </div>
+                                }
+                            />
+                        ))}
+                    </Tabs>
+                </div>
+            </Card>
+
             {/* Tabs pour filtrer par numéro de game */}
             <Card>
                 <div className="p-4">
@@ -119,6 +234,13 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                             tab: "max-w-fit px-0 h-12",
                         }}
                     >
+                        {gameStats.length === 0 && (
+                            <Tab
+                                key="0"
+                                title={<span>Aucune partie</span>}
+                                isDisabled
+                            />
+                        )}
                         {gameStats.map((stat) => (
                             <Tab
                                 key={stat.gameNumber.toString()}
@@ -146,7 +268,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                 <Card>
                     <div className="p-8 text-center text-default-500">
                         <Gamepad2 size={48} className="mx-auto mb-4 opacity-50" />
-                        <p>Aucune partie trouvée pour ce numéro de game.</p>
+                        <p>Aucune partie trouvée pour ce bracket et ce numéro de game.</p>
                     </div>
                 </Card>
             )}

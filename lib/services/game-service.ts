@@ -22,17 +22,10 @@ import {
   applySeedingMatrix,
 } from "@/utils/seeding-matrices";
 import { syncTournamentStatusByPhaseId } from "@/lib/services/tournament-status-service";
-
-function getCheckmateThreshold(bracketName?: string): number | null {
-  if (bracketName === "challenger") return 21;
-  if (bracketName === "master" || bracketName === "amateur") return 18;
-  return null;
-}
-
-function getFinalsMaxGames(bracketName?: string): number {
-  if (bracketName === "challenger") return 7;
-  return 6;
-}
+import {
+  getFinalistThresholdByBracket,
+  getFinalsMaxGamesByBracket,
+} from "@/lib/services/finals-rules";
 
 /**
  * Create a new game
@@ -122,6 +115,13 @@ export async function submitGameResults(
     throw new Error("Game not found");
   }
 
+  const phaseInfo = await db.query.phase.findFirst({
+    where: eq(phase.id, gameInfo.phase_id),
+    columns: {
+      tournament_id: true,
+    },
+  });
+
   // Validation: Check all player_ids are unique
   const playerIds = gameResults.map((r) => r.player_id);
   const uniquePlayerIds = new Set(playerIds);
@@ -159,6 +159,7 @@ export async function submitGameResults(
   const forfeitResults = gameResults.filter(
     (result) => (result.result_status ?? "normal") === "forfeit",
   );
+  const forfeitedPlayerIds = forfeitResults.map((result) => result.player_id);
 
   // Validation: normal placements must be in [1..normalPlayersCount]
   const normalPlayersCount = normalResults.length;
@@ -193,7 +194,7 @@ export async function submitGameResults(
     points:
       (result.result_status ?? "normal") === "forfeit"
         ? 0
-        : result.points ?? calculatePoints(result.placement),
+        : (result.points ?? calculatePoints(result.placement)),
     result_status: result.result_status ?? "normal",
   }));
 
@@ -205,12 +206,35 @@ export async function submitGameResults(
     // Insert new results
     await tx.insert(results).values(resultsWithPoints);
 
+    if (phaseInfo?.tournament_id && forfeitedPlayerIds.length > 0) {
+      await tx
+        .update(tournamentRegistration)
+        .set({ forfeited_at: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(tournamentRegistration.tournament_id, phaseInfo.tournament_id),
+            inArray(tournamentRegistration.player_id, forfeitedPlayerIds),
+          ),
+        );
+    }
+
     // Update game status to completed
     await tx
       .update(game)
       .set({ status: "completed", updatedAt: new Date() })
       .where(eq(game.id, gameId));
   });
+
+  // After successful submission, remove forfeited players from future games and recreate if needed
+  if (
+    forfeitedPlayerIds.length > 0 &&
+    gameInfo.phase_id &&
+    gameInfo.tournament_id
+  ) {
+    for (const playerId of forfeitedPlayerIds) {
+      await forfeitPlayerFromTournament(gameInfo.tournament_id, playerId);
+    }
+  }
 
   // After successful submission, check if we should create the next game
   if (gameInfo.phase_id) {
@@ -219,6 +243,37 @@ export async function submitGameResults(
   }
 
   return resultsWithPoints;
+}
+
+async function getForfeitedPlayerIdsForPhase(
+  phaseId: string,
+): Promise<Set<string>> {
+  const currentPhase = await db.query.phase.findFirst({
+    where: eq(phase.id, phaseId),
+    columns: {
+      tournament_id: true,
+    },
+  });
+
+  if (!currentPhase?.tournament_id) {
+    return new Set<string>();
+  }
+
+  const forfeitedRegistrations = await db.query.tournamentRegistration.findMany(
+    {
+      where: and(
+        eq(tournamentRegistration.tournament_id, currentPhase.tournament_id),
+        sql`${tournamentRegistration.forfeited_at} is not null`,
+      ),
+      columns: {
+        player_id: true,
+      },
+    },
+  );
+
+  return new Set(
+    forfeitedRegistrations.map((registration) => registration.player_id),
+  );
 }
 
 /**
@@ -235,7 +290,7 @@ export async function forfeitPlayerFromTournament(
 
   const phaseIds = phaseRows.map((p) => p.id);
 
-  await db.transaction(async (tx) => {
+  const impactedPendingGroups = await db.transaction(async (tx) => {
     await tx
       .update(tournamentRegistration)
       .set({ forfeited_at: new Date(), updatedAt: new Date() })
@@ -247,11 +302,20 @@ export async function forfeitPlayerFromTournament(
       );
 
     if (phaseIds.length === 0) {
-      return;
+      return [] as Array<{
+        phaseId: string;
+        bracketId: string;
+        pendingGameNumbers: number[];
+        activePlayerIds: string[];
+        fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
+      }>;
     }
 
     const pendingGames = await tx.query.game.findMany({
-      where: and(inArray(game.phase_id, phaseIds), sql`${game.status} != 'completed'`),
+      where: and(
+        inArray(game.phase_id, phaseIds),
+        sql`${game.status} != 'completed'`,
+      ),
       with: {
         lobbyPlayers: true,
       },
@@ -262,18 +326,213 @@ export async function forfeitPlayerFromTournament(
       .map((g) => g.id);
 
     if (targetGameIds.length === 0) {
-      return;
+      return [] as Array<{
+        phaseId: string;
+        bracketId: string;
+        pendingGameNumbers: number[];
+        activePlayerIds: string[];
+        fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
+      }>;
     }
 
-    await tx
-      .delete(lobbyPlayer)
-      .where(
-        and(
-          inArray(lobbyPlayer.game_id, targetGameIds),
-          eq(lobbyPlayer.player_id, playerId),
-        ),
+    const impactedGroups = new Map<
+      string,
+      {
+        phaseId: string;
+        bracketId: string;
+        pendingGameNumbers: number[];
+        activePlayerIds: string[];
+        fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
+        pendingGameIds: string[];
+      }
+    >();
+
+    for (const g of pendingGames) {
+      if (!g.bracket_id) continue;
+      if (!g.lobbyPlayers.some((lp) => lp.player_id === playerId)) continue;
+
+      const key = `${g.phase_id}:${g.bracket_id}`;
+      if (!impactedGroups.has(key)) {
+        impactedGroups.set(key, {
+          phaseId: g.phase_id,
+          bracketId: g.bracket_id,
+          pendingGameNumbers: [],
+          activePlayerIds: [],
+          fallbackSeedOrder: [],
+          pendingGameIds: [],
+        });
+      }
+
+      impactedGroups.get(key)!.pendingGameIds.push(g.id);
+    }
+
+    for (const group of impactedGroups.values()) {
+      const bracketPendingGames = pendingGames
+        .filter(
+          (g) =>
+            g.phase_id === group.phaseId &&
+            g.bracket_id === group.bracketId &&
+            g.status !== "completed",
+        )
+        .sort((a, b) => a.game_number - b.game_number);
+
+      const pendingNumbers = [
+        ...new Set(bracketPendingGames.map((g) => g.game_number)),
+      ];
+      group.pendingGameNumbers = pendingNumbers;
+
+      const firstPendingGameNumber = pendingNumbers[0];
+      if (!firstPendingGameNumber) continue;
+
+      const firstPendingGames = bracketPendingGames.filter(
+        (g) => g.game_number === firstPendingGameNumber,
       );
+
+      const activePlayers = new Set<string>();
+      const seedByPlayer = new Map<string, number>();
+      for (const pendingGame of firstPendingGames) {
+        for (const lp of pendingGame.lobbyPlayers) {
+          if (lp.player_id !== playerId) {
+            activePlayers.add(lp.player_id);
+            const lobbySeed =
+              typeof lp.seed === "number" ? lp.seed : Number.MAX_SAFE_INTEGER;
+            const currentSeed = seedByPlayer.get(lp.player_id);
+            if (currentSeed === undefined || lobbySeed < currentSeed) {
+              seedByPlayer.set(lp.player_id, lobbySeed);
+            }
+          }
+        }
+      }
+      group.activePlayerIds = Array.from(activePlayers);
+      group.fallbackSeedOrder = Array.from(seedByPlayer.entries())
+        .map(([player_id, seed]) => ({ player_id, seed }))
+        .sort((a, b) => a.seed - b.seed);
+
+      const pendingIds = bracketPendingGames.map((g) => g.id);
+      if (pendingIds.length > 0) {
+        await tx.delete(game).where(inArray(game.id, pendingIds));
+      }
+    }
+
+    return Array.from(impactedGroups.values()).map((g) => ({
+      phaseId: g.phaseId,
+      bracketId: g.bracketId,
+      pendingGameNumbers: g.pendingGameNumbers,
+      activePlayerIds: g.activePlayerIds,
+      fallbackSeedOrder: g.fallbackSeedOrder,
+    }));
   });
+
+  // Recreate pending games without the forfeited player, based on current standings.
+  for (const group of impactedPendingGroups) {
+    if (
+      group.pendingGameNumbers.length === 0 ||
+      group.activePlayerIds.length === 0
+    ) {
+      continue;
+    }
+
+    const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(
+      group.phaseId,
+    );
+    const activePlayerIds = group.activePlayerIds.filter(
+      (id) => !forfeitedPlayerIds.has(id),
+    );
+
+    if (activePlayerIds.length === 0) {
+      continue;
+    }
+
+    const bracketLeaderboard = await getLeaderboard(
+      group.phaseId,
+      group.bracketId,
+    );
+    const filteredLeaderboard = bracketLeaderboard.filter(
+      (entry) =>
+        !forfeitedPlayerIds.has(entry.player_id) &&
+        activePlayerIds.includes(entry.player_id),
+    );
+
+    const fallbackSeedOrder = group.fallbackSeedOrder.filter(
+      (entry) => !forfeitedPlayerIds.has(entry.player_id),
+    );
+
+    const sourcePlayerIds =
+      filteredLeaderboard.length > 0
+        ? filteredLeaderboard.map((entry) => entry.player_id)
+        : fallbackSeedOrder.map((entry) => entry.player_id);
+
+    if (sourcePlayerIds.length === 0) {
+      continue;
+    }
+
+    const playersData = await db.query.player.findMany({
+      where: inArray(player.id, sourcePlayerIds),
+    });
+
+    const playersMap = new Map(playersData.map((p) => [p.id, p]));
+
+    const seededPlayers: SeededPlayer[] =
+      filteredLeaderboard.length > 0
+        ? filteredLeaderboard.map((entry, index) => {
+            const playerData = playersMap.get(entry.player_id);
+            if (!playerData) {
+              throw new Error(`Player ${entry.player_id} not found`);
+            }
+
+            return {
+              player_id: entry.player_id,
+              name: entry.player_name,
+              riot_id: entry.riot_id,
+              tier: playerData.tier!,
+              division: playerData.division as any,
+              league_points: playerData.league_points!,
+              seed: index + 1,
+            };
+          })
+        : fallbackSeedOrder.map((entry, index) => {
+            const playerData = playersMap.get(entry.player_id);
+            if (!playerData) {
+              throw new Error(`Player ${entry.player_id} not found`);
+            }
+
+            return {
+              player_id: entry.player_id,
+              name: playerData.name,
+              riot_id: playerData.riot_id,
+              tier: playerData.tier!,
+              division: playerData.division as any,
+              league_points: playerData.league_points!,
+              seed: index + 1,
+            };
+          });
+
+    const seedingMatrix = generateSnakeDraftMatrix(seededPlayers.length, 1);
+    const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
+
+    for (const gameNumber of group.pendingGameNumbers) {
+      for (const assignment of assignments) {
+        if (assignment.players.length === 0) {
+          continue;
+        }
+
+        const newGame = await createGame({
+          bracket_id: group.bracketId,
+          phase_id: group.phaseId,
+          lobby_name: assignment.lobby_name,
+          game_number: gameNumber,
+        });
+
+        const lobbyAssignments = assignment.players.map((p: any) => ({
+          game_id: newGame.id,
+          player_id: p.player_id,
+          seed: p.seed,
+        }));
+
+        await db.insert(lobbyPlayer).values(lobbyAssignments);
+      }
+    }
+  }
 }
 
 /**
@@ -459,7 +718,10 @@ async function createPhase4MasterTop16Games(
   }
 
   const leaderboard = await getLeaderboard(phaseId, bracketId);
-  const top16 = leaderboard.slice(0, 16);
+  const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phaseId);
+  const top16 = leaderboard
+    .filter((entry) => !forfeitedPlayerIds.has(entry.player_id))
+    .slice(0, 16);
 
   if (top16.length < 16) {
     throw new Error(
@@ -532,12 +794,12 @@ async function createNextGameWithReseed(
   const bracketName = currentGames[0]?.bracket?.name;
 
   if (phaseOrderIndex === 5) {
-    const finalsMaxGames = getFinalsMaxGames(bracketName);
+    const finalsMaxGames = getFinalsMaxGamesByBracket(bracketName);
     if (currentGameNumber >= finalsMaxGames) {
       return { created: false, gamesCreated: 0 };
     }
 
-    const checkmateThreshold = getCheckmateThreshold(bracketName);
+    const checkmateThreshold = getFinalistThresholdByBracket(bracketName);
     if (checkmateThreshold) {
       const bracketLeaderboard = await getLeaderboard(phaseId, bracketId);
       const finalists = new Set(
@@ -550,7 +812,9 @@ async function createNextGameWithReseed(
         const finalistWonCurrentGame = currentGames.some((g) =>
           g.results.some(
             (result: { player_id: string | null; placement: number }) =>
-              !!result.player_id && result.placement === 1 && finalists.has(result.player_id),
+              !!result.player_id &&
+              result.placement === 1 &&
+              finalists.has(result.player_id),
           ),
         );
 
@@ -578,13 +842,17 @@ async function createNextGameWithReseed(
 
   // 1. Get current leaderboard for THIS BRACKET ONLY
   const leaderboard = await getLeaderboard(phaseId, bracketId);
+  const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phaseId);
+  const filteredLeaderboard = leaderboard.filter(
+    (entry) => !forfeitedPlayerIds.has(entry.player_id),
+  );
 
-  if (leaderboard.length === 0) {
+  if (filteredLeaderboard.length === 0) {
     throw new Error(`No leaderboard data found for bracket ${bracketId}`);
   }
 
   // 2. Get all players with their rank data to create SeededPlayer objects
-  const playerIds = leaderboard.map((entry) => entry.player_id);
+  const playerIds = filteredLeaderboard.map((entry) => entry.player_id);
   const playersData = await db.query.player.findMany({
     where: inArray(player.id, playerIds),
   });
@@ -592,22 +860,24 @@ async function createNextGameWithReseed(
   const playersMap = new Map(playersData.map((p) => [p.id, p]));
 
   // 3. Transform leaderboard to SeededPlayer[] with contiguous seeds (1..N)
-  const seededPlayers: SeededPlayer[] = leaderboard.map((entry, index) => {
-    const playerData = playersMap.get(entry.player_id);
-    if (!playerData) {
-      throw new Error(`Player ${entry.player_id} not found`);
-    }
+  const seededPlayers: SeededPlayer[] = filteredLeaderboard.map(
+    (entry, index) => {
+      const playerData = playersMap.get(entry.player_id);
+      if (!playerData) {
+        throw new Error(`Player ${entry.player_id} not found`);
+      }
 
-    return {
-      player_id: entry.player_id,
-      name: entry.player_name,
-      riot_id: entry.riot_id,
-      tier: playerData.tier!,
-      division: playerData.division as any,
-      league_points: playerData.league_points!,
-      seed: index + 1,
-    };
-  });
+      return {
+        player_id: entry.player_id,
+        name: entry.player_name,
+        riot_id: entry.riot_id,
+        tier: playerData.tier!,
+        division: playerData.division as any,
+        league_points: playerData.league_points!,
+        seed: index + 1,
+      };
+    },
+  );
 
   // 4. Determine starting seed
   const playerCount = seededPlayers.length;

@@ -32,6 +32,9 @@ export const Navbar = () => {
     const isLoggedIn = !!session;
     console.log(env.NEXT_PUBLIC_FRONTEND_URL);
 
+    const isExternalLink = (href: string) =>
+        href.startsWith("http://") || href.startsWith("https://");
+
     const handleAdminClick = () => {
         if (isLoggedIn) {
             router.push("/admin/tournaments");
@@ -85,9 +88,9 @@ export const Navbar = () => {
                             className="h-10 w-auto"
                         />
                         <Image
-                            src="/logos/spatula_tour.svg"
+                            src="/logos/SpatulaTour_RGB_horizontale-YELLOW_1.png"
                             alt="Logo Spatula Tour"
-                            width={40}
+                            width={120}
                             height={40}
                             className="h-10 w-auto text-yellow-500"
                         />
@@ -99,15 +102,29 @@ export const Navbar = () => {
             <NavbarContent className="hidden sm:flex gap-6" justify="center">
                 {siteConfig.navItems.map((item) => (
                     <NavbarItem key={item.href}>
-                        <NextLink
-                            className={clsx(
-                                linkStyles({ color: "foreground" }),
-                                "data-[active=true]:text-primary data-[active=true]:font-medium"
-                            )}
-                            href={item.href}
-                        >
-                            {item.label}
-                        </NextLink>
+                        {isExternalLink(item.href) ? (
+                            <a
+                                className={clsx(
+                                    linkStyles({ color: "foreground" }),
+                                    "data-[active=true]:text-primary data-[active=true]:font-medium"
+                                )}
+                                href={item.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                {item.label}
+                            </a>
+                        ) : (
+                            <NextLink
+                                className={clsx(
+                                    linkStyles({ color: "foreground" }),
+                                    "data-[active=true]:text-primary data-[active=true]:font-medium"
+                                )}
+                                href={item.href}
+                            >
+                                {item.label}
+                            </NextLink>
+                        )}
                     </NavbarItem>
                 ))}
             </NavbarContent>
@@ -147,17 +164,33 @@ export const Navbar = () => {
             <NavbarMenu>
                 {siteConfig.navMenuItems.map((item, index) => (
                     <NavbarMenuItem key={`${item.label}-${index}`}>
-                        <NextLink
-                            className={clsx(
-                                "w-full transition-colors",
-                                linkStyles({ color: "foreground" }),
-                                "hover:text-primary"
-                            )}
-                            href={item.href}
-                            onClick={() => setIsMenuOpen(false)}
-                        >
-                            {item.label}
-                        </NextLink>
+                        {isExternalLink(item.href) ? (
+                            <a
+                                className={clsx(
+                                    "w-full transition-colors",
+                                    linkStyles({ color: "foreground" }),
+                                    "hover:text-primary"
+                                )}
+                                href={item.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => setIsMenuOpen(false)}
+                            >
+                                {item.label}
+                            </a>
+                        ) : (
+                            <NextLink
+                                className={clsx(
+                                    "w-full transition-colors",
+                                    linkStyles({ color: "foreground" }),
+                                    "hover:text-primary"
+                                )}
+                                href={item.href}
+                                onClick={() => setIsMenuOpen(false)}
+                            >
+                                {item.label}
+                            </NextLink>
+                        )}
                     </NavbarMenuItem>
                 ))}
             </NavbarMenu>

@@ -37,12 +37,12 @@ export function applySeedingMatrix(
 }
 
 /**
- * Generate a Swiss-style contiguous seeding matrix dynamically for any player count >= 8
+ * Generate a Swiss-style contiguous seeding matrix dynamically for any positive player count
  *
  * This is the PRIMARY and ONLY method to use for generating seeding matrices.
  * It ensures contiguous seed ranges per lobby and balanced lobby sizes.
  *
- * @param playerCount - Total number of players (>= 8)
+ * @param playerCount - Total number of players (> 0)
  * @param startSeed - Starting seed number (default: 1). Use this for non-consecutive seeds (e.g., Phase 2 starts at seed 33)
  * @returns Matrix of seed assignments with balanced lobby sizes (difference <= 1)
  *
@@ -71,8 +71,8 @@ export function generateSnakeDraftMatrix(
   startSeed: number = 1,
 ): number[][] {
   // Validate input
-  if (playerCount < 8) {
-    throw new Error(`playerCount must be at least 8, got ${playerCount}`);
+  if (playerCount < 1) {
+    throw new Error(`playerCount must be at least 1, got ${playerCount}`);
   }
 
   if (startSeed < 1) {
@@ -83,8 +83,9 @@ export function generateSnakeDraftMatrix(
   const baseLobbySize = Math.floor(playerCount / lobbyCount);
   const extraPlayers = playerCount % lobbyCount;
 
-  const lobbySizes = Array.from({ length: lobbyCount }, (_, index) =>
-    baseLobbySize + (index < extraPlayers ? 1 : 0),
+  const lobbySizes = Array.from(
+    { length: lobbyCount },
+    (_, index) => baseLobbySize + (index < extraPlayers ? 1 : 0),
   );
 
   const matrix: number[][] = Array.from({ length: lobbyCount }, () => []);

@@ -147,7 +147,7 @@ export function OverviewTab({ tournament, confirmedPlayersCount, getStatusColor,
                     <div className="p-3 rounded-lg bg-warning-50 border border-warning-200">
                         <p className="font-semibold">Règle clé</p>
                         <p className="text-sm text-default-600">
-                            Le top cut est appliqué en Phase 4 Master (réduction après les deux premières parties). La finale reste sur 3 brackets de 8 joueurs.
+                            Le top cut est appliqué en Phase 4 Master (réduction après les deux premières parties). Les finales restent sur 3 brackets avec répartition équilibrée des joueurs.
                         </p>
                     </div>
 
@@ -157,7 +157,7 @@ export function OverviewTab({ tournament, confirmedPlayersCount, getStatusColor,
                             <p className="text-sm text-default-600 mt-1">
                                 Phase 3: Master {halfStructure.phase3.masterPlayers} / Amateur {halfStructure.phase3.amateurPlayers}.
                                 Phase 4: Master {halfStructure.phase4.masterPlayers} / Amateur {halfStructure.phase4.amateurPlayers}.
-                                Finale inchangée: 3 brackets de 8 joueurs.
+                                Finale inchangée: 3 brackets (répartition équilibrée).
                             </p>
                         </div>
                     ) : null}

@@ -7,12 +7,14 @@ import { generateSnakeDraftMatrix } from "./seeding-matrices";
 
 describe("generateSnakeDraftMatrix", () => {
   describe("validation", () => {
-    it("should throw error if playerCount is less than 8", () => {
-      expect(() => generateSnakeDraftMatrix(0)).toThrow("must be at least 8");
-      expect(() => generateSnakeDraftMatrix(4)).toThrow("must be at least 8");
+    it("should throw error if playerCount is less than 1", () => {
+      expect(() => generateSnakeDraftMatrix(0)).toThrow("must be at least 1");
     });
 
-    it("should accept any player count >= 8", () => {
+    it("should accept any player count >= 1", () => {
+      expect(() => generateSnakeDraftMatrix(1)).not.toThrow();
+      expect(() => generateSnakeDraftMatrix(4)).not.toThrow();
+      expect(() => generateSnakeDraftMatrix(7)).not.toThrow();
       expect(() => generateSnakeDraftMatrix(8)).not.toThrow();
       expect(() => generateSnakeDraftMatrix(10)).not.toThrow();
       expect(() => generateSnakeDraftMatrix(52)).not.toThrow();
@@ -23,6 +25,8 @@ describe("generateSnakeDraftMatrix", () => {
 
   describe("matrix structure", () => {
     it("should generate correct number of lobbies", () => {
+      expect(generateSnakeDraftMatrix(1)).toHaveLength(1);
+      expect(generateSnakeDraftMatrix(7)).toHaveLength(1);
       expect(generateSnakeDraftMatrix(8)).toHaveLength(1);
       expect(generateSnakeDraftMatrix(16)).toHaveLength(2);
       expect(generateSnakeDraftMatrix(50)).toHaveLength(7);
@@ -32,19 +36,23 @@ describe("generateSnakeDraftMatrix", () => {
     });
 
     it("should keep lobby sizes balanced (difference <= 1)", () => {
-      const testCases = [8, 9, 10, 15, 17, 49, 50, 52, 64, 96, 104, 128];
+      const testCases = [
+        1, 2, 3, 4, 5, 7, 8, 9, 10, 15, 17, 49, 50, 52, 64, 96, 104, 128,
+      ];
 
       testCases.forEach((playerCount) => {
         const matrix = generateSnakeDraftMatrix(playerCount);
         const lobbySizes = matrix.map((lobby) => lobby.length);
-        expect(Math.max(...lobbySizes) - Math.min(...lobbySizes)).toBeLessThanOrEqual(1);
+        expect(
+          Math.max(...lobbySizes) - Math.min(...lobbySizes),
+        ).toBeLessThanOrEqual(1);
       });
     });
   });
 
   describe("seed coverage", () => {
     it("should include all seeds from 1 to playerCount", () => {
-      const testCases = [8, 16, 32, 64, 96, 128];
+      const testCases = [1, 4, 7, 8, 16, 32, 64, 96, 128];
 
       testCases.forEach((playerCount) => {
         const matrix = generateSnakeDraftMatrix(playerCount);
@@ -61,7 +69,7 @@ describe("generateSnakeDraftMatrix", () => {
     });
 
     it("should have no duplicate seeds", () => {
-      const testCases = [8, 16, 32, 64, 96, 128, 256];
+      const testCases = [1, 4, 7, 8, 16, 32, 64, 96, 128, 256];
 
       testCases.forEach((playerCount) => {
         const matrix = generateSnakeDraftMatrix(playerCount);
@@ -74,6 +82,11 @@ describe("generateSnakeDraftMatrix", () => {
   });
 
   describe("snake draft pattern", () => {
+    it("should generate contiguous blocks for 7 players", () => {
+      const matrix = generateSnakeDraftMatrix(7);
+      expect(matrix).toEqual([[1, 2, 3, 4, 5, 6, 7]]);
+    });
+
     it("should generate contiguous blocks for 8 players", () => {
       const matrix = generateSnakeDraftMatrix(8);
       expect(matrix).toEqual([[1, 2, 3, 4, 5, 6, 7, 8]]);
@@ -194,8 +207,8 @@ describe("generateSnakeDraftMatrix", () => {
   describe("edge cases", () => {
     it("should distribute evenly for a wide range of counts", () => {
       const testCases = [
-        8, 9, 10, 11, 12, 16, 24, 25, 32, 40, 48, 49, 50, 52, 56, 64, 72,
-        80, 88, 96, 104, 112, 120, 128,
+        1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 16, 24, 25, 32, 40, 48, 49, 50, 52,
+        56, 64, 72, 80, 88, 96, 104, 112, 120, 128,
       ];
 
       testCases.forEach((playerCount) => {

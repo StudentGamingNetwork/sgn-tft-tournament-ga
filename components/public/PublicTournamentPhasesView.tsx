@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@heroui/card";
+import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Select, SelectItem } from "@heroui/select";
 import { Tab, Tabs } from "@heroui/tabs";
@@ -20,6 +21,7 @@ import {
   getTournamentPhases,
   getTournaments,
 } from "@/app/actions/tournaments";
+import type { PhaseDetails } from "@/app/actions/tournaments";
 import { getBracketChipColor } from "@/utils/bracket-colors";
 
 function getSortedTournaments(
@@ -38,6 +40,7 @@ export function PublicTournamentPhasesView() {
   const [selectedTournamentId, setSelectedTournamentId] = useState("");
   const [selectedPhaseId, setSelectedPhaseId] = useState("");
   const [selectedSubTab, setSelectedSubTab] = useState("rank");
+  const [selectedBracketFilter, setSelectedBracketFilter] = useState<string | null>(null);
 
   const {
     data: tournaments,
@@ -109,10 +112,10 @@ export function PublicTournamentPhasesView() {
   const gamesByNumber = useMemo(() => {
     if (!phaseDetails) return [] as Array<{
       gameNumber: number;
-      games: typeof phaseDetails.games;
+      games: PhaseDetails["games"];
     }>;
 
-    const grouped = new Map<number, typeof phaseDetails.games>();
+    const grouped = new Map<number, PhaseDetails["games"]>();
 
     for (const game of phaseDetails.games) {
       const list = grouped.get(game.game_number) || [];
@@ -128,6 +131,28 @@ export function PublicTournamentPhasesView() {
       }));
   }, [phaseDetails]);
 
+  const availableBrackets = useMemo(() => {
+    if (!phaseDetails) return [];
+    const brackets = new Set<string>();
+    for (const game of phaseDetails.games) {
+      brackets.add(game.bracket_name);
+    }
+    return Array.from(brackets).sort();
+  }, [phaseDetails]);
+
+  const filteredGamesByNumber = useMemo(() => {
+    if (!selectedBracketFilter) return gamesByNumber;
+
+    return gamesByNumber
+      .map((group) => ({
+        gameNumber: group.gameNumber,
+        games: group.games.filter(
+          (game) => game.bracket_name === selectedBracketFilter,
+        ),
+      }))
+      .filter((group) => group.games.length > 0);
+  }, [gamesByNumber, selectedBracketFilter]);
+
   const selectedTournamentKeys = useMemo(
     () =>
       selectedTournamentId
@@ -139,14 +164,23 @@ export function PublicTournamentPhasesView() {
   useEffect(() => {
     const hasTab =
       selectedSubTab === "rank" ||
-      gamesByNumber.some((group) => `game-${group.gameNumber}` === selectedSubTab);
+      filteredGamesByNumber.some((group) => `game-${group.gameNumber}` === selectedSubTab);
 
     if (hasTab) {
       return;
     }
 
-    setSelectedSubTab("rank");
-  }, [gamesByNumber, selectedSubTab]);
+    // Si le tab sélectionné n'existe pas, vérifier si on peut sélectionner "game-1"
+    if (filteredGamesByNumber.some((group) => group.gameNumber === 1)) {
+      setSelectedSubTab("game-1");
+    } else if (filteredGamesByNumber.length > 0) {
+      // Sinon, sélectionner la première partie disponible
+      setSelectedSubTab(`game-${filteredGamesByNumber[0].gameNumber}`);
+    } else {
+      // Sinon, revenir au classement
+      setSelectedSubTab("rank");
+    }
+  }, [filteredGamesByNumber, selectedSubTab]);
 
   if (tournamentsLoading) {
     return (
@@ -176,13 +210,14 @@ export function PublicTournamentPhasesView() {
   }
 
   return (
-    <div className="flex flex-col gap-4 py-2">
-      <Card className="p-4 border border-divider bg-secondary">
-        <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 items-start">
+    <div className="flex flex-col gap-4 py-2 w-full">
+      <Card className="p-4 border border-divider bg-secondary w-full mx-auto">
+        <div className="grid w-full grid-cols-3 gap-4 items-center">
           <Select
             label="Tournoi"
             selectedKeys={selectedTournamentKeys}
             disallowEmptySelection
+            className="w-60"
             renderValue={(items) =>
               items
                 .map((item) => item.textValue)
@@ -204,14 +239,15 @@ export function PublicTournamentPhasesView() {
             ))}
           </Select>
 
-          <div className="flex flex-wrap gap-2 items-center">
-            <h1 className="text-2xl font-bold">Vue publique par phase</h1>
-            {phaseDetails ? (
-              <Chip color="primary" variant="dot" size="sm">
+          
+            <h1 className="text-2xl font-bold flex-1 text-center">Vue publique par phase</h1>
+            
+  
+          {phaseDetails ? (
+              <Chip color="primary" variant="dot" size="sm" className="ml-auto">
                 {phaseDetails.phase.gamesWithResults}/{phaseDetails.phase.totalGamesExpected} parties jouees
               </Chip>
             ) : null}
-          </div>
         </div>
       </Card>
 
@@ -239,7 +275,8 @@ export function PublicTournamentPhasesView() {
           selectedKey={selectedPhaseId}
           onSelectionChange={(key) => {
             setSelectedPhaseId(String(key));
-            setSelectedSubTab("rank");
+            setSelectedSubTab("game-1");
+            setSelectedBracketFilter(null);
           }}
           color="primary"
           variant="underlined"
@@ -264,14 +301,46 @@ export function PublicTournamentPhasesView() {
               {phaseDetails && phaseDetails.phase.id === phase.id ? (
                 <div className="flex flex-col gap-4">
                   <Card className="p-4 border border-divider">
-                    <p className="text-sm text-default-500">
+                    <p className="text-sm text-default-500 text-center">
                       {phaseDetails.phase.participantsCount} participants
                     </p>
                   </Card>
 
+                  {phaseDetails.phase.order_index >= 2 && availableBrackets.length > 0 ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-sm text-default-500">Filtrer par bracket</span>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <Button
+                          size="sm"
+                          variant={selectedBracketFilter === null ? "solid" : "flat"}
+                          color="primary"
+                          onPress={() => setSelectedBracketFilter(null)}
+                        >
+                          Tous les brackets
+                        </Button>
+                        {availableBrackets.map((bracket) => {
+                          const label = bracket.charAt(0).toUpperCase() + bracket.slice(1);
+
+                          return (
+                            <Button
+                              key={bracket}
+                              size="sm"
+                              variant={selectedBracketFilter === bracket ? "solid" : "flat"}
+                              color="primary"
+                              onPress={() => setSelectedBracketFilter(bracket)}
+                            >
+                              {label}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <Tabs
                     aria-label="Sous-onglets phase"
                     selectedKey={selectedSubTab}
+                    defaultSelectedKey={`game-1`}
                     onSelectionChange={(key) => setSelectedSubTab(String(key))}
                     color="secondary"
                     variant="bordered"
@@ -307,7 +376,7 @@ export function PublicTournamentPhasesView() {
                       </Card>
                     </Tab>
 
-                    {gamesByNumber.map((group) => (
+                    {filteredGamesByNumber.map((group) => (
                       <Tab
                         key={`game-${group.gameNumber}`}
                         title={`Partie ${group.gameNumber}`}

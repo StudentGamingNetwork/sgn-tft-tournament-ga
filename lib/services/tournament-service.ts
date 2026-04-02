@@ -32,7 +32,7 @@ import { getLeaderboard, getCumulativeLeaderboard } from "./scoring-service";
 import { syncTournamentStatusByPhaseId } from "./tournament-status-service";
 
 const PHASE2_QUALIFIERS_FROM_P1 = 48;
-const PHASE2_ELIMINATED_FROM_P1 = 32;
+const PHASE2_ELIMINATED_FROM_P1 = 16;
 const PHASE3_MASTER_FROM_P1 = 16;
 const PHASE3_MASTER_FROM_P2 = 16;
 const PHASE3_AMATEUR_FROM_P2 = 32;
@@ -83,24 +83,10 @@ function getPhaseProgressStatus(currentPhase: {
     0,
   );
 
-  const totalGamesExpected = currentPhase.brackets.reduce(
-    (sum, currentBracket) => {
-      const game1LobbyCount = currentBracket.games.filter(
-        (currentGame) => currentGame.game_number === 1,
-      ).length;
-
-      return (
-        sum +
-        calculateExpectedGamesForBracket(
-          currentPhase.order_index,
-          currentPhase.total_games,
-          currentBracket.name,
-          game1LobbyCount,
-        )
-      );
-    },
-    0,
-  );
+  // Expected games must follow the current effective schedule.
+  // For forfait scenarios, pending games can be deleted/recreated,
+  // so completion is based on games that currently exist.
+  const totalGamesExpected = totalGamesCreated;
 
   if (totalGamesCreated === 0) {
     return "not_started";
@@ -190,10 +176,10 @@ async function assertPhaseCanBeStarted(
 
 /**
  * Crée un tournoi standard avec la structure de phases correcte :
- * - Phase 1: 128 joueurs, 1 bracket (common)
- * - Phase 2: 96 joueurs, 1 bracket (common)
- * - Phase 3: 128 joueurs, 2 brackets (master 64, amateur 64) - RESET points
- * - Phase 4: 96 joueurs, 2 brackets (master 32, amateur 64) - Amateur RESET
+ * - Phase 1: jusqu'a 128 joueurs, 1 bracket (common)
+ * - Phase 2: bottom 48 de P1 max, 1 bracket (common)
+ * - Phase 3: master 32 (top 16 P1 + top 16 P2), amateur jusqu'a 32 (reste P2) - RESET points
+ * - Phase 4: master 16 (top 16 P3 master), amateur jusqu'a 32 (top 16 P3 amateur + relegues P3 master) - Amateur RESET
  * - Phase 5: 24 joueurs, 3 brackets (challenger 8, master 8, amateur 8)
  */
 export async function createStandardTournament(name: string, year: string) {
@@ -378,8 +364,8 @@ export async function advanceToNextPhase(
 
 /**
  * PHASE 1 → PHASE 2
- * Élimine les 32 meilleurs joueurs de Phase 1
- * Les 96 derniers continuent en Phase 2
+ * Élimine les 16 meilleurs joueurs de Phase 1
+ * Les 48 suivants maximum continuent en Phase 2
  */
 export async function startPhase2FromPhase1(
   phase1Id: string,
@@ -435,8 +421,8 @@ export async function startPhase2FromPhase1(
 /**
  * PHASE 2 → PHASE 3
  * Phase 3 a 2 brackets avec RESET des points :
- * - Master: Top 32 P1 + Top 32 P2 = 64 joueurs
- * - Amateur: 64 derniers de P2 = 64 joueurs
+ * - Master: Top 16 P1 + Top 16 P2 = 32 joueurs
+ * - Amateur: jusqu'a 32 derniers de P2
  */
 export async function startPhase3FromPhase1And2(
   phase1Id: string,
@@ -532,8 +518,8 @@ export async function startPhase3FromPhase1And2(
 /**
  * PHASE 3 → PHASE 4
  * Phase 4 a 2 brackets :
- * - Master: Top 32 de P3 Master = 32 joueurs
- * - Amateur: Top 32 P3 Amateur + 32 derniers P3 Master = 64 joueurs (RESET points)
+ * - Master: Top 16 de P3 Master = 16 joueurs
+ * - Amateur: Top 16 P3 Amateur + 16 derniers P3 Master = jusqu'a 32 joueurs (RESET points)
  */
 export async function startPhase4FromPhase3(
   phase3Id: string,
@@ -781,38 +767,41 @@ export async function startPhase5FromPhase4(
   }
 
   // Seed et créer games (8 joueurs = 1 lobby chacun)
-  const challengerSeededPlayers = await seedPlayersForPhase(
-    phase5Id,
-    challengerPlayerIds,
-  );
-  const challengerGames = await assignPlayersToLobbies(
-    phase5Id,
-    challengerBracket.id,
-    1,
-    challengerSeededPlayers,
-  );
+  const challengerSeededPlayers = challengerPlayerIds.length
+    ? await seedPlayersForPhase(phase5Id, challengerPlayerIds)
+    : [];
+  const challengerGames = challengerSeededPlayers.length
+    ? await assignPlayersToLobbies(
+        phase5Id,
+        challengerBracket.id,
+        1,
+        challengerSeededPlayers,
+      )
+    : [];
 
-  const masterSeededPlayers = await seedPlayersForPhase(
-    phase5Id,
-    phase5MasterPlayerIds,
-  );
-  const masterGames = await assignPlayersToLobbies(
-    phase5Id,
-    masterBracket.id,
-    1,
-    masterSeededPlayers,
-  );
+  const masterSeededPlayers = phase5MasterPlayerIds.length
+    ? await seedPlayersForPhase(phase5Id, phase5MasterPlayerIds)
+    : [];
+  const masterGames = masterSeededPlayers.length
+    ? await assignPlayersToLobbies(
+        phase5Id,
+        masterBracket.id,
+        1,
+        masterSeededPlayers,
+      )
+    : [];
 
-  const amateurSeededPlayers = await seedPlayersForPhase(
-    phase5Id,
-    phase5AmateurPlayerIds,
-  );
-  const amateurGames = await assignPlayersToLobbies(
-    phase5Id,
-    amateurBracket.id,
-    1,
-    amateurSeededPlayers,
-  );
+  const amateurSeededPlayers = phase5AmateurPlayerIds.length
+    ? await seedPlayersForPhase(phase5Id, phase5AmateurPlayerIds)
+    : [];
+  const amateurGames = amateurSeededPlayers.length
+    ? await assignPlayersToLobbies(
+        phase5Id,
+        amateurBracket.id,
+        1,
+        amateurSeededPlayers,
+      )
+    : [];
 
   await syncTournamentStatusByPhaseId(phase5Id);
 

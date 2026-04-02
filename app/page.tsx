@@ -85,16 +85,14 @@ export default async function Home() {
             <section className="flex flex-col items-center justify-center gap-8 text-center">
                 {/* Spatula Tour Logo */}
                 <Image
-                    src="/logos/spatula_tour.svg"
+                    src="/logos/SpatulaTour_RGB_horizontale-YELLOW_1.png"
                     alt="Logo Spatula Tour"
-                    width={80}
-                    height={80}
-                    className="w-20 h-20 md:w-24 md:h-24 text-yellow-500"
+                    className=" text-yellow-500 h-32"
                 />
                 
                 <div className="inline-block max-w-4xl">
                     <h1 className={title({ size: "lg" })}>
-                        Gamers Assembly 2026 :&nbsp;
+                        Gamers Assembly 2026 : &nbsp;
                     </h1>
                     <h1 className={title({ size: "lg" })}>
                         Festival Edition
@@ -113,15 +111,7 @@ export default async function Home() {
                         size="lg"
                         variant="shadow"
                     >
-                        Voir les classements
-                    </Button>
-                    <Button
-                        as={Link}
-                        href="/schedule"
-                        size="lg"
-                        variant="bordered"
-                    >
-                        Calendrier des matchs
+                        Voir les résultats
                     </Button>
                 </div>
             </section>
@@ -164,26 +154,16 @@ export default async function Home() {
                     <h2 className={title({ color: "yellow", size: "md" })}>Tournoi</h2>
                 </div>
 
-                {featuredTournament.structureImageUrl ? (
-                    <Card className="mt-4">
-                        <CardBody className="p-2 md:p-4">
+               
+                    <Card className="mt-4 flex justify-center">
+                        <CardBody className="p-2 md:p-4 flex justify-center items-center w-full">
                             <Image
-                                src={featuredTournament.structureImageUrl}
+                                src="/Structure_GAFE_2026.png"
                                 alt="Structure du tournoi"
                                 className="w-full h-auto max-h-[720px] object-contain"
                             />
                         </CardBody>
                     </Card>
-                ) : (
-                    <Card className="mt-4 border border-warning/30 bg-warning/10">
-                        <CardBody className="py-8 text-center">
-                            <p className="font-semibold text-warning">Image de structure manquante</p>
-                            <p className="text-sm text-default-500 mt-2">
-                                Configurez l'image de structure du tournoi dans les paramètres admin.
-                            </p>
-                        </CardBody>
-                    </Card>
-                )}
             </section>
 
             {/* Call to Action Final */}
@@ -218,15 +198,7 @@ export default async function Home() {
                                 size="lg"
                                 variant="shadow"
                             >
-                                Voir les classements
-                            </Button>
-                            <Button
-                                as={Link}
-                                href="/results"
-                                size="lg"
-                                variant="flat"
-                            >
-                                Résultats des matchs
+                                Voir les résultats
                             </Button>
                             <Button
                                 as={Link}

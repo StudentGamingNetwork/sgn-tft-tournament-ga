@@ -299,7 +299,7 @@ describe("tournaments actions", () => {
             {
               id: "b1",
               name: "common",
-              games: [{ id: "g1", game_number: 1, results: [] }],
+              games: [{ id: "g1", game_number: 1, results: [{ id: "r1" }] }],
             },
           ],
         },
@@ -322,7 +322,6 @@ describe("tournaments actions", () => {
           name: "Test",
           year: "2026",
           status: "upcoming",
-          structureImageUrl: "https://example.com/structure.png",
         }),
       ).rejects.toThrow("Impossible de créer le tournoi");
     });
@@ -364,7 +363,6 @@ describe("tournaments actions", () => {
         name: "Test",
         year: "2026",
         status: "upcoming",
-        structureImageUrl: "https://example.com/structure.png",
       });
 
       expect(result.id).toBe("t-1");
@@ -692,7 +690,7 @@ describe("tournaments actions", () => {
             {
               id: "b1",
               name: "common",
-              games: [{ id: "g1", game_number: 1, results: [{ id: "r1" }] }],
+              games: [{ id: "g1", game_number: 1, results: [] }],
             },
           ],
         },

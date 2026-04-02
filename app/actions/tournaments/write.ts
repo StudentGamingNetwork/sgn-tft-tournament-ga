@@ -220,39 +220,21 @@ export async function createTournament(data: {
   year: string;
   status: "upcoming" | "ongoing" | "completed";
   isSimulation?: boolean;
-  structureImageUrl: string;
-  rulesUrl?: string | null;
 }): Promise<Tournament> {
   try {
     await requireAuthenticatedUser();
-
-    const structureImageUrl = data.structureImageUrl?.trim();
-    if (!structureImageUrl) {
-      throw new Error("L'image de structure est obligatoire");
-    }
-
-    const normalizedRulesUrl = data.rulesUrl?.trim() || null;
 
     const createdTournament = await createStandardTournament(
       data.name,
       data.year,
     );
 
-    if (
-      data.status !== "upcoming" ||
-      data.isSimulation ||
-      structureImageUrl ||
-      normalizedRulesUrl
-    ) {
+    if (data.status !== "upcoming" || data.isSimulation) {
       const updateData: {
         status?: "upcoming" | "ongoing" | "completed";
         is_simulation?: boolean;
-        structure_image_url?: string;
-        rules_url?: string | null;
         updatedAt: Date;
       } = {
-        structure_image_url: structureImageUrl,
-        rules_url: normalizedRulesUrl,
         updatedAt: new Date(),
       };
 
@@ -1364,14 +1346,6 @@ export async function createSimulationPlayersAction(
         success: false,
         created: 0,
         error: "Le nombre de joueurs doit etre un entier positif",
-      };
-    }
-
-    if (playerCount % 8 !== 0) {
-      return {
-        success: false,
-        created: 0,
-        error: "Le nombre de joueurs doit etre un multiple de 8",
       };
     }
 

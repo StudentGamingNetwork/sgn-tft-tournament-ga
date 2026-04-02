@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { tournament, phase } from "@/models/schema";
 import { eq } from "drizzle-orm";
+import { getCappedFinalsGamesTotal } from "@/lib/services/finals-rules";
 
 function calculateExpectedGamesForBracket(
   phaseOrderIndex: number,
@@ -21,10 +22,7 @@ function calculateExpectedGamesForBracket(
   }
 
   if (phaseOrderIndex === 5) {
-    const cappedTotalGames =
-      bracketName === "challenger"
-        ? Math.min(totalGames, 7)
-        : Math.min(totalGames, 6);
+    const cappedTotalGames = getCappedFinalsGamesTotal(totalGames, bracketName);
     return game1LobbyCount * cappedTotalGames;
   }
 

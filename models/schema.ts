@@ -237,6 +237,8 @@ export const lobbyPlayer = pgTable(
   ],
 );
 
+export const resultStatusEnum = pgEnum("result_status", ["normal", "forfeit"]);
+
 export const results = pgTable(
   "results",
   {
@@ -247,7 +249,9 @@ export const results = pgTable(
     }),
     placement: integer("placement").notNull(),
     points: integer("points").notNull(), // Calculated based on placement
-    result_status: resultStatusEnum("result_status").notNull().default("normal"),
+    result_status: resultStatusEnum("result_status")
+      .notNull()
+      .default("normal"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -293,8 +297,6 @@ export const registrationStatusEnum = pgEnum("registration_status", [
   "confirmed",
   "cancelled",
 ]);
-
-export const resultStatusEnum = pgEnum("result_status", ["normal", "forfeit"]);
 
 export const tournamentRegistration = pgTable(
   "tournament_registration",

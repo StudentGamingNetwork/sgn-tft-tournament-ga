@@ -79,7 +79,9 @@ function applyTieAwareRanks(entries: LeaderboardEntry[]): LeaderboardEntry[] {
   });
 }
 
-function getFinalistThresholdByBracketName(bracketName?: string): number | null {
+function getFinalistThresholdByBracketName(
+  bracketName?: string,
+): number | null {
   if (bracketName === "challenger") return 21;
   if (bracketName === "master" || bracketName === "amateur") return 18;
   return null;
@@ -303,21 +305,8 @@ export async function getTournamentPhases(
         0,
       );
 
-      const totalGamesExpected = phase.brackets.reduce((sum, bracket) => {
-        const game1LobbyCount = bracket.games.filter(
-          (game) => game.game_number === 1,
-        ).length;
-
-        return (
-          sum +
-          calculateExpectedGamesForBracket(
-            phase.order_index,
-            phase.total_games,
-            bracket.name,
-            game1LobbyCount,
-          )
-        );
-      }, 0);
+      // Expected games must reflect the current real schedule (after forfait-driven deletions/recreations).
+      const totalGamesExpected = totalGamesCreated;
 
       let status: "not_started" | "in_progress" | "completed" = "not_started";
       if (totalGamesCreated === 0) {
@@ -874,7 +863,11 @@ export async function getPhaseDetails(
       for (const g of gamesData) {
         const bracketName = g.bracket?.name;
         for (const lp of g.lobbyPlayers) {
-          if (!lp.player_id || !bracketName || phase5PlayerBucket.has(lp.player_id)) {
+          if (
+            !lp.player_id ||
+            !bracketName ||
+            phase5PlayerBucket.has(lp.player_id)
+          ) {
             continue;
           }
           phase5PlayerBucket.set(lp.player_id, bracketName);
@@ -884,7 +877,9 @@ export async function getPhaseDetails(
       for (const participant of participants) {
         const bucket = phase5PlayerBucket.get(participant.player_id);
         const threshold = getFinalistThresholdByBracketName(bucket);
-        const isFinalist = threshold ? participant.total_points >= threshold : false;
+        const isFinalist = threshold
+          ? participant.total_points >= threshold
+          : false;
         participant.is_finalist = isFinalist;
         finalistByPlayerId.set(participant.player_id, isFinalist);
       }
@@ -933,26 +928,8 @@ export async function getPhaseDetails(
     const gamesWithResults = gamesData.filter(
       (g) => g.results.length > 0,
     ).length;
-    const game1LobbyCountByBracket = new Map<string, number>();
-    for (const g of gamesData) {
-      if (g.game_number !== 1) continue;
-      const bracketName = g.bracket?.name || "unknown";
-      game1LobbyCountByBracket.set(
-        bracketName,
-        (game1LobbyCountByBracket.get(bracketName) || 0) + 1,
-      );
-    }
-
-    const totalGamesExpected = Array.from(game1LobbyCountByBracket.entries())
-      .map(([bracketName, game1LobbyCount]) =>
-        calculateExpectedGamesForBracket(
-          phaseData.order_index,
-          phaseData.total_games,
-          bracketName,
-          game1LobbyCount,
-        ),
-      )
-      .reduce((sum, value) => sum + value, 0);
+    // Expected games must reflect the current real schedule (after forfait-driven deletions/recreations).
+    const totalGamesExpected = totalGamesCreated;
 
     const confirmedPlayersCount = await db
       .select({ count: count() })

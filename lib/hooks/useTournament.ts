@@ -35,6 +35,10 @@ export function useTournamentPhases(tournamentId: string) {
   return useQuery({
     queryKey: tournamentKeys.phases(tournamentId),
     queryFn: () => getTournamentPhases(tournamentId),
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
+    refetchInterval: 10000,
+    refetchIntervalInBackground: true,
   });
 }
 

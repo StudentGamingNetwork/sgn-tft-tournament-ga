@@ -1,5 +1,8 @@
 export type SiteConfig = typeof siteConfig;
 
+const OFFICIAL_RULES_URL =
+  "https://backoffice.gamers-assembly.net/sites/default/files/tournament/GA2026%20-%20R%C3%A8glement%20-%20TFT.docx_.pdf";
+
 export const siteConfig = {
   name: "Spatula Tour - Teamfight Tactic",
   description: "Gamers Assembly 2026 : Festival Edition",
@@ -14,7 +17,7 @@ export const siteConfig = {
     },
     {
       label: "Règlement officiel",
-      href: "/rules",
+      href: OFFICIAL_RULES_URL,
     },
   ],
   navMenuItems: [
@@ -28,7 +31,7 @@ export const siteConfig = {
     },
     {
       label: "Règlement officiel",
-      href: "/rules",
+      href: OFFICIAL_RULES_URL,
     },
     {
       label: "Profil",
@@ -41,6 +44,6 @@ export const siteConfig = {
     docs: "https://heroui.com",
     discord: "https://discord.gg/9b6yyZKmH4",
     sponsor: "https://patreon.com/jrgarciadev",
-    rules: "https://www.gamersassembly.gg",
+    rules: OFFICIAL_RULES_URL,
   },
 };

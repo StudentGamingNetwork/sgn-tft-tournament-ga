@@ -100,17 +100,12 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
     };
 
     const handleAddSimulationPlayers = async () => {
-        const input = window.prompt("Nombre de joueurs à générer (multiple de 8)", "64");
+        const input = window.prompt("Nombre de joueurs à générer", "64");
         if (!input) return;
 
         const count = Number.parseInt(input, 10);
         if (!Number.isInteger(count) || count <= 0) {
             alert("Le nombre doit être un entier positif.");
-            return;
-        }
-
-        if (count % 8 !== 0) {
-            alert("Le nombre de joueurs doit être un multiple de 8.");
             return;
         }
 

@@ -46,8 +46,11 @@ export function getTournamentStructureForPlayerCount(
 ): TournamentStructure {
   validateTournamentPlayerCount(playerCount);
 
-  const phase2EliminatedFromPhase1 = Math.min(32, playerCount);
-  const phase2Players = Math.min(48, Math.max(playerCount - phase2EliminatedFromPhase1, 0));
+  const phase2EliminatedFromPhase1 = Math.min(16, playerCount);
+  const phase2Players = Math.min(
+    48,
+    Math.max(playerCount - phase2EliminatedFromPhase1, 0),
+  );
 
   const phase3Phase1MasterQualifiers = Math.min(16, playerCount);
   const phase3Phase2MasterQualifiers = Math.min(16, phase2Players);

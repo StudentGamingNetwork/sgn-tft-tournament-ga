@@ -32,7 +32,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
     const { tournamentId, phaseId } = use(params);
     const [phaseDetails, setPhaseDetails] = useState<PhaseDetails | null>(null);
     const [loading, setLoading] = useState(true);
-    const [selectedTab, setSelectedTab] = useState("overview");
+    const [selectedTab, setSelectedTab] = useState("games");
     const [isStartingPhase, setIsStartingPhase] = useState(false);
     const [isAutoCompleting, setIsAutoCompleting] = useState(false);
 
@@ -68,7 +68,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
 
         const intervalId = setInterval(() => {
             void loadPhaseDetails(false);
-        }, 30000);
+           }, 5000); // Recharger toutes les 5 secondes au lieu de 30
 
         return () => clearInterval(intervalId);
     }, [session, loadPhaseDetails]);
@@ -333,7 +333,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                             </div>
                             <div className="flex items-center gap-2">
                                 <Gamepad2 size={16} />
-                                <span>{phase.total_games} parties prévues</span>
+                                <span>{phase.totalGamesExpected} parties attendues</span>
                             </div>
                         </div>
                     </div>
