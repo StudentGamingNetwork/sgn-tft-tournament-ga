@@ -9,6 +9,8 @@ import { db } from "@/lib/db";
 import { tournament, tournamentRegistration } from "@/models/schema";
 import { env } from "@/utils/environment";
 
+export const dynamic = "force-dynamic";
+
 async function getFeaturedTournament() {
     let tournaments: Array<{
         id: string;

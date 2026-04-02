@@ -7,6 +7,8 @@ import { siteConfig } from "@/config/site";
 import { db } from "@/lib/db";
 import { tournament } from "@/models/schema";
 
+export const dynamic = "force-dynamic";
+
 async function getRulesUrl() {
   let tournaments: Array<{
     status: "upcoming" | "ongoing" | "completed";

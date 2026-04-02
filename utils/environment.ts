@@ -4,6 +4,7 @@ export const env = {
   DATABASE_URL:
     process.env.DATABASE_URL ??
     "postgresql://postgres:postgres@127.0.0.1:5432/sgn-tft-tournamnent-ga",
+  BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "",
   KEYCLOAK_CLIENT_ID: process.env.KEYCLOAK_CLIENT_ID ?? "",
   KEYCLOAK_CLIENT_SECRET: process.env.KEYCLOAK_CLIENT_SECRET ?? "",
   KEYCLOAK_ISSUER_URL: process.env.KEYCLOAK_ISSUER_URL ?? "",

@@ -7,6 +7,7 @@ import { genericOAuth, keycloak } from "better-auth/plugins";
 export const auth = betterAuth({
   baseURL: env.NEXT_PUBLIC_FRONTEND_URL,
   basePath: "/api/auth",
+  secret: env.BETTER_AUTH_SECRET || "sgn-tft-tournament-ga-build-secret",
   database: drizzleAdapter(db, { provider: "pg" }),
 
   plugins: [
