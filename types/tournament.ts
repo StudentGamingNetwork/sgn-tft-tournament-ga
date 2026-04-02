@@ -204,11 +204,11 @@ export interface RotationMatrix {
  * Input DTO for bulk player creation
  */
 export interface PlayerCSVImport {
-  name: string;
+  name?: string;
   riot_id: string;
-  tier: TierType;
-  division: DivisionType;
-  league_points: number;
+  tier?: TierType;
+  division?: DivisionType;
+  league_points?: number;
   discord_tag?: string;
   team_name?: string;
 }

@@ -72,6 +72,12 @@ vi.mock("@/lib/services/player-service", () => ({
   updatePlayer: vi.fn(),
 }));
 
+vi.mock("@/lib/services/rank-sync-service", () => ({
+  ensureRankSyncSchedulerStarted: vi.fn(),
+  triggerTournamentRankSync: vi.fn(),
+  getRankSyncState: vi.fn(),
+}));
+
 const tournamentsActions = await import("@/app/actions/tournaments");
 const { auth } = await import("@/lib/auth");
 const { db } = await import("@/lib/db");
@@ -80,6 +86,9 @@ const { createStandardTournament } = await import(
 );
 const { submitGameResults } = await import("@/lib/services/game-service");
 const { getPlayerByRiotId } = await import("@/lib/services/player-service");
+const { triggerTournamentRankSync, getRankSyncState } = await import(
+  "@/lib/services/rank-sync-service"
+);
 const {
   startPhase,
   startPhase2FromPhase1,
@@ -92,6 +101,8 @@ const mockGetSession = vi.mocked(auth.api.getSession);
 const mockCreateStandardTournament = vi.mocked(createStandardTournament);
 const mockSubmitGameResults = vi.mocked(submitGameResults);
 const mockGetPlayerByRiotId = vi.mocked(getPlayerByRiotId);
+const mockTriggerTournamentRankSync = vi.mocked(triggerTournamentRankSync);
+const mockGetRankSyncState = vi.mocked(getRankSyncState);
 const mockStartPhase = vi.mocked(startPhase);
 const mockStartPhase2FromPhase1 = vi.mocked(startPhase2FromPhase1);
 const mockStartPhase3FromPhase1And2 = vi.mocked(startPhase3FromPhase1And2);
@@ -440,6 +451,67 @@ describe("tournaments actions", () => {
       expect(result.updated).toBe(1);
       expect(result.registered).toBe(1);
       expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe("rank sync actions", () => {
+    it("lance la synchronisation des ranks pour un tournoi", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockTriggerTournamentRankSync.mockResolvedValue({
+        isRunning: true,
+        queueSize: 1,
+        schedulerEnabled: true,
+        lastRunAt: null,
+        lastError: null,
+        lastResult: null,
+      } as any);
+      mockGetRankSyncState.mockReturnValue({
+        isRunning: true,
+        queueSize: 1,
+        schedulerEnabled: true,
+        lastRunAt: null,
+        lastError: null,
+        lastResult: null,
+      } as any);
+
+      const result =
+        await tournamentsActions.triggerTournamentRanksSyncAction("t-1");
+
+      expect(result.success).toBe(true);
+      expect(mockTriggerTournamentRankSync).toHaveBeenCalledWith("t-1");
+      expect(result.state?.isRunning).toBe(true);
+    });
+
+    it("retourne une erreur si triggerTournamentRankSync echoue", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockTriggerTournamentRankSync.mockRejectedValue(
+        new Error("sync indisponible"),
+      );
+
+      const result =
+        await tournamentsActions.triggerTournamentRanksSyncAction("t-1");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("sync indisponible");
+    });
+
+    it("recupere l'etat du job de synchronisation", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockGetRankSyncState.mockReturnValue({
+        isRunning: false,
+        queueSize: 0,
+        schedulerEnabled: true,
+        lastRunAt: null,
+        lastError: null,
+        lastResult: null,
+      } as any);
+
+      const result =
+        await tournamentsActions.getTournamentRanksSyncStateAction();
+
+      expect(result.success).toBe(true);
+      expect(mockGetRankSyncState).toHaveBeenCalled();
+      expect(result.state?.schedulerEnabled).toBe(true);
     });
   });
 

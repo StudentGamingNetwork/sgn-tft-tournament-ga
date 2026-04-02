@@ -8,6 +8,8 @@ import {
   confirmAllPlayersInTournament,
   unconfirmAllPlayersInTournament,
   unregisterAllPlayersFromTournament,
+  triggerTournamentRanksSyncAction,
+  getTournamentRanksSyncStateAction,
   deletePhase,
   startPhase1Action,
   startNextPhaseAction,
@@ -132,6 +134,30 @@ export function useUnregisterAllPlayers(tournamentId: string) {
         queryKey: tournamentKeys.players(tournamentId),
       });
     },
+  });
+}
+
+// Hook pour lancer la synchronisation Riot des ranks
+export function useTriggerTournamentRankSync(tournamentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => triggerTournamentRanksSyncAction(tournamentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: tournamentKeys.players(tournamentId),
+      });
+    },
+  });
+}
+
+// Hook pour récupérer l'état du job de synchro
+export function useTournamentRankSyncState() {
+  return useQuery({
+    queryKey: [...tournamentKeys.all, "rank-sync-state"] as const,
+    queryFn: () => getTournamentRanksSyncStateAction(),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
   });
 }
 

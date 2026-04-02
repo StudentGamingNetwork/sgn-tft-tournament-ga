@@ -51,9 +51,9 @@ export function RegisterPlayerModal({
         name: "",
         riot_id: "",
         discord_tag: "",
-        tier: "DIAMOND" as TierType,
-        division: "IV" as DivisionType | null,
-        league_points: 0,
+        tier: null as TierType | null,
+        division: null as DivisionType | null,
+        league_points: "",
         team_name: "",
     });
 
@@ -69,9 +69,9 @@ export function RegisterPlayerModal({
                 name: "",
                 riot_id: "",
                 discord_tag: "",
-                tier: "DIAMOND",
-                division: "IV",
-                league_points: 0,
+                tier: null,
+                division: null,
+                league_points: "",
                 team_name: "",
             });
             setErrors({});
@@ -81,10 +81,12 @@ export function RegisterPlayerModal({
 
     // Auto-disable division for certain tiers
     useEffect(() => {
-        if (TIERS_WITHOUT_DIVISION.includes(formData.tier)) {
+        if (formData.tier && TIERS_WITHOUT_DIVISION.includes(formData.tier)) {
             setFormData((prev) => ({ ...prev, division: null }));
-        } else if (formData.division === null) {
+        } else if (formData.tier && formData.division === null) {
             setFormData((prev) => ({ ...prev, division: "IV" }));
+        } else if (!formData.tier) {
+            setFormData((prev) => ({ ...prev, division: null }));
         }
     }, [formData.tier]);
 
@@ -103,9 +105,13 @@ export function RegisterPlayerModal({
                         setFormData((prev) => ({
                             ...prev,
                             name: player.name,
-                            tier: player.tier || "DIAMOND",
-                            division: (player.division as DivisionType) || "IV",
-                            league_points: player.league_points || 0,
+                            tier: (player.tier as TierType) || null,
+                            division: (player.division as DivisionType) || null,
+                            league_points:
+                                player.league_points !== null &&
+                                    player.league_points !== undefined
+                                    ? String(player.league_points)
+                                    : "",
                             discord_tag: player.discord_tag || "",
                         }));
                     } else {
@@ -134,9 +140,11 @@ export function RegisterPlayerModal({
     const validateForm = (): boolean => {
         const newErrors: Record<string, string> = {};
 
-        const nameValidation = validatePlayerName(formData.name);
-        if (!nameValidation.valid) {
-            newErrors.name = nameValidation.error!;
+        if (formData.name.trim().length > 0) {
+            const nameValidation = validatePlayerName(formData.name);
+            if (!nameValidation.valid) {
+                newErrors.name = nameValidation.error!;
+            }
         }
 
         const riotIdValidation = validateRiotId(formData.riot_id);
@@ -151,14 +159,23 @@ export function RegisterPlayerModal({
             }
         }
 
-        const tierDivisionValidation = validateTierDivision(formData.tier, formData.division);
-        if (!tierDivisionValidation.valid) {
-            newErrors.division = tierDivisionValidation.error!;
+        if (formData.tier) {
+            const tierDivisionValidation = validateTierDivision(formData.tier, formData.division);
+            if (!tierDivisionValidation.valid) {
+                newErrors.division = tierDivisionValidation.error!;
+            }
         }
 
-        const lpValidation = validateLeaguePoints(formData.league_points, formData.tier);
-        if (!lpValidation.valid) {
-            newErrors.league_points = lpValidation.error!;
+        if (formData.league_points.length > 0) {
+            const parsedLeaguePoints = parseInt(formData.league_points, 10);
+            if (!formData.tier) {
+                newErrors.league_points = "Le tier est requis quand des points de ligue sont renseignés";
+            } else {
+                const lpValidation = validateLeaguePoints(parsedLeaguePoints, formData.tier);
+                if (!lpValidation.valid) {
+                    newErrors.league_points = lpValidation.error!;
+                }
+            }
         }
 
         setErrors(newErrors);
@@ -176,9 +193,12 @@ export function RegisterPlayerModal({
             const result = await createPlayerAndRegister(tournamentId, {
                 name: formData.name,
                 riot_id: formData.riot_id,
-                tier: formData.tier,
-                division: formData.division,
-                league_points: formData.league_points,
+                tier: formData.tier || undefined,
+                division: formData.tier ? formData.division : null,
+                league_points:
+                    formData.league_points.length > 0
+                        ? parseInt(formData.league_points, 10)
+                        : undefined,
                 discord_tag: formData.discord_tag || undefined,
                 team_name: formData.team_name || undefined,
             });
@@ -218,10 +238,10 @@ export function RegisterPlayerModal({
                             placeholder="Jean Dupont"
                             value={formData.name}
                             onValueChange={(value) => handleChange("name", value)}
-                            isRequired
                             errorMessage={errors.name}
                             isInvalid={!!errors.name}
                             isDisabled={existingPlayerFound}
+                            description="Optionnel: si vide, le nom du Riot ID sera utilisé"
                         />
 
                         {/* Riot ID */}
@@ -256,12 +276,11 @@ export function RegisterPlayerModal({
                             <Select
                                 label="Tier"
                                 placeholder="Sélectionner un tier"
-                                selectedKeys={[formData.tier]}
+                                selectedKeys={formData.tier ? [formData.tier] : []}
                                 onSelectionChange={(keys) => {
-                                    const tier = Array.from(keys)[0] as TierType;
+                                    const tier = (Array.from(keys)[0] as TierType) || null;
                                     handleChange("tier", tier);
                                 }}
-                                isRequired
                             >
                                 {TIERS.map((tier) => (
                                     <SelectItem key={tier}>
@@ -279,11 +298,13 @@ export function RegisterPlayerModal({
                                     const division = Array.from(keys)[0] as DivisionType;
                                     handleChange("division", division || null);
                                 }}
-                                isDisabled={TIERS_WITHOUT_DIVISION.includes(formData.tier)}
+                                isDisabled={!formData.tier || TIERS_WITHOUT_DIVISION.includes(formData.tier)}
                                 errorMessage={errors.division}
                                 isInvalid={!!errors.division}
                                 description={
-                                    TIERS_WITHOUT_DIVISION.includes(formData.tier)
+                                    !formData.tier
+                                        ? "Renseignez un tier pour sélectionner une division"
+                                        : TIERS_WITHOUT_DIVISION.includes(formData.tier)
                                         ? "Aucune division pour ce tier"
                                         : ""
                                 }
@@ -300,14 +321,13 @@ export function RegisterPlayerModal({
                         <Input
                             label="Points de ligue"
                             type="number"
-                            value={formData.league_points.toString()}
-                            onValueChange={(value) =>
-                                handleChange("league_points", parseInt(value) || 0)
-                            }
+                            value={formData.league_points}
+                            onValueChange={(value) => handleChange("league_points", value)}
                             min={0}
-                            max={["CHALLENGER", "GRANDMASTER", "MASTER"].includes(formData.tier) ? 9999 : 100}
+                            max={formData.tier && ["CHALLENGER", "GRANDMASTER", "MASTER"].includes(formData.tier) ? 9999 : 100}
                             errorMessage={errors.league_points}
                             isInvalid={!!errors.league_points}
+                            description="Optionnel"
                         />
 
                         {/* Nom d'équipe */}

@@ -38,6 +38,11 @@ import {
   submitGameResults,
   forfeitPlayerFromTournament,
 } from "@/lib/services/game-service";
+import {
+  ensureRankSyncSchedulerStarted,
+  getRankSyncState,
+  triggerTournamentRankSync,
+} from "@/lib/services/rank-sync-service";
 import { auth } from "@/lib/auth";
 import { getTournamentPhases } from "./read";
 
@@ -60,6 +65,8 @@ const SIMULATION_DIVISIONS: Array<"I" | "II" | "III" | "IV"> = [
   "III",
   "IV",
 ];
+
+ensureRankSyncSchedulerStarted();
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -353,11 +360,11 @@ export async function unregisterPlayerFromTournament(
 export async function createPlayerAndRegister(
   tournamentId: string,
   playerData: {
-    name: string;
+    name?: string;
     riot_id: string;
-    tier: TierType;
+    tier?: TierType;
     division?: DivisionType | null;
-    league_points: number;
+    league_points?: number;
     discord_tag?: string;
     team_name?: string;
   },
@@ -366,8 +373,15 @@ export async function createPlayerAndRegister(
     await requireAuthenticatedUser();
     await requireTournamentNotStarted(tournamentId);
 
+    const fallbackName = playerData.riot_id.split("#")[0]?.trim();
+    const effectiveName = (
+      playerData.name?.trim() ||
+      fallbackName ||
+      ""
+    ).trim();
+
     const validation = validatePlayerData({
-      name: playerData.name,
+      name: effectiveName,
       riot_id: playerData.riot_id,
       tier: playerData.tier,
       division: playerData.division || null,
@@ -418,7 +432,7 @@ export async function createPlayerAndRegister(
     }
 
     const newPlayer = await createPlayer({
-      name: playerData.name,
+      name: effectiveName,
       riot_id: playerData.riot_id,
       tier: playerData.tier,
       division: playerData.division || null,
@@ -633,6 +647,63 @@ export async function unregisterAllPlayersFromTournament(
 }
 
 /**
+ * Lancer la synchronisation des ranks Riot pour un tournoi
+ */
+export async function triggerTournamentRanksSyncAction(
+  tournamentId: string,
+): Promise<{
+  success: boolean;
+  error?: string;
+  state?: ReturnType<typeof getRankSyncState>;
+}> {
+  try {
+    await requireAuthenticatedUser();
+    await triggerTournamentRankSync(tournamentId);
+
+    return {
+      success: true,
+      state: getRankSyncState(),
+    };
+  } catch (error) {
+    console.error("Error triggering rank sync:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors du lancement de la synchronisation des ranks",
+    };
+  }
+}
+
+/**
+ * Récupérer le statut du job de synchronisation des ranks Riot
+ */
+export async function getTournamentRanksSyncStateAction(): Promise<{
+  success: boolean;
+  error?: string;
+  state?: ReturnType<typeof getRankSyncState>;
+}> {
+  try {
+    await requireAuthenticatedUser();
+
+    return {
+      success: true,
+      state: getRankSyncState(),
+    };
+  } catch (error) {
+    console.error("Error getting rank sync state:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors de la récupération du statut de synchronisation",
+    };
+  }
+}
+
+/**
  * Mettre à jour les informations d'un joueur
  */
 export async function updatePlayerInfo(
@@ -640,9 +711,9 @@ export async function updatePlayerInfo(
   playerData: {
     name: string;
     discord_tag?: string;
-    tier: TierType;
+    tier?: TierType;
     division?: DivisionType | null;
-    league_points: number;
+    league_points?: number;
     team_name?: string;
   },
 ): Promise<{ success: boolean; error?: string }> {
@@ -685,7 +756,7 @@ export async function updatePlayerInfo(
     await updatePlayer(playerId, {
       name: playerData.name,
       discord_tag: playerData.discord_tag || undefined,
-      tier: playerData.tier,
+      tier: playerData.tier ?? null,
       division: playerData.division || null,
       league_points: playerData.league_points,
       team_id: teamId,

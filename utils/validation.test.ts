@@ -118,6 +118,15 @@ describe("validation utils", () => {
       expect(result.errors.league_points).toBeDefined();
       expect(result.errors.discord_tag).toBeDefined();
     });
+
+    it("accepte des données sans tier/division/lp", () => {
+      const result = validatePlayerData({
+        name: "Player One",
+        riot_id: "PlayerOne#EUW",
+      });
+
+      expect(result.valid).toBe(true);
+    });
   });
 
   describe("parsePlayersCSV", () => {
@@ -137,11 +146,12 @@ describe("validation utils", () => {
     });
 
     it("retourne une erreur si colonnes requises absentes", () => {
-      const csv = ["name,division,league_points", "Player One,I,50"].join("\n");
+      const csv = ["division,league_points", "I,50"].join("\n");
       const result = parsePlayersCSV(csv);
 
       expect(result.success).toBe(false);
       expect(result.errors?.[0].message).toContain("Colonnes manquantes");
+      expect(result.errors?.[0].message).toContain("riot_id");
     });
 
     it("retourne des erreurs de ligne pour un CSV invalide", () => {
@@ -159,6 +169,30 @@ describe("validation utils", () => {
       expect(result.errors?.some((e) => e.field === "league_points")).toBe(
         true,
       );
+    });
+
+    it("accepte un CSV sans tier/division/league_points", () => {
+      const csv = [
+        "name,riot_id,discord_tag",
+        "Player One,PlayerOne#EUW,player.one",
+      ].join("\n");
+
+      const result = parsePlayersCSV(csv);
+
+      expect(result.success).toBe(true);
+      expect(result.data?.[0].tier).toBeUndefined();
+      expect(result.data?.[0].league_points).toBeUndefined();
+    });
+
+    it("accepte un CSV sans colonne name", () => {
+      const csv = ["riot_id,discord_tag", "PlayerOne#EUW,player.one"].join(
+        "\n",
+      );
+
+      const result = parsePlayersCSV(csv);
+
+      expect(result.success).toBe(true);
+      expect(result.data?.[0].name).toBe("PlayerOne");
     });
   });
 });

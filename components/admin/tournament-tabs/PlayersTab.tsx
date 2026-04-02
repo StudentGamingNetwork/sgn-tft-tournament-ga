@@ -4,7 +4,7 @@ import { Card } from "@heroui/card";
 import { Chip } from "@heroui/chip";
 import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell } from "@heroui/table";
 import { Pagination } from "@heroui/pagination";
-import { UserPlus, FileUp, CheckCircle, XCircle, Trash2, Download } from "lucide-react";
+import { UserPlus, FileUp, CheckCircle, XCircle, Trash2, Download, RefreshCw } from "lucide-react";
 import { SortableTableHeader } from "@/components/admin/SortableTableHeader";
 import { PlayerActionButtons } from "@/components/admin/PlayerActionButtons";
 import {
@@ -14,6 +14,8 @@ import {
     useConfirmAllPlayers,
     useUnconfirmAllPlayers,
     useUnregisterAllPlayers,
+    useTriggerTournamentRankSync,
+    useTournamentRankSyncState,
 } from "@/lib/hooks/useTournament";
 import type { PlayerWithRegistration } from "@/types/tournament";
 
@@ -73,6 +75,8 @@ export function PlayersTab({
     const confirmAll = useConfirmAllPlayers(tournamentId);
     const unconfirmAll = useUnconfirmAllPlayers(tournamentId);
     const unregisterAll = useUnregisterAllPlayers(tournamentId);
+    const triggerRankSync = useTriggerTournamentRankSync(tournamentId);
+    const { data: rankSyncStateData } = useTournamentRankSyncState();
 
     // États locaux pour le tri uniquement
     const [sortColumn, setSortColumn] = useState<keyof PlayerWithRegistration | "team_name" | "registration_status" | null>(null);
@@ -265,6 +269,25 @@ export function PlayersTab({
     const isBulkActionLoading =
         confirmAll.isPending || unconfirmAll.isPending || unregisterAll.isPending;
 
+    const rankSyncState = rankSyncStateData?.success
+        ? rankSyncStateData.state
+        : undefined;
+
+    const handleTriggerRankSync = useCallback(async () => {
+        try {
+            const result = await triggerRankSync.mutateAsync();
+            if (!result.success) {
+                alert(result.error || "Erreur lors du lancement de la synchronisation");
+                return;
+            }
+
+            alert("Synchronisation des ranks lancée. Le job s'exécute en arrière-plan.");
+        } catch (error) {
+            console.error("Error triggering rank sync:", error);
+            alert("Erreur lors du lancement de la synchronisation");
+        }
+    }, [triggerRankSync]);
+
     const handleExportPlayersCsv = useCallback(() => {
         if (sortedPlayers.length === 0) {
             return;
@@ -323,6 +346,15 @@ export function PlayersTab({
                     )}
                 </div>
                 <div className="flex gap-2">
+                    <Button
+                        color="warning"
+                        variant="flat"
+                        startContent={<RefreshCw size={18} />}
+                        onPress={handleTriggerRankSync}
+                        isLoading={triggerRankSync.isPending}
+                    >
+                        Sync ranks Riot
+                    </Button>
                     <Button
                         color="default"
                         variant="flat"
@@ -387,6 +419,42 @@ export function PlayersTab({
                         >
                             Supprimer tous
                         </Button>
+                    </div>
+                </div>
+            )}
+
+            {rankSyncState && (
+                <div className="mb-4 p-4 bg-warning-50 border border-warning rounded-lg">
+                    <p className="text-sm font-semibold mb-1">Synchronisation Riot</p>
+                    <div className="text-sm text-default-700">
+                        <p>
+                            État: {rankSyncState.isRunning ? "En cours" : "Idle"} •
+                            File: {rankSyncState.queueSize}
+                        </p>
+                        {rankSyncState.lastRunAt && (
+                            <p>
+                                Dernière exécution: {new Date(rankSyncState.lastRunAt).toLocaleString("fr-FR")}
+                            </p>
+                        )}
+                        {rankSyncState.lastResult && (
+                            <p>
+                                Dernier résultat: {rankSyncState.lastResult.stats.updated} mis à jour,
+                                {" "}{rankSyncState.lastResult.stats.failed} en erreur,
+                                {" "}{rankSyncState.lastResult.stats.skipped} ignorés
+                            </p>
+                        )}
+                        {rankSyncState.lastError && (
+                            <p className="text-danger">Dernière erreur: {rankSyncState.lastError}</p>
+                        )}
+                        {rankSyncState.lastResult?.errors.length ? (
+                            <div className="mt-1 text-danger">
+                                {rankSyncState.lastResult.errors.slice(0, 3).map((error) => (
+                                    <p key={`${error.playerId}-${error.riotId}`}>
+                                        • {error.riotId}: {error.message}
+                                    </p>
+                                ))}
+                            </div>
+                        ) : null}
                     </div>
                 </div>
             )}

@@ -20,11 +20,7 @@ export const PLAYER_CSV_COLUMNS = [
 
 export type PlayerCsvColumn = (typeof PLAYER_CSV_COLUMNS)[number];
 
-export const PLAYER_CSV_REQUIRED_COLUMNS: PlayerCsvColumn[] = [
-  "name",
-  "riot_id",
-  "tier",
-];
+export const PLAYER_CSV_REQUIRED_COLUMNS: PlayerCsvColumn[] = ["riot_id"];
 
 export type PlayerCsvColumnMapping = Record<PlayerCsvColumn, string | null>;
 
@@ -361,18 +357,6 @@ export function parsePlayersCSV(
 
       const lineNumber = i + 1;
 
-      // Validate name
-      const playerName = mappedValue("name");
-      const nameValidation = validatePlayerName(playerName);
-      if (!nameValidation.valid) {
-        errors.push({
-          line: lineNumber,
-          field: "name",
-          value: playerName,
-          message: nameValidation.error!,
-        });
-      }
-
       // Validate riot_id
       const riotId = mappedValue("riot_id");
       const riotIdValidation = validateRiotId(riotId);
@@ -385,8 +369,25 @@ export function parsePlayersCSV(
         });
       }
 
-      // Validate tier
-      const tier = mappedValue("tier")?.toUpperCase() as TierType;
+      // Validate name only when provided
+      const rawPlayerName = mappedValue("name");
+      if (rawPlayerName) {
+        const nameValidation = validatePlayerName(rawPlayerName);
+        if (!nameValidation.valid) {
+          errors.push({
+            line: lineNumber,
+            field: "name",
+            value: rawPlayerName,
+            message: nameValidation.error!,
+          });
+        }
+      }
+
+      const fallbackName = riotId.split("#")[0]?.trim();
+      const playerName = rawPlayerName || fallbackName;
+
+      const rawTier = mappedValue("tier");
+      const tier = rawTier ? (rawTier.toUpperCase() as TierType) : undefined;
       const validTiers: TierType[] = [
         "CHALLENGER",
         "GRANDMASTER",
@@ -401,7 +402,7 @@ export function parsePlayersCSV(
         "UNRANKED",
       ];
 
-      if (!validTiers.includes(tier)) {
+      if (tier && !validTiers.includes(tier)) {
         errors.push({
           line: lineNumber,
           field: "tier",
@@ -410,29 +411,59 @@ export function parsePlayersCSV(
         });
       }
 
-      // Validate division
-      const division = (mappedValue("division")?.toUpperCase() ||
-        null) as DivisionType;
-      const tierDivisionValidation = validateTierDivision(tier, division);
-      if (!tierDivisionValidation.valid) {
+      // Validate division only when a tier is provided
+      const rawDivision = mappedValue("division");
+      const division = rawDivision
+        ? (rawDivision.toUpperCase() as DivisionType)
+        : null;
+      if (tier) {
+        const tierDivisionValidation = validateTierDivision(tier, division);
+        if (!tierDivisionValidation.valid) {
+          errors.push({
+            line: lineNumber,
+            field: "division",
+            value: mappedValue("division"),
+            message: tierDivisionValidation.error!,
+          });
+        }
+      } else if (rawDivision) {
         errors.push({
           line: lineNumber,
           field: "division",
           value: mappedValue("division"),
-          message: tierDivisionValidation.error!,
+          message: "Le tier est requis quand une division est renseignée",
         });
       }
 
-      // Validate league_points
-      const leaguePoints = parseInt(mappedValue("league_points") || "0", 10);
-      const lpValidation = validateLeaguePoints(leaguePoints, tier);
-      if (!lpValidation.valid) {
-        errors.push({
-          line: lineNumber,
-          field: "league_points",
-          value: mappedValue("league_points"),
-          message: lpValidation.error!,
-        });
+      // Validate league_points only when provided
+      const rawLeaguePoints = mappedValue("league_points");
+      const hasLeaguePoints = rawLeaguePoints.length > 0;
+      const leaguePoints = hasLeaguePoints
+        ? parseInt(rawLeaguePoints, 10)
+        : undefined;
+      if (hasLeaguePoints) {
+        if (!tier) {
+          errors.push({
+            line: lineNumber,
+            field: "league_points",
+            value: mappedValue("league_points"),
+            message:
+              "Le tier est requis quand des points de ligue sont renseignés",
+          });
+        } else {
+          const lpValidation = validateLeaguePoints(
+            leaguePoints as number,
+            tier,
+          );
+          if (!lpValidation.valid) {
+            errors.push({
+              line: lineNumber,
+              field: "league_points",
+              value: mappedValue("league_points"),
+              message: lpValidation.error!,
+            });
+          }
+        }
       }
 
       // Validate discord_tag if provided
@@ -487,18 +518,20 @@ export function parsePlayersCSV(
  * Validate complete player data
  */
 export function validatePlayerData(data: {
-  name: string;
+  name?: string;
   riot_id: string;
-  tier: TierType;
+  tier?: TierType;
   division?: DivisionType;
-  league_points: number;
+  league_points?: number;
   discord_tag?: string;
 }): { valid: boolean; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
 
-  const nameValidation = validatePlayerName(data.name);
-  if (!nameValidation.valid) {
-    errors.name = nameValidation.error!;
+  if (data.name !== undefined && data.name.trim().length > 0) {
+    const nameValidation = validatePlayerName(data.name);
+    if (!nameValidation.valid) {
+      errors.name = nameValidation.error!;
+    }
   }
 
   const riotIdValidation = validateRiotId(data.riot_id);
@@ -506,17 +539,28 @@ export function validatePlayerData(data: {
     errors.riot_id = riotIdValidation.error!;
   }
 
-  const tierDivisionValidation = validateTierDivision(
-    data.tier,
-    data.division || null,
-  );
-  if (!tierDivisionValidation.valid) {
-    errors.division = tierDivisionValidation.error!;
+  if (data.tier) {
+    const tierDivisionValidation = validateTierDivision(
+      data.tier,
+      data.division || null,
+    );
+    if (!tierDivisionValidation.valid) {
+      errors.division = tierDivisionValidation.error!;
+    }
+  } else if (data.division) {
+    errors.division = "Le tier est requis quand une division est renseignée";
   }
 
-  const lpValidation = validateLeaguePoints(data.league_points, data.tier);
-  if (!lpValidation.valid) {
-    errors.league_points = lpValidation.error!;
+  if (data.league_points !== undefined && data.league_points !== null) {
+    if (!data.tier) {
+      errors.league_points =
+        "Le tier est requis quand des points de ligue sont renseignés";
+    } else {
+      const lpValidation = validateLeaguePoints(data.league_points, data.tier);
+      if (!lpValidation.valid) {
+        errors.league_points = lpValidation.error!;
+      }
+    }
   }
 
   if (data.discord_tag) {
