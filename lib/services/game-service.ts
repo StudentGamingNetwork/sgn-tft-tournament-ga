@@ -115,12 +115,14 @@ export async function submitGameResults(
     throw new Error("Game not found");
   }
 
-  const phaseInfo = await db.query.phase.findFirst({
-    where: eq(phase.id, gameInfo.phase_id),
-    columns: {
-      tournament_id: true,
-    },
-  });
+  const phaseInfo = gameInfo.phase_id
+    ? await db.query.phase.findFirst({
+        where: eq(phase.id, gameInfo.phase_id),
+        columns: {
+          tournament_id: true,
+        },
+      })
+    : null;
 
   // Validation: Check all player_ids are unique
   const playerIds = gameResults.map((r) => r.player_id);
@@ -226,13 +228,9 @@ export async function submitGameResults(
   });
 
   // After successful submission, remove forfeited players from future games and recreate if needed
-  if (
-    forfeitedPlayerIds.length > 0 &&
-    gameInfo.phase_id &&
-    gameInfo.tournament_id
-  ) {
+  if (forfeitedPlayerIds.length > 0 && phaseInfo?.tournament_id) {
     for (const playerId of forfeitedPlayerIds) {
-      await forfeitPlayerFromTournament(gameInfo.tournament_id, playerId);
+      await forfeitPlayerFromTournament(phaseInfo.tournament_id, playerId);
     }
   }
 
@@ -348,7 +346,7 @@ export async function forfeitPlayerFromTournament(
     >();
 
     for (const g of pendingGames) {
-      if (!g.bracket_id) continue;
+      if (!g.phase_id || !g.bracket_id) continue;
       if (!g.lobbyPlayers.some((lp) => lp.player_id === playerId)) continue;
 
       const key = `${g.phase_id}:${g.bracket_id}`;
@@ -392,14 +390,16 @@ export async function forfeitPlayerFromTournament(
       const seedByPlayer = new Map<string, number>();
       for (const pendingGame of firstPendingGames) {
         for (const lp of pendingGame.lobbyPlayers) {
-          if (lp.player_id !== playerId) {
-            activePlayers.add(lp.player_id);
-            const lobbySeed =
-              typeof lp.seed === "number" ? lp.seed : Number.MAX_SAFE_INTEGER;
-            const currentSeed = seedByPlayer.get(lp.player_id);
-            if (currentSeed === undefined || lobbySeed < currentSeed) {
-              seedByPlayer.set(lp.player_id, lobbySeed);
-            }
+          if (!lp.player_id || lp.player_id === playerId) {
+            continue;
+          }
+
+          activePlayers.add(lp.player_id);
+          const lobbySeed =
+            typeof lp.seed === "number" ? lp.seed : Number.MAX_SAFE_INTEGER;
+          const currentSeed = seedByPlayer.get(lp.player_id);
+          if (currentSeed === undefined || lobbySeed < currentSeed) {
+            seedByPlayer.set(lp.player_id, lobbySeed);
           }
         }
       }

@@ -88,7 +88,7 @@ export const Navbar = () => {
                             className="h-10 w-auto"
                         />
                         <Image
-                            src="/logos/SpatulaTour_RGB_horizontale-YELLOW_1.png"
+                            src="/logos/SpatulaTour_RGB_logomark-YELLOW_1.png"
                             alt="Logo Spatula Tour"
                             width={120}
                             height={40}
