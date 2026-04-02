@@ -1022,7 +1022,6 @@ async function startSpecificPhaseAction() {
         phase1.id,
         phase2.id,
         targetPhase.id,
-        8,
       );
 
       log("\n✅ Phase 3 démarrée avec succès!", "green");
