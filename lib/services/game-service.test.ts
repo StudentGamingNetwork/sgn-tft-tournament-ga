@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { GameResult } from "@/types/tournament";
+import { game as gameTable } from "@/models/schema";
 
 // Mock de la base de données
 vi.mock("@/lib/db", () => ({
@@ -44,6 +45,7 @@ const {
   updateGameStatus,
   submitGameResults,
   hasResults,
+  checkAndCreateNextGame,
   forfeitPlayerFromTournament,
 } = await import("./game-service");
 
@@ -148,10 +150,16 @@ describe("gameService", () => {
       (db.query.lobbyPlayer.findMany as any).mockResolvedValue(
         validPlayers.map((id) => ({ game_id: validGameId, player_id: id })),
       );
+      (db.query.phase.findMany as any).mockResolvedValue([{ id: "phase-id" }]);
 
       // Mock transaction
       (db.transaction as any).mockImplementation(async (callback: any) => {
         const tx = {
+          query: {
+            game: {
+              findMany: vi.fn().mockResolvedValue([]),
+            },
+          },
           delete: vi
             .fn()
             .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
@@ -297,6 +305,11 @@ describe("gameService", () => {
 
       (db.transaction as any).mockImplementation(async (callback: any) => {
         const tx = {
+          query: {
+            game: {
+              findMany: vi.fn().mockResolvedValue([]),
+            },
+          },
           delete: vi
             .fn()
             .mockReturnValue({ where: vi.fn().mockResolvedValue([]) }),
@@ -310,8 +323,8 @@ describe("gameService", () => {
 
       await submitGameResults(validGameId, resultsWithForfeit);
 
-      expect(txUpdate).toHaveBeenCalledTimes(2);
-      expect(txUpdateWhere).toHaveBeenCalledTimes(2);
+      expect(txUpdate).toHaveBeenCalledTimes(3);
+      expect(txUpdateWhere).toHaveBeenCalledTimes(3);
     });
 
     it("rejette un forfait avec placement non nul", async () => {
@@ -659,6 +672,133 @@ describe("gameService", () => {
       const result = await hasResults("game-id");
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe("checkAndCreateNextGame - finals progression", () => {
+    const phaseId = "phase-5";
+    const bracketId = "bracket-final";
+    const phase5Players = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
+
+    const currentGames = [
+      {
+        id: "game-2",
+        phase_id: phaseId,
+        bracket_id: bracketId,
+        game_number: 2,
+        lobby_name: "Final Lobby A",
+        status: "completed",
+        bracket: { name: "master" },
+        results: [
+          { player_id: "p1", placement: 1, points: 8 },
+          { player_id: "p2", placement: 2, points: 7 },
+          { player_id: "p3", placement: 3, points: 6 },
+          { player_id: "p4", placement: 4, points: 5 },
+          { player_id: "p5", placement: 5, points: 4 },
+          { player_id: "p6", placement: 6, points: 3 },
+          { player_id: "p7", placement: 7, points: 2 },
+          { player_id: "p8", placement: 8, points: 1 },
+        ],
+      },
+    ];
+
+    const playerData = phase5Players.map((id, index) => ({
+      id,
+      name: `Player ${index + 1}`,
+      riot_id: `p${index + 1}#1`,
+      tier: "GOLD",
+      division: "I",
+      league_points: 50,
+    }));
+
+    const setupGameCreationMocks = (
+      leaderboard: Array<{
+        player_id: string;
+        player_name: string;
+        riot_id: string;
+        total_points: number;
+      }>,
+    ) => {
+      (db.query.phase.findFirst as any).mockResolvedValue({
+        id: phaseId,
+        tournament_id: "tournament-1",
+        total_games: 6,
+        order_index: 5,
+      });
+
+      (db.query.game.findMany as any)
+        .mockResolvedValueOnce(currentGames)
+        .mockResolvedValueOnce([]);
+
+      vi.mocked(getLeaderboard as any).mockResolvedValue(leaderboard);
+      (db.query.player.findMany as any).mockResolvedValue(playerData);
+
+      (db.insert as any).mockImplementation((table: any) => {
+        if (table === gameTable) {
+          return {
+            values: vi.fn().mockReturnValue({
+              returning: vi.fn().mockResolvedValue([
+                {
+                  id: "new-final-game",
+                  bracket_id: bracketId,
+                  phase_id: phaseId,
+                  lobby_name: "Lobby 1",
+                  game_number: 3,
+                  status: "upcoming",
+                },
+              ]),
+            }),
+          };
+        }
+
+        return {
+          values: vi.fn().mockResolvedValue([]),
+        };
+      });
+    };
+
+    it("crée la game suivante quand le vainqueur n'était pas finaliste avant la game", async () => {
+      setupGameCreationMocks([
+        {
+          player_id: "p1",
+          player_name: "Player 1",
+          riot_id: "p1#1",
+          total_points: 18,
+        },
+        {
+          player_id: "p2",
+          player_name: "Player 2",
+          riot_id: "p2#1",
+          total_points: 15,
+        },
+      ]);
+
+      const result = await checkAndCreateNextGame(phaseId, 2);
+
+      expect(result.created).toBe(true);
+      expect(db.insert).toHaveBeenCalledWith(gameTable);
+    });
+
+    it("n'arrête pas la suite quand un joueur déjà finaliste gagne", async () => {
+      setupGameCreationMocks([
+        {
+          player_id: "p1",
+          player_name: "Player 1",
+          riot_id: "p1#1",
+          total_points: 26,
+        },
+        {
+          player_id: "p2",
+          player_name: "Player 2",
+          riot_id: "p2#1",
+          total_points: 15,
+        },
+      ]);
+
+      const result = await checkAndCreateNextGame(phaseId, 2);
+
+      expect(result.created).toBe(false);
+      expect(db.insert).not.toHaveBeenCalledWith(gameTable);
     });
   });
 });

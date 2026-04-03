@@ -155,12 +155,14 @@ export async function submitGameResults(
     );
   }
 
-  const normalResults = gameResults.filter(
-    (result) => (result.result_status ?? "normal") !== "forfeit",
-  );
-  const forfeitResults = gameResults.filter(
-    (result) => (result.result_status ?? "normal") === "forfeit",
-  );
+  const normalResults = gameResults.filter((result) => {
+    const resultStatus = result.result_status ?? "normal";
+    return resultStatus !== "forfeit";
+  });
+  const forfeitResults = gameResults.filter((result) => {
+    const resultStatus = result.result_status ?? "normal";
+    return resultStatus === "forfeit";
+  });
   const forfeitedPlayerIds = forfeitResults.map((result) => result.player_id);
 
   // Validation: normal placements must be in [1..normalPlayersCount]
@@ -801,10 +803,31 @@ async function createNextGameWithReseed(
 
     const checkmateThreshold = getFinalistThresholdByBracket(bracketName);
     if (checkmateThreshold) {
+      const currentGamePointsByPlayer = new Map<string, number>();
+      for (const currentGame of currentGames) {
+        for (const result of currentGame.results ?? []) {
+          if (!result.player_id) {
+            continue;
+          }
+
+          currentGamePointsByPlayer.set(
+            result.player_id,
+            (currentGamePointsByPlayer.get(result.player_id) ?? 0) +
+              (result.points ?? calculatePoints(result.placement)),
+          );
+        }
+      }
+
       const bracketLeaderboard = await getLeaderboard(phaseId, bracketId);
       const finalists = new Set(
         bracketLeaderboard
-          .filter((entry) => entry.total_points >= checkmateThreshold)
+          .filter((entry) => {
+            const previousPoints =
+              entry.total_points -
+              (currentGamePointsByPlayer.get(entry.player_id) ?? 0);
+
+            return previousPoints >= checkmateThreshold;
+          })
           .map((entry) => entry.player_id),
       );
 
