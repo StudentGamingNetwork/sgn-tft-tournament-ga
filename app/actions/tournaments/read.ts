@@ -401,7 +401,13 @@ export async function getTournamentGlobalResults(
           games_played: 0,
           avg_placement: 0,
           top1_count: 0,
+          top2_count: 0,
+          top3_count: 0,
           top4_count: 0,
+          top5_count: 0,
+          top6_count: 0,
+          top7_count: 0,
+          top8_count: 0,
         }),
       )
       .sort((a, b) => a.player_name.localeCompare(b.player_name));

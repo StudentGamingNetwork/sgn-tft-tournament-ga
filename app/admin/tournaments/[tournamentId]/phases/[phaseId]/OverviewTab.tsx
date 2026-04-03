@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { Card } from "@heroui/card";
 import { Tabs, Tab } from "@heroui/tabs";
 import { Chip } from "@heroui/chip";
+import { Button } from "@heroui/button";
 import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell } from "@heroui/table";
 import { Pagination } from "@heroui/pagination";
 import { Trophy, Award, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
@@ -14,13 +15,14 @@ interface OverviewTabProps {
     phaseOrderIndex: number;
 }
 
-const ITEMS_PER_PAGE = 20;
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50, 60] as const;
 
 export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTabProps) {
     const [sortColumn, setSortColumn] = useState<keyof PhasePlayerStats | null>(null);
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
     const [currentPage, setCurrentPage] = useState(1);
     const [selectedBracket, setSelectedBracket] = useState<string>("all");
+    const [pageSize, setPageSize] = useState<number | "all">(50);
 
     // Extraire les brackets uniques des games
     const brackets = useMemo(() => {
@@ -58,6 +60,7 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
             setSortColumn(column);
             setSortDirection("asc");
         }
+        setCurrentPage(1);
     };
 
     const sortedParticipants = useMemo(() => {
@@ -84,13 +87,26 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
         });
     }, [filteredParticipants, sortColumn, sortDirection]);
 
-    const totalPages = Math.ceil(sortedParticipants.length / ITEMS_PER_PAGE);
+    const totalPages = pageSize === "all"
+        ? 1
+        : Math.max(1, Math.ceil(sortedParticipants.length / pageSize));
 
     const paginatedParticipants = useMemo(() => {
-        const start = (currentPage - 1) * ITEMS_PER_PAGE;
-        const end = start + ITEMS_PER_PAGE;
+        if (pageSize === "all") {
+            return sortedParticipants;
+        }
+
+        const start = (currentPage - 1) * pageSize;
+        const end = start + pageSize;
         return sortedParticipants.slice(start, end);
-    }, [sortedParticipants, currentPage]);
+    }, [sortedParticipants, currentPage, pageSize]);
+
+    const displayedFrom = pageSize === "all"
+        ? (sortedParticipants.length > 0 ? 1 : 0)
+        : Math.min((currentPage - 1) * pageSize + 1, sortedParticipants.length);
+    const displayedTo = pageSize === "all"
+        ? sortedParticipants.length
+        : Math.min(currentPage * pageSize, sortedParticipants.length);
 
     const getSortIcon = (column: keyof PhasePlayerStats) => {
         if (sortColumn !== column) {
@@ -177,7 +193,33 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
                     </Tabs>
                 )}
 
-                <Table aria-label="Participants table" className="min-w-full">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-default-500">Lignes par page</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                            <Button
+                                key={size}
+                                size="sm"
+                                variant={pageSize === size ? "solid" : "flat"}
+                                color={pageSize === size ? "primary" : "default"}
+                                onPress={() => setPageSize(size)}
+                            >
+                                {size}
+                            </Button>
+                        ))}
+                        <Button
+                            size="sm"
+                            variant={pageSize === "all" ? "solid" : "flat"}
+                            color={pageSize === "all" ? "primary" : "default"}
+                            onPress={() => setPageSize("all")}
+                        >
+                            Tous
+                        </Button>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                <Table aria-label="Participants table" className="min-w-[1200px] whitespace-nowrap">
                     <TableHeader>
                         <TableColumn>
                             <button
@@ -375,7 +417,8 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
                         ))}
                     </TableBody>
                 </Table>
-                {totalPages > 1 && (
+                </div>
+                {pageSize !== "all" && totalPages > 1 && (
                     <div className="flex justify-center mt-6">
                         <Pagination
                             total={totalPages}
@@ -384,6 +427,13 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
                             showControls
                             color="primary"
                         />
+                    </div>
+                )}
+                {pageSize === "all" && sortedParticipants.length > 0 && (
+                    <div className="flex justify-center mt-6">
+                        <span className="text-sm text-default-500">
+                            Affichage {displayedFrom}-{displayedTo} sur {sortedParticipants.length}
+                        </span>
                     </div>
                 )}
             </div>

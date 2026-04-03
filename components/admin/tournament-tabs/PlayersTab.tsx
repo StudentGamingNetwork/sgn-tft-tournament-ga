@@ -19,6 +19,8 @@ import {
 } from "@/lib/hooks/useTournament";
 import type { PlayerWithRegistration } from "@/types/tournament";
 
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40] as const;
+
 // Fonctions pures hors du composant pour éviter les recréations
 const getTierRank = (tier: string | null): number => {
     const tierOrder: Record<string, number> = {
@@ -82,7 +84,7 @@ export function PlayersTab({
     const [sortColumn, setSortColumn] = useState<keyof PlayerWithRegistration | "team_name" | "registration_status" | null>(null);
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
     const [page, setPage] = useState(1);
-    const playersPerPage = 10;
+    const [itemsPerPage, setItemsPerPage] = useState<number | "all">("all");
 
     // Handlers avec useCallback pour éviter recréation
     const handleEditPlayer = useCallback((player: PlayerWithRegistration) => {
@@ -249,22 +251,25 @@ export function PlayersTab({
 
     // Pagination : calculer le nombre de pages
     const totalPages = useMemo(
-        () => Math.ceil(sortedPlayers.length / playersPerPage),
-        [sortedPlayers.length, playersPerPage]
+        () => itemsPerPage === "all" ? 1 : Math.ceil(sortedPlayers.length / itemsPerPage),
+        [sortedPlayers.length, itemsPerPage]
     );
 
     const paginatedPlayers = useMemo(() => {
-        const start = (page - 1) * playersPerPage;
-        const end = start + playersPerPage;
+        if (itemsPerPage === "all") {
+            return sortedPlayers;
+        }
+        const start = (page - 1) * itemsPerPage;
+        const end = start + itemsPerPage;
         return sortedPlayers.slice(start, end);
-    }, [sortedPlayers, page, playersPerPage]);
+    }, [sortedPlayers, page, itemsPerPage]);
 
     // Réinitialiser la page si elle devient invalide après un changement de données
     useEffect(() => {
         if (page > totalPages && totalPages > 0) {
             setPage(totalPages);
         }
-    }, [totalPages, page]);
+    }, [totalPages, page, itemsPerPage]);
 
     const isBulkActionLoading =
         confirmAll.isPending || unconfirmAll.isPending || unregisterAll.isPending;
@@ -340,12 +345,13 @@ export function PlayersTab({
                     <h2 className="text-2xl font-bold">Gestion des joueurs</h2>
                     {players.length > 0 && (
                         <p className="text-sm text-default-500 mt-1">
-                            {sortedPlayers.length} joueur{sortedPlayers.length > 1 ? 's' : ''} au total
-                            {totalPages > 1 && ` • Page ${page}/${totalPages}`}
+                            {itemsPerPage === "all"
+                                ? `Affichage 1-${sortedPlayers.length} sur ${sortedPlayers.length}`
+                                : `Affichage ${Math.min((page - 1) * itemsPerPage + 1, sortedPlayers.length)}-${Math.min(page * itemsPerPage, sortedPlayers.length)} sur ${sortedPlayers.length}`}
                         </p>
                     )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                     <Button
                         color="warning"
                         variant="flat"
@@ -372,6 +378,33 @@ export function PlayersTab({
                     >
                         Importer CSV
                     </Button>
+                    <div className="ml-auto flex items-center gap-2">
+                        {PAGE_SIZE_OPTIONS.map((size) => (
+                            <Button
+                                key={size}
+                                size="sm"
+                                variant={itemsPerPage === size ? "solid" : "flat"}
+                                color={itemsPerPage === size ? "secondary" : "default"}
+                                onPress={() => {
+                                    setItemsPerPage(size);
+                                    setPage(1);
+                                }}
+                            >
+                                {size}/page
+                            </Button>
+                        ))}
+                        <Button
+                            size="sm"
+                            variant={itemsPerPage === "all" ? "solid" : "flat"}
+                            color={itemsPerPage === "all" ? "secondary" : "default"}
+                            onPress={() => {
+                                setItemsPerPage("all");
+                                setPage(1);
+                            }}
+                        >
+                            Tous
+                        </Button>
+                    </div>
                     <Button
                         color="primary"
                         startContent={<UserPlus size={18} />}
@@ -595,7 +628,7 @@ export function PlayersTab({
             )}
 
             {/* Pagination */}
-            {totalPages > 1 && (
+            {itemsPerPage !== "all" && totalPages > 1 && (
                 <div className="flex justify-center mt-4">
                     <Pagination
                         total={totalPages}

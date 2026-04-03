@@ -227,7 +227,13 @@ export interface LeaderboardEntry {
   games_played: number;
   avg_placement: number;
   top1_count: number;
+  top2_count: number;
+  top3_count: number;
   top4_count: number;
+  top5_count: number;
+  top6_count: number;
+  top7_count: number;
+  top8_count: number;
   is_finalist?: boolean;
 }
 

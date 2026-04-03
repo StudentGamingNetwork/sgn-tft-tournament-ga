@@ -306,7 +306,7 @@ export function PublicTournamentPhasesView() {
                     </p>
                   </Card>
 
-                  {phaseDetails.phase.order_index >= 2 && availableBrackets.length > 0 ? (
+                  {phaseDetails.phase.order_index >= 3 && availableBrackets.length > 0 ? (
                     <div className="flex flex-col items-center gap-2">
                       <span className="text-sm text-default-500">Filtrer par bracket</span>
                       <div className="flex flex-wrap justify-center gap-2">
@@ -350,28 +350,44 @@ export function PublicTournamentPhasesView() {
                         {phaseDetails.participants.length === 0 ? (
                           <p className="text-default-500">Aucun classement disponible.</p>
                         ) : (
-                          <Table aria-label="Classement de la phase">
-                            <TableHeader>
-                              <TableColumn>RANK</TableColumn>
-                              <TableColumn>JOUEUR</TableColumn>
-                              <TableColumn>RIOT ID</TableColumn>
-                              <TableColumn>POINTS</TableColumn>
-                              <TableColumn>TOP 1</TableColumn>
-                              <TableColumn>TOP 4+</TableColumn>
-                            </TableHeader>
-                            <TableBody>
-                              {phaseDetails.participants.map((player) => (
-                                <TableRow key={player.player_id}>
-                                  <TableCell>#{player.current_rank}</TableCell>
-                                  <TableCell>{player.player_name}</TableCell>
-                                  <TableCell>{player.riot_id}</TableCell>
-                                  <TableCell>{player.total_points}</TableCell>
-                                  <TableCell>{player.top1_count}</TableCell>
-                                  <TableCell>{player.top4_or_better_count}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                          <div className="overflow-x-auto">
+                            <Table aria-label="Classement de la phase" className="min-w-[1100px] whitespace-nowrap">
+                              <TableHeader>
+                                <TableColumn>RANK</TableColumn>
+                                <TableColumn>JOUEUR</TableColumn>
+                                <TableColumn>RIOT ID</TableColumn>
+                                <TableColumn>POINTS</TableColumn>
+                                <TableColumn>TOP 1</TableColumn>
+                                <TableColumn>TOP 4+</TableColumn>
+                                <TableColumn>TOP 2</TableColumn>
+                                <TableColumn>TOP 3</TableColumn>
+                                <TableColumn>TOP 4</TableColumn>
+                                <TableColumn>TOP 5</TableColumn>
+                                <TableColumn>TOP 6</TableColumn>
+                                <TableColumn>TOP 7</TableColumn>
+                                <TableColumn>TOP 8</TableColumn>
+                              </TableHeader>
+                              <TableBody>
+                                {phaseDetails.participants.map((player) => (
+                                  <TableRow key={player.player_id}>
+                                    <TableCell>#{player.current_rank}</TableCell>
+                                    <TableCell>{player.player_name}</TableCell>
+                                    <TableCell>{player.riot_id}</TableCell>
+                                    <TableCell>{player.total_points}</TableCell>
+                                    <TableCell>{player.top1_count}</TableCell>
+                                    <TableCell>{player.top4_or_better_count}</TableCell>
+                                    <TableCell>{player.top2_count}</TableCell>
+                                    <TableCell>{player.top3_count}</TableCell>
+                                    <TableCell>{player.top4_count}</TableCell>
+                                    <TableCell>{player.top5_count}</TableCell>
+                                    <TableCell>{player.top6_count}</TableCell>
+                                    <TableCell>{player.top7_count}</TableCell>
+                                    <TableCell>{player.top8_count}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
                         )}
                       </Card>
                     </Tab>

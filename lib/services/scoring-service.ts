@@ -229,7 +229,13 @@ export async function getLeaderboard(
       games_played: item.stats.total_games,
       avg_placement: item.stats.avg_placement,
       top1_count: item.stats.top1_count,
+      top2_count: item.stats.top2_count,
+      top3_count: item.stats.top3_count,
       top4_count: item.stats.top4_count,
+      top5_count: item.stats.top5_count,
+      top6_count: item.stats.top6_count,
+      top7_count: item.stats.top7_count,
+      top8_count: item.stats.top8_count,
     };
   });
 
@@ -331,7 +337,13 @@ export async function getCumulativeLeaderboard(
       games_played: item.stats.total_games,
       avg_placement: item.stats.avg_placement,
       top1_count: item.stats.top1_count,
+      top2_count: item.stats.top2_count,
+      top3_count: item.stats.top3_count,
       top4_count: item.stats.top4_count,
+      top5_count: item.stats.top5_count,
+      top6_count: item.stats.top6_count,
+      top7_count: item.stats.top7_count,
+      top8_count: item.stats.top8_count,
     };
   });
 

@@ -5,6 +5,8 @@ import { Pagination } from "@heroui/pagination";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useTournamentGlobalResults } from "@/lib/hooks/useTournament";
 
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50, 60] as const;
+
 interface ResultsTabProps {
     tournamentId: string;
 }
@@ -13,7 +15,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
     const { data, isLoading, error } = useTournamentGlobalResults(tournamentId);
     const [selectedFilter, setSelectedFilter] = useState("global");
     const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(25);
+    const [pageSize, setPageSize] = useState<number | "all">(50);
 
     const activePhase = data?.activePhase;
     const availableFilters = data?.availableFilters || ["global"];
@@ -32,8 +34,14 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
         setCurrentPage(1);
     }, [safeSelectedFilter, leaderboard.length, pageSize]);
 
-    const totalPages = Math.max(1, Math.ceil(leaderboard.length / pageSize));
+    const totalPages = pageSize === "all"
+        ? 1
+        : Math.max(1, Math.ceil(leaderboard.length / pageSize));
     const paginatedLeaderboard = useMemo(() => {
+        if (pageSize === "all") {
+            return leaderboard;
+        }
+
         const startIndex = (currentPage - 1) * pageSize;
         return leaderboard.slice(startIndex, startIndex + pageSize);
     }, [leaderboard, currentPage, pageSize]);
@@ -64,7 +72,13 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
             "points",
             "parties_jouees",
             "top_1",
+            "top_2",
+            "top_3",
             "top_4",
+            "top_5",
+            "top_6",
+            "top_7",
+            "top_8",
             "placement_moyen",
         ];
 
@@ -75,7 +89,13 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
             entry.total_points,
             entry.games_played,
             entry.top1_count,
+            entry.top2_count,
+            entry.top3_count,
             entry.top4_count,
+            entry.top5_count,
+            entry.top6_count,
+            entry.top7_count,
+            entry.top8_count,
             entry.games_played > 0 ? entry.avg_placement.toFixed(2) : "-",
         ]);
 
@@ -179,7 +199,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                             >
                                 Exporter CSV
                             </Button>
-                            {[10, 25, 50].map((size) => (
+                            {PAGE_SIZE_OPTIONS.map((size) => (
                                 <Button
                                     key={size}
                                     size="sm"
@@ -190,6 +210,14 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                     {size}/page
                                 </Button>
                             ))}
+                            <Button
+                                size="sm"
+                                variant={pageSize === "all" ? "solid" : "flat"}
+                                color={pageSize === "all" ? "secondary" : "default"}
+                                onPress={() => setPageSize("all")}
+                            >
+                                Tous
+                            </Button>
                         </div>
                     </div>
 
@@ -199,7 +227,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                         </p>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
+                            <table className="min-w-[1200px] w-full text-sm whitespace-nowrap">
                                 <thead>
                                     <tr className="border-b border-divider text-left text-default-500">
                                         <th className="py-2 pr-3">#</th>
@@ -208,7 +236,13 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                         <th className="py-2 pr-3">Points</th>
                                         <th className="py-2 pr-3">Parties</th>
                                         <th className="py-2 pr-3">Top 1</th>
+                                        <th className="py-2 pr-3">Top 2</th>
+                                        <th className="py-2 pr-3">Top 3</th>
                                         <th className="py-2 pr-3">Top 4</th>
+                                        <th className="py-2 pr-3">Top 5</th>
+                                        <th className="py-2 pr-3">Top 6</th>
+                                        <th className="py-2 pr-3">Top 7</th>
+                                        <th className="py-2 pr-3">Top 8</th>
                                         <th className="py-2 pr-3">Moy. place</th>
                                     </tr>
                                 </thead>
@@ -256,7 +290,13 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                                     <td className="py-2 pr-3 font-semibold">{entry.total_points}</td>
                                                     <td className="py-2 pr-3">{entry.games_played}</td>
                                                     <td className="py-2 pr-3">{entry.top1_count}</td>
+                                                    <td className="py-2 pr-3">{entry.top2_count}</td>
+                                                    <td className="py-2 pr-3">{entry.top3_count}</td>
                                                     <td className="py-2 pr-3">{entry.top4_count}</td>
+                                                    <td className="py-2 pr-3">{entry.top5_count}</td>
+                                                    <td className="py-2 pr-3">{entry.top6_count}</td>
+                                                    <td className="py-2 pr-3">{entry.top7_count}</td>
+                                                    <td className="py-2 pr-3">{entry.top8_count}</td>
                                                     <td className="py-2 pr-3">{entry.games_played > 0 ? entry.avg_placement.toFixed(2) : "-"}</td>
                                                 </tr>
                                             </Fragment>
@@ -267,10 +307,11 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
 
                             <div className="mt-4 flex items-center justify-between gap-3">
                                 <p className="text-xs text-default-500">
-                                    Affichage {Math.min((currentPage - 1) * pageSize + 1, leaderboard.length)}-
-                                    {Math.min(currentPage * pageSize, leaderboard.length)} sur {leaderboard.length}
+                                    {pageSize === "all"
+                                        ? `Affichage 1-${leaderboard.length} sur ${leaderboard.length}`
+                                        : `Affichage ${Math.min((currentPage - 1) * pageSize + 1, leaderboard.length)}-${Math.min(currentPage * pageSize, leaderboard.length)} sur ${leaderboard.length}`}
                                 </p>
-                                {totalPages > 1 ? (
+                                {pageSize !== "all" && totalPages > 1 ? (
                                     <Pagination
                                         total={totalPages}
                                         page={currentPage}
