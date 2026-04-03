@@ -43,16 +43,25 @@ export function PhasesTab({
         }
 
         // Vérifier qu'il y a des joueurs confirmés
-        const confirmedCount = players.filter(p => p.registration.status === "confirmed").length;
+        const confirmedPlayers = players.filter(
+            (p) => p.registration.status === "confirmed",
+        );
+        const confirmedCount = confirmedPlayers.length;
 
         if (confirmedCount === 0) {
             alert("Aucun joueur confirmé. Veuillez confirmer les joueurs dans l'onglet Joueurs avant de démarrer la phase.");
             return;
         }
 
-        const lobbyCount = Math.floor(confirmedCount / 8);
+        const playersWithoutRankCount = confirmedPlayers.filter(
+            (p) => !p.tier || p.league_points === null || p.league_points === undefined,
+        ).length;
+
+        const lobbyCount = Math.ceil(confirmedCount / 8);
         const message = `Démarrer la Phase 1 avec ${confirmedCount} joueurs confirmés ?\n\n` +
             `Cela créera ${lobbyCount} lobby(s) de 8 joueurs pour le Game 1.\n` +
+            `Joueurs sans rank détectés : ${playersWithoutRankCount}.\n` +
+            `Ils seront considérés comme UNRANKED (0 LP) pour le seeding.\n\n` +
             `Les joueurs seront automatiquement répartis selon leur classement.`;
 
         if (!confirm(message)) {
@@ -113,7 +122,31 @@ export function PhasesTab({
             return;
         }
 
-        const message = `Démarrer la prochaine phase (${nextStartablePhase.name}) ?`;
+        let message = `Démarrer la prochaine phase (${nextStartablePhase.name}) ?`;
+
+        if (nextStartablePhase.order_index === 1) {
+            const confirmedPlayers = players.filter(
+                (p) => p.registration.status === "confirmed",
+            );
+            const confirmedCount = confirmedPlayers.length;
+
+            if (confirmedCount === 0) {
+                alert("Aucun joueur confirmé. Veuillez confirmer les joueurs dans l'onglet Joueurs avant de démarrer la phase.");
+                return;
+            }
+
+            const playersWithoutRankCount = confirmedPlayers.filter(
+                (p) => !p.tier || p.league_points === null || p.league_points === undefined,
+            ).length;
+
+            const lobbyCount = Math.ceil(confirmedCount / 8);
+            message = `Démarrer la Phase 1 avec ${confirmedCount} joueurs confirmés ?\n\n` +
+                `Cela créera ${lobbyCount} lobby(s) de 8 joueurs pour le Game 1.\n` +
+                `Joueurs sans rank détectés : ${playersWithoutRankCount}.\n` +
+                `Ils seront considérés comme UNRANKED (0 LP) pour le seeding.\n\n` +
+                `Les joueurs seront automatiquement répartis selon leur classement.`;
+        }
+
         if (!confirm(message)) {
             return;
         }

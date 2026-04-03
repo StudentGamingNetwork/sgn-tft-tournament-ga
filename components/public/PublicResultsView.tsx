@@ -25,6 +25,14 @@ import { getBracketChipColor } from "@/utils/bracket-colors";
 
 const ALL_BRACKETS = ["common", "amateur", "master", "challenger"] as const;
 
+const getTrPseudo = (
+  riotId: string | null | undefined,
+  fallbackName?: string | null,
+): string => {
+  const pseudo = riotId?.split("#")[0]?.trim();
+  return pseudo || fallbackName || "-";
+};
+
 export function PublicResultsView() {
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>("");
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
@@ -294,8 +302,8 @@ export function PublicResultsView() {
 
               <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3 items-start">
                 <Input
-                  label="Recherche joueur"
-                  placeholder="Pseudo ou Riot ID"
+                  label="Recherche pseudo TR"
+                  placeholder="Pseudo TR"
                   value={searchText}
                   onValueChange={setSearchText}
                 />
@@ -350,8 +358,7 @@ export function PublicResultsView() {
                   <Table aria-label={`Résultats ${game.lobby_name}`}>
                     <TableHeader>
                       <TableColumn>PLACEMENT</TableColumn>
-                      <TableColumn>JOUEUR</TableColumn>
-                      <TableColumn>RIOT ID</TableColumn>
+                      <TableColumn>PSEUDO TR</TableColumn>
                       <TableColumn>POINTS</TableColumn>
                     </TableHeader>
                     <TableBody>
@@ -362,7 +369,7 @@ export function PublicResultsView() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span>{result.player_name}</span>
+                              <span>{getTrPseudo(result.riot_id, result.player_name)}</span>
                               {result.is_finalist ? (
                                 <Chip size="sm" color="warning" variant="flat">
                                   Finaliste
@@ -370,7 +377,6 @@ export function PublicResultsView() {
                               ) : null}
                             </div>
                           </TableCell>
-                          <TableCell>{result.riot_id}</TableCell>
                           <TableCell>{result.points}</TableCell>
                         </TableRow>
                       ))}
@@ -380,8 +386,7 @@ export function PublicResultsView() {
                   <Table aria-label={`Lobby ${game.lobby_name}`}>
                     <TableHeader>
                       <TableColumn>SEED</TableColumn>
-                      <TableColumn>JOUEUR</TableColumn>
-                      <TableColumn>RIOT ID</TableColumn>
+                      <TableColumn>PSEUDO TR</TableColumn>
                     </TableHeader>
                     <TableBody>
                       {game.assignedPlayers.map((assigned) => (
@@ -389,7 +394,7 @@ export function PublicResultsView() {
                           <TableCell>#{assigned.seed}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span>{assigned.player_name}</span>
+                              <span>{getTrPseudo(assigned.riot_id, assigned.player_name)}</span>
                               {assigned.is_finalist ? (
                                 <Chip size="sm" color="warning" variant="flat">
                                   Finaliste
@@ -397,7 +402,6 @@ export function PublicResultsView() {
                               ) : null}
                             </div>
                           </TableCell>
-                          <TableCell>{assigned.riot_id}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

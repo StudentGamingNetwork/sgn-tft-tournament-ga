@@ -36,6 +36,14 @@ function getSortedTournaments(
   });
 }
 
+const getTrPseudo = (
+  riotId: string | null | undefined,
+  fallbackName?: string | null,
+): string => {
+  const pseudo = riotId?.split("#")[0]?.trim();
+  return pseudo || fallbackName || "-";
+};
+
 export function PublicTournamentPhasesView() {
   const [selectedTournamentId, setSelectedTournamentId] = useState("");
   const [selectedPhaseId, setSelectedPhaseId] = useState("");
@@ -354,8 +362,7 @@ export function PublicTournamentPhasesView() {
                             <Table aria-label="Classement de la phase" className="min-w-[1100px] whitespace-nowrap">
                               <TableHeader>
                                 <TableColumn>RANK</TableColumn>
-                                <TableColumn>JOUEUR</TableColumn>
-                                <TableColumn>RIOT ID</TableColumn>
+                                <TableColumn>PSEUDO TR</TableColumn>
                                 <TableColumn>POINTS</TableColumn>
                                 <TableColumn>TOP 1</TableColumn>
                                 <TableColumn>TOP 4+</TableColumn>
@@ -371,8 +378,7 @@ export function PublicTournamentPhasesView() {
                                 {phaseDetails.participants.map((player) => (
                                   <TableRow key={player.player_id}>
                                     <TableCell>#{player.current_rank}</TableCell>
-                                    <TableCell>{player.player_name}</TableCell>
-                                    <TableCell>{player.riot_id}</TableCell>
+                                    <TableCell>{getTrPseudo(player.riot_id, player.player_name)}</TableCell>
                                     <TableCell>{player.total_points}</TableCell>
                                     <TableCell>{player.top1_count}</TableCell>
                                     <TableCell>{player.top4_or_better_count}</TableCell>
@@ -415,16 +421,14 @@ export function PublicTournamentPhasesView() {
                                 <Table aria-label={`Resultats ${game.lobby_name}`}>
                                   <TableHeader>
                                     <TableColumn>PLACEMENT</TableColumn>
-                                    <TableColumn>JOUEUR</TableColumn>
-                                    <TableColumn>RIOT ID</TableColumn>
+                                    <TableColumn>PSEUDO TR</TableColumn>
                                     <TableColumn>POINTS</TableColumn>
                                   </TableHeader>
                                   <TableBody>
                                     {game.results.map((result) => (
                                       <TableRow key={result.player_id}>
                                         <TableCell>#{result.placement}</TableCell>
-                                        <TableCell>{result.player_name}</TableCell>
-                                        <TableCell>{result.riot_id}</TableCell>
+                                        <TableCell>{getTrPseudo(result.riot_id, result.player_name)}</TableCell>
                                         <TableCell>{result.points}</TableCell>
                                       </TableRow>
                                     ))}
@@ -434,15 +438,13 @@ export function PublicTournamentPhasesView() {
                                 <Table aria-label={`Lobby ${game.lobby_name}`}>
                                   <TableHeader>
                                     <TableColumn>SEED</TableColumn>
-                                    <TableColumn>JOUEUR</TableColumn>
-                                    <TableColumn>RIOT ID</TableColumn>
+                                    <TableColumn>PSEUDO TR</TableColumn>
                                   </TableHeader>
                                   <TableBody>
                                     {game.assignedPlayers.map((player) => (
                                       <TableRow key={player.player_id}>
                                         <TableCell>#{player.seed}</TableCell>
-                                        <TableCell>{player.player_name}</TableCell>
-                                        <TableCell>{player.riot_id}</TableCell>
+                                        <TableCell>{getTrPseudo(player.riot_id, player.player_name)}</TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>

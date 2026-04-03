@@ -119,4 +119,70 @@ describe("rankSyncService", () => {
     expect(state.lastResult?.stats.updated).toBe(1);
     expect(state.lastResult?.stats.failed).toBe(0);
   });
+
+  it("réinitialise automatiquement un état bloqué trop longtemps", async () => {
+    (fetchTftRankByRiotId as any).mockResolvedValue({
+      tier: "UNRANKED",
+      division: null,
+      league_points: 0,
+    });
+
+    (globalThis as any).rankSyncState = {
+      queue: [{ key: "tournament:t-1", scope: { type: "tournament", tournamentId: "t-1" } }],
+      running: true,
+      runningStartedAt: new Date(Date.now() - 11 * 60 * 1000),
+      schedulerStarted: true,
+      lastRunAt: null,
+      lastError: null,
+      lastResult: null,
+    };
+
+    const firstState = getRankSyncState();
+
+    expect(firstState.lastError).toContain("bloqué");
+
+    await flushAllTimersAndJobs();
+
+    const state = getRankSyncState();
+
+    expect(state.isRunning).toBe(false);
+    expect(state.queueSize).toBe(0);
+    expect(state.lastResult?.scope).toBe("tournament");
+  });
+
+  it("arrête le job dès une erreur Riot 401", async () => {
+    (db.query.tournamentRegistration.findMany as any).mockResolvedValue([
+      {
+        player: {
+          id: "p-1",
+          riot_id: "PlayerOne#EUW",
+          tier: null,
+          division: null,
+          league_points: null,
+        },
+      },
+      {
+        player: {
+          id: "p-2",
+          riot_id: "PlayerTwo#EUW",
+          tier: null,
+          division: null,
+          league_points: null,
+        },
+      },
+    ]);
+
+    (fetchTftRankByRiotId as any).mockRejectedValue(
+      new RiotApiError("Erreur Riot API (401)", 401),
+    );
+
+    await triggerTournamentRankSync("t-1");
+    await flushAllTimersAndJobs();
+
+    const state = getRankSyncState();
+
+    expect(fetchTftRankByRiotId).toHaveBeenCalledTimes(1);
+    expect(state.lastResult?.stats.failed).toBe(1);
+    expect(state.lastResult?.errors[0]?.message).toContain("Authentification Riot invalide");
+  });
 });

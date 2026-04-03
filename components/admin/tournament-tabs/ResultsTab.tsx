@@ -11,6 +11,14 @@ interface ResultsTabProps {
     tournamentId: string;
 }
 
+const getTrPseudo = (
+    riotId: string | null | undefined,
+    fallbackName?: string | null,
+): string => {
+    const pseudo = riotId?.split("#")[0]?.trim();
+    return pseudo || fallbackName || "-";
+};
+
 export function ResultsTab({ tournamentId }: ResultsTabProps) {
     const { data, isLoading, error } = useTournamentGlobalResults(tournamentId);
     const [selectedFilter, setSelectedFilter] = useState("global");
@@ -231,8 +239,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                 <thead>
                                     <tr className="border-b border-divider text-left text-default-500">
                                         <th className="py-2 pr-3">#</th>
-                                        <th className="py-2 pr-3">Joueur</th>
-                                        <th className="py-2 pr-3">Riot ID</th>
+                                        <th className="py-2 pr-3">Pseudo TR</th>
                                         <th className="py-2 pr-3">Points</th>
                                         <th className="py-2 pr-3">Parties</th>
                                         <th className="py-2 pr-3">Top 1</th>
@@ -269,7 +276,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                             <Fragment key={entry.player_id}>
                                                 {shouldShowSectionHeader && (
                                                     <tr key={`section-${currentSectionLabel}-${entry.player_id}`} className="bg-secondary/40 border-y border-divider">
-                                                        <td colSpan={8} className="py-2 px-2 text-xs font-semibold uppercase tracking-wide text-default-700">
+                                                        <td colSpan={13} className="py-2 px-2 text-xs font-semibold uppercase tracking-wide text-default-700">
                                                             {currentSectionLabel}
                                                         </td>
                                                     </tr>
@@ -278,7 +285,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                                     <td className="py-2 pr-3 font-semibold">{entry.rank}</td>
                                                     <td className="py-2 pr-3">
                                                         <div className="flex items-center gap-2">
-                                                            <span>{entry.player_name}</span>
+                                                            <span>{getTrPseudo(entry.riot_id, entry.player_name)}</span>
                                                             {entry.is_finalist && (
                                                                 <Chip size="sm" color="warning" variant="flat">
                                                                     Finaliste
@@ -286,7 +293,6 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="py-2 pr-3 text-default-500">{entry.riot_id}</td>
                                                     <td className="py-2 pr-3 font-semibold">{entry.total_points}</td>
                                                     <td className="py-2 pr-3">{entry.games_played}</td>
                                                     <td className="py-2 pr-3">{entry.top1_count}</td>

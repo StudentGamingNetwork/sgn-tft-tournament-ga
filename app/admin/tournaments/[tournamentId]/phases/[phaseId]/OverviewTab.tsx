@@ -17,6 +17,14 @@ interface OverviewTabProps {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50, 60] as const;
 
+const getTrPseudo = (
+    riotId: string | null | undefined,
+    fallbackName?: string | null,
+): string => {
+    const pseudo = riotId?.split("#")[0]?.trim();
+    return pseudo || fallbackName || "-";
+};
+
 export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTabProps) {
     const [sortColumn, setSortColumn] = useState<keyof PhasePlayerStats | null>(null);
     const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -232,17 +240,9 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
                         <TableColumn>
                             <button
                                 className="flex items-center gap-1 hover:opacity-80"
-                                onClick={() => handleSort("player_name")}
-                            >
-                                JOUEUR {getSortIcon("player_name")}
-                            </button>
-                        </TableColumn>
-                        <TableColumn>
-                            <button
-                                className="flex items-center gap-1 hover:opacity-80"
                                 onClick={() => handleSort("riot_id")}
                             >
-                                RIOT ID {getSortIcon("riot_id")}
+                                PSEUDO TR {getSortIcon("riot_id")}
                             </button>
                         </TableColumn>
                         <TableColumn>
@@ -370,8 +370,7 @@ export function OverviewTab({ participants, games, phaseOrderIndex }: OverviewTa
                                         <span className="font-bold">#{participant.current_rank}</span>
                                     </div>
                                 </TableCell>
-                                <TableCell className="font-medium">{participant.player_name}</TableCell>
-                                <TableCell className="text-default-500">{participant.riot_id}</TableCell>
+                                <TableCell className="font-medium">{getTrPseudo(participant.riot_id, participant.player_name)}</TableCell>
                                 <TableCell className="text-default-500">
                                     {participant.team_name || "-"}
                                 </TableCell>

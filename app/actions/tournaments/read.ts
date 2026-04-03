@@ -17,10 +17,25 @@ import type {
 } from "@/types/tournament";
 import { getPlayerByRiotId } from "@/lib/services/player-service";
 import {
+  fetchTftRankByRiotId,
+  RiotApiError,
+  type RiotRankData,
+} from "@/lib/services/riot-service";
+import {
   getLeaderboard,
   getCumulativeLeaderboard,
   calculatePlayerStatsForPhase,
 } from "@/lib/services/scoring-service";
+
+export type RiotPlayerLookupState =
+  | { status: "idle" }
+  | { status: "loading"; message: string }
+  | { status: "found"; message: string; rank: RiotRankData }
+  | { status: "unranked"; message: string; rank: RiotRankData }
+  | { status: "not_found"; message: string }
+  | { status: "invalid"; message: string }
+  | { status: "rate_limited"; message: string; retryAfterMs?: number }
+  | { status: "error"; message: string };
 
 interface TournamentWithCount extends Tournament {
   registrationsCount: number;
@@ -640,6 +655,82 @@ export async function searchPlayerByRiotId(riotId: string) {
   } catch (error) {
     console.error("Error searching player:", error);
     return null;
+  }
+}
+
+/**
+ * Vérifier en direct l'état d'un joueur côté API Riot.
+ */
+export async function lookupRiotPlayerStatusByRiotId(
+  riotId: string,
+): Promise<RiotPlayerLookupState> {
+  try {
+    if (!riotId || !riotId.includes("#")) {
+      return {
+        status: "invalid",
+        message: "Format attendu: Nom#TAG",
+      };
+    }
+
+    const rankData = await fetchTftRankByRiotId(riotId);
+
+    if (!rankData) {
+      return {
+        status: "error",
+        message: "Impossible de déterminer le rank Riot",
+      };
+    }
+
+    if (rankData.tier === "UNRANKED") {
+      return {
+        status: "unranked",
+        message: "Compte Riot trouvé: joueur non classé (UNRANKED)",
+        rank: rankData,
+      };
+    }
+
+    return {
+      status: "found",
+      message: `Compte Riot trouvé: ${rankData.tier} ${rankData.division ?? ""} (${rankData.league_points} LP)`,
+      rank: rankData,
+    };
+  } catch (error) {
+    if (error instanceof RiotApiError) {
+      if (error.status === 404) {
+        return {
+          status: "not_found",
+          message: "Compte Riot introuvable",
+        };
+      }
+
+      if (error.status === 400) {
+        return {
+          status: "invalid",
+          message: "Riot ID invalide",
+        };
+      }
+
+      if (error.status === 429) {
+        return {
+          status: "rate_limited",
+          message: "Limite Riot atteinte, réessayez dans quelques instants",
+          retryAfterMs: error.retryAfterMs,
+        };
+      }
+
+      return {
+        status: "error",
+        message: error.message,
+      };
+    }
+
+    return {
+      status: "error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Erreur inconnue côté Riot API",
+    };
   }
 }
 

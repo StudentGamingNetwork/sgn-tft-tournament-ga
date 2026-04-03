@@ -3,17 +3,17 @@
  * Handles tournament creation, phase management, and workflow orchestration
  *
  * Workflow du tournoi :
- * - Phase 1 : 128 joueurs (1 bracket common)
- * - Phase 2 : 96 joueurs (96 derniers de P1) (1 bracket common)
- * - Phase 3 : 128 joueurs (2 brackets, RESET points)
- *   - Master: 64 joueurs (Top 32 P1 + Top 32 P2)
- *   - Amateur: 64 joueurs (64 derniers P2)
- * - Phase 4 : 96 joueurs (2 brackets)
- *   - Master: 32 joueurs (Top 32 P3 Master) games 1-2, puis 16 joueurs (Top 16 après games 1-2) games 3-4
- *   - Amateur: 64 joueurs (RESET points) (Top 32 P3 Amateur + 32 derniers P3 Master)
+ * - Phase 1 : 52 joueurs (1 bracket common)
+ * - Phase 2 : 36 joueurs (1 bracket common)
+ * - Phase 3 : 52 joueurs (2 brackets, RESET points)
+ *   - Master: 32 joueurs (Top 16 P1 + Top 16 P2)
+ *   - Amateur: 20 joueurs (Bottom 20 P2)
+ * - Phase 4 : 40 joueurs (2 brackets)
+ *   - Master: 16 joueurs (Top 16 P3 Master)
+ *   - Amateur: 24 joueurs (RESET points) (Bottom 16 P3 Master + Top 8 P3 Amateur)
  * - Phase 5 : 24 joueurs (3 brackets)
  *   - Challenger: 8 joueurs (Top 8 P4 Master)
- *   - Master: 8 joueurs (Ranks 9-16 P4 Master)
+ *   - Master: 8 joueurs (Bottom 8 P4 Master)
  *   - Amateur: 8 joueurs (Top 8 P4 Amateur)
  */
 
@@ -31,13 +31,13 @@ import {
 import { getLeaderboard, getCumulativeLeaderboard } from "./scoring-service";
 import { syncTournamentStatusByPhaseId } from "./tournament-status-service";
 
-const PHASE2_QUALIFIERS_FROM_P1 = 48;
+const PHASE2_QUALIFIERS_FROM_P1 = 36;
 const PHASE2_ELIMINATED_FROM_P1 = 16;
 const PHASE3_MASTER_FROM_P1 = 16;
 const PHASE3_MASTER_FROM_P2 = 16;
-const PHASE3_AMATEUR_FROM_P2 = 32;
+const PHASE3_AMATEUR_FROM_P2 = 20;
 const PHASE4_MASTER_FROM_P3_MASTER = 16;
-const PHASE4_AMATEUR_FROM_P3_AMATEUR = 16;
+const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;
 const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
 const PHASE5_CHALLENGER_FROM_P4_MASTER = 8;
 const PHASE5_MASTER_FROM_P4_MASTER = 8;
@@ -176,10 +176,10 @@ async function assertPhaseCanBeStarted(
 
 /**
  * Crée un tournoi standard avec la structure de phases correcte :
- * - Phase 1: jusqu'a 128 joueurs, 1 bracket (common)
- * - Phase 2: bottom 48 de P1 max, 1 bracket (common)
- * - Phase 3: master 32 (top 16 P1 + top 16 P2), amateur jusqu'a 32 (reste P2) - RESET points
- * - Phase 4: master 16 (top 16 P3 master), amateur jusqu'a 32 (top 16 P3 amateur + relegues P3 master) - Amateur RESET
+ * - Phase 1: 52 joueurs, 1 bracket (common)
+ * - Phase 2: 36 joueurs (après élimination des top 16 de P1), 1 bracket (common)
+ * - Phase 3: master 32 (top 16 P1 + top 16 P2), amateur 20 (bottom 20 P2) - RESET points
+ * - Phase 4: master 16 (top 16 P3 master), amateur 24 (bottom 16 P3 master + top 8 P3 amateur) - Amateur RESET
  * - Phase 5: 24 joueurs, 3 brackets (challenger 8, master 8, amateur 8)
  */
 export async function createStandardTournament(name: string, year: string) {
@@ -365,7 +365,7 @@ export async function advanceToNextPhase(
 /**
  * PHASE 1 → PHASE 2
  * Élimine les 16 meilleurs joueurs de Phase 1
- * Les 48 suivants maximum continuent en Phase 2
+ * Les 36 suivants maximum continuent en Phase 2
  */
 export async function startPhase2FromPhase1(
   phase1Id: string,
@@ -422,7 +422,7 @@ export async function startPhase2FromPhase1(
  * PHASE 2 → PHASE 3
  * Phase 3 a 2 brackets avec RESET des points :
  * - Master: Top 16 P1 + Top 16 P2 = 32 joueurs
- * - Amateur: jusqu'a 32 derniers de P2
+ * - Amateur: bottom 20 de P2
  */
 export async function startPhase3FromPhase1And2(
   phase1Id: string,
@@ -519,7 +519,7 @@ export async function startPhase3FromPhase1And2(
  * PHASE 3 → PHASE 4
  * Phase 4 a 2 brackets :
  * - Master: Top 16 de P3 Master = 16 joueurs
- * - Amateur: Top 16 P3 Amateur + 16 derniers P3 Master = jusqu'a 32 joueurs (RESET points)
+ * - Amateur: Top 8 P3 Amateur + Bottom 16 P3 Master = 24 joueurs (RESET points)
  */
 export async function startPhase4FromPhase3(
   phase3Id: string,
@@ -578,13 +578,12 @@ export async function startPhase4FromPhase3(
   // PAS DE RESET : on utilise le classement de Phase 3 Master pour le seeding des lobbies
   // Game 2 sera créée automatiquement quand toutes les lobbies de la game 1 seront terminées.
   // Games 3-4 seront créées plus tard avec seulement le top 16 via continuePhase4MasterBracket().
-  const top32MasterLeaderboard = masterLeaderboard.slice(
+  const topMasterLeaderboard = masterLeaderboard.slice(
     0,
     PHASE4_MASTER_FROM_P3_MASTER,
   );
-  const masterSeededPlayers = await seedPlayersBasedOnLeaderboard(
-    top32MasterLeaderboard,
-  );
+  const masterSeededPlayers =
+    await seedPlayersBasedOnLeaderboard(topMasterLeaderboard);
 
   // Créer seulement la game 1
   const masterGames = await assignPlayersToLobbies(

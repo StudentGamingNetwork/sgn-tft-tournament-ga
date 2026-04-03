@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from "@heroui/modal";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Select, SelectItem } from "@heroui/select";
+import { Chip } from "@heroui/chip";
 import { UserPlus } from "lucide-react";
-import { createPlayerAndRegister, searchPlayerByRiotId } from "@/app/actions/tournaments";
+import {
+    createPlayerAndRegister,
+    lookupRiotPlayerStatusByRiotId,
+    searchPlayerByRiotId,
+} from "@/app/actions/tournaments";
+import type { RiotPlayerLookupState } from "@/app/actions/tournaments";
 import type { TierType, DivisionType } from "@/types/tournament";
 import {
     validateRiotId,
@@ -61,6 +67,10 @@ export function RegisterPlayerModal({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchingPlayer, setSearchingPlayer] = useState(false);
     const [existingPlayerFound, setExistingPlayerFound] = useState(false);
+    const [riotLookupState, setRiotLookupState] = useState<RiotPlayerLookupState>({
+        status: "idle",
+    });
+    const lookupRequestIdRef = useRef(0);
 
     // Reset form when modal opens/closes
     useEffect(() => {
@@ -76,6 +86,7 @@ export function RegisterPlayerModal({
             });
             setErrors({});
             setExistingPlayerFound(false);
+            setRiotLookupState({ status: "idle" });
         }
     }, [isOpen]);
 
@@ -93,37 +104,86 @@ export function RegisterPlayerModal({
     // Search for existing player when Riot ID changes
     useEffect(() => {
         const searchPlayer = async () => {
-            if (formData.riot_id.includes("#")) {
-                const validation = validateRiotId(formData.riot_id);
-                if (validation.valid) {
-                    setSearchingPlayer(true);
-                    const player = await searchPlayerByRiotId(formData.riot_id);
-                    setSearchingPlayer(false);
-
-                    if (player) {
-                        setExistingPlayerFound(true);
-                        setFormData((prev) => ({
-                            ...prev,
-                            name: player.name,
-                            tier: (player.tier as TierType) || null,
-                            division: (player.division as DivisionType) || null,
-                            league_points:
-                                player.league_points !== null &&
-                                    player.league_points !== undefined
-                                    ? String(player.league_points)
-                                    : "",
-                            discord_tag: player.discord_tag || "",
-                        }));
-                    } else {
-                        setExistingPlayerFound(false);
-                    }
-                }
+            const riotId = formData.riot_id.trim();
+            if (!riotId) {
+                setExistingPlayerFound(false);
+                setRiotLookupState({ status: "idle" });
+                return;
             }
+
+            const validation = validateRiotId(riotId);
+            if (!validation.valid) {
+                setExistingPlayerFound(false);
+                setRiotLookupState({
+                    status: "invalid",
+                    message: "Format attendu: Nom#TAG",
+                });
+                return;
+            }
+
+            const currentRequestId = ++lookupRequestIdRef.current;
+
+            setSearchingPlayer(true);
+            setRiotLookupState({
+                status: "loading",
+                message: "Interrogation API Riot en cours...",
+            });
+
+            const player = await searchPlayerByRiotId(riotId);
+            if (currentRequestId !== lookupRequestIdRef.current) {
+                return;
+            }
+
+            if (player) {
+                setExistingPlayerFound(true);
+                setFormData((prev) => ({
+                    ...prev,
+                    name: player.name,
+                    tier: (player.tier as TierType) || null,
+                    division: (player.division as DivisionType) || null,
+                    league_points:
+                        player.league_points !== null &&
+                        player.league_points !== undefined
+                            ? String(player.league_points)
+                            : "",
+                    discord_tag: player.discord_tag || "",
+                }));
+            } else {
+                setExistingPlayerFound(false);
+            }
+
+            const riotState = await lookupRiotPlayerStatusByRiotId(riotId);
+            if (currentRequestId !== lookupRequestIdRef.current) {
+                return;
+            }
+
+            setRiotLookupState(riotState);
+
+            // Pré-remplir les infos de rank uniquement pour un nouveau joueur.
+            if (!player && (riotState.status === "found" || riotState.status === "unranked")) {
+                setFormData((prev) => ({
+                    ...prev,
+                    tier: riotState.rank.tier,
+                    division: riotState.rank.division,
+                    league_points: String(riotState.rank.league_points),
+                }));
+            }
+
+            setSearchingPlayer(false);
         };
 
         const timeoutId = setTimeout(searchPlayer, 500);
         return () => clearTimeout(timeoutId);
-    }, [formData.riot_id]);
+        }, [formData.riot_id]);
+
+        const riotStateColor =
+                riotLookupState.status === "found" || riotLookupState.status === "unranked"
+                        ? "success"
+                        : riotLookupState.status === "loading"
+                            ? "warning"
+                            : riotLookupState.status === "idle"
+                                ? "default"
+                                : "danger";
 
     const handleChange = (field: string, value: any) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
@@ -260,6 +320,12 @@ export function RegisterPlayerModal({
                                 )
                             }
                         />
+
+                        {riotLookupState.status !== "idle" && (
+                            <Chip color={riotStateColor} variant="flat" size="sm">
+                                {riotLookupState.message}
+                            </Chip>
+                        )}
 
                         {/* Discord Tag */}
                         <Input

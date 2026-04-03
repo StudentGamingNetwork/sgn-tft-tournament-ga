@@ -57,6 +57,14 @@ const escapeCsvCell = (value: string | number): string => {
     return text;
 };
 
+const getTrPseudo = (
+    riotId: string | null | undefined,
+    fallbackName?: string | null,
+): string => {
+    const pseudo = riotId?.split("#")[0]?.trim();
+    return pseudo || fallbackName || "-";
+};
+
 interface PlayersTabProps {
     tournamentId: string;
     onImportOpen: () => void;
@@ -505,16 +513,7 @@ export function PlayersTab({
                     <TableHeader>
                         <TableColumn>
                             <SortableTableHeader
-                                label="NOM"
-                                columnKey="name"
-                                currentSortColumn={sortColumn}
-                                sortDirection={sortDirection}
-                                onSort={handleSort}
-                            />
-                        </TableColumn>
-                        <TableColumn>
-                            <SortableTableHeader
-                                label="RIOT ID"
+                                label="PSEUDO TR"
                                 columnKey="riot_id"
                                 currentSortColumn={sortColumn}
                                 sortDirection={sortDirection}
@@ -562,11 +561,8 @@ export function PlayersTab({
                     <TableBody>
                         {paginatedPlayers.map((player) => (
                             <TableRow key={player.id}>
-                                <TableCell>{player.name}</TableCell>
                                 <TableCell>
-                                    <code className="text-xs bg-secondary/50 px-2 py-1 rounded">
-                                        {player.riot_id}
-                                    </code>
+                                    {getTrPseudo(player.riot_id, player.name)}
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex flex-col">

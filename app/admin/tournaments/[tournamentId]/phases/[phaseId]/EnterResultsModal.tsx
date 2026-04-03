@@ -23,6 +23,11 @@ interface PlayerInputProps {
     onForfeitChange: (value: boolean) => void;
 }
 
+const getTrPseudo = (riotId: string | null | undefined): string => {
+    const pseudo = riotId?.split("#")[0]?.trim();
+    return pseudo || "-";
+};
+
 const PlayerInputRow = memo(function PlayerInputRow({
     player,
     placement,
@@ -34,8 +39,7 @@ const PlayerInputRow = memo(function PlayerInputRow({
     return (
         <div className="flex items-center gap-4">
             <div className="flex-1">
-                <p className="font-medium">{player.player_name}</p>
-                <p className="text-sm text-default-500">{player.riot_id}</p>
+                <p className="font-medium">{getTrPseudo(player.riot_id)}</p>
             </div>
             <Checkbox isSelected={isForfeit} onValueChange={onForfeitChange}>
                 Forfait

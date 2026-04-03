@@ -26,6 +26,11 @@ type LobbyPlayer = {
   riotId: string;
 };
 
+const getTrPseudo = (riotId: string | null | undefined): string => {
+  const pseudo = riotId?.split("#")[0]?.trim();
+  return pseudo || "-";
+};
+
 type ScheduleGame = {
   phaseId: string;
   phaseName: string;
@@ -73,9 +78,7 @@ const BRACKET_LABELS: Record<string, string> = {
 };
 
 function toSearchIndex(players: LobbyPlayer[]): string {
-  return players
-    .map((player) => `${player.playerName} ${player.riotId}`.toLowerCase())
-    .join(" ");
+  return players.map((player) => player.playerName.toLowerCase()).join(" ");
 }
 
 function getGamePlayers(detailsGame: PhaseDetails["games"][number]): LobbyPlayer[] {
@@ -83,7 +86,7 @@ function getGamePlayers(detailsGame: PhaseDetails["games"][number]): LobbyPlayer
 
   return source
     .map((player) => ({
-      playerName: player.player_name,
+      playerName: getTrPseudo(player.riot_id),
       riotId: player.riot_id,
     }))
     .sort((a, b) => a.playerName.localeCompare(b.playerName));
@@ -455,8 +458,8 @@ export function PublicScheduleView() {
 
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
             <Input
-              label="Filtrer par joueur"
-              placeholder="Pseudo ou Riot ID"
+              label="Filtrer par pseudo TR"
+              placeholder="Pseudo TR"
               value={playerSearch}
               onValueChange={setPlayerSearch}
             />
@@ -577,7 +580,6 @@ export function PublicScheduleView() {
                                 }`}
                               >
                                 <span className="font-medium">{player.playerName}</span>
-                                <span className="text-default-500"> · {player.riotId}</span>
                               </div>
                             );
                           })}
@@ -808,7 +810,6 @@ export function PublicScheduleView() {
                                                   }`}
                                                 >
                                                   <span className="font-medium">{player.playerName}</span>
-                                                  <span className="text-default-500"> · {player.riotId}</span>
                                                 </p>
                                               );
                                             })}

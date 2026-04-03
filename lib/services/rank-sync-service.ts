@@ -59,10 +59,13 @@ const TIERS_WITHOUT_DIVISION: TierType[] = [
   "UNRANKED",
 ];
 
+const RANK_SYNC_STALE_TIMEOUT_MS = 10 * 60 * 1000;
+
 const globalForRankSync = globalThis as unknown as {
   rankSyncState?: {
     queue: SyncQueueItem[];
     running: boolean;
+    runningStartedAt: Date | null;
     schedulerStarted: boolean;
     schedulerTimer?: ReturnType<typeof setInterval>;
     lastRunAt: Date | null;
@@ -92,6 +95,7 @@ function getState() {
     globalForRankSync.rankSyncState = {
       queue: [],
       running: false,
+      runningStartedAt: null,
       schedulerStarted: false,
       lastRunAt: null,
       lastError: null,
@@ -124,6 +128,7 @@ async function fetchAndApplyPlayerRank(playerData: RankSyncPlayer): Promise<{
   updated: boolean;
   skipped: boolean;
   error?: string;
+  fatal?: boolean;
 }> {
   if (!isPlayerMissingRankData(playerData)) {
     return { updated: false, skipped: true };
@@ -137,6 +142,16 @@ async function fetchAndApplyPlayerRank(playerData: RankSyncPlayer): Promise<{
     if (error instanceof RiotApiError) {
       if (error.status === 404) {
         return { updated: false, skipped: true };
+      }
+
+      if (error.status === 401 || error.status === 403) {
+        return {
+          updated: false,
+          skipped: false,
+          fatal: true,
+          error:
+            "Authentification Riot invalide (401/403). Vérifiez RIOT_API_KEY puis redémarrez l'application.",
+        };
       }
 
       if (error.status === 429 && error.retryAfterMs) {
@@ -240,6 +255,10 @@ async function runRankSync(scope: SyncScope): Promise<RankSyncResult> {
         riotId: currentPlayer.riot_id,
         message: outcome.error || "Erreur de synchronisation",
       });
+
+      if (outcome.fatal) {
+        break;
+      }
     }
 
     await sleep(throttleMs);
@@ -262,6 +281,7 @@ async function drainQueue(): Promise<void> {
   }
 
   state.running = true;
+  state.runningStartedAt = new Date();
 
   try {
     while (state.queue.length > 0) {
@@ -289,6 +309,28 @@ async function drainQueue(): Promise<void> {
     }
   } finally {
     state.running = false;
+    state.runningStartedAt = null;
+  }
+}
+
+function recoverIfSyncIsStale(): void {
+  const state = getState();
+  if (!state.running || !state.runningStartedAt) {
+    return;
+  }
+
+  const runningForMs = Date.now() - state.runningStartedAt.getTime();
+  if (runningForMs < RANK_SYNC_STALE_TIMEOUT_MS) {
+    return;
+  }
+
+  state.running = false;
+  state.runningStartedAt = null;
+  state.lastError =
+    "Le job de synchronisation Riot semblait bloqué et a été réinitialisé automatiquement.";
+
+  if (state.queue.length > 0) {
+    void drainQueue();
   }
 }
 
@@ -323,17 +365,20 @@ export async function triggerTournamentRankSync(
   tournamentId: string,
 ): Promise<RankSyncState> {
   ensureRankSyncSchedulerStarted();
+  recoverIfSyncIsStale();
   enqueue({ type: "tournament", tournamentId });
   return getRankSyncState();
 }
 
 export async function triggerGlobalRankSync(): Promise<RankSyncState> {
   ensureRankSyncSchedulerStarted();
+  recoverIfSyncIsStale();
   enqueue({ type: "global" });
   return getRankSyncState();
 }
 
 export function getRankSyncState(): RankSyncState {
+  recoverIfSyncIsStale();
   const state = getState();
 
   return {

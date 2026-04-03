@@ -24,6 +24,11 @@ interface ImportPlayersCSVModalProps {
     tournamentId: string;
 }
 
+const getTrPseudo = (riotId: string | null | undefined): string => {
+    const pseudo = riotId?.split("#")[0]?.trim();
+    return pseudo || "-";
+};
+
 export function ImportPlayersCSVModal({
     isOpen,
     onClose,
@@ -336,7 +341,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                         <thead className="bg-secondary/40 sticky top-0">
                                             <tr>
                                                 <th className="p-2 text-left">Nom</th>
-                                                <th className="p-2 text-left">Riot ID</th>
+                                                <th className="p-2 text-left">Pseudo TR</th>
                                                 <th className="p-2 text-left">Tier</th>
                                                 <th className="p-2 text-left">Division</th>
                                                 <th className="p-2 text-left">LP</th>
@@ -350,7 +355,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                                     className="border-b border-divider"
                                                 >
                                                     <td className="p-2">{player.name}</td>
-                                                    <td className="p-2">{player.riot_id}</td>
+                                                    <td className="p-2">{getTrPseudo(player.riot_id)}</td>
                                                     <td className="p-2">{player.tier}</td>
                                                     <td className="p-2">{player.division || "-"}</td>
                                                     <td className="p-2">{player.league_points}</td>

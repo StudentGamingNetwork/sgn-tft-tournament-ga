@@ -17,6 +17,14 @@ interface GamesTabProps {
     onResultsSubmitted?: () => void;
 }
 
+const getTrPseudo = (
+    riotId: string | null | undefined,
+    fallbackName?: string | null,
+): string => {
+    const pseudo = riotId?.split("#")[0]?.trim();
+    return pseudo || fallbackName || "-";
+};
+
 export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabProps) {
     const [selectedGame, setSelectedGame] = useState<GameWithResults | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -302,8 +310,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                             <Table aria-label={`Results for game ${game.game_number}`}>
                                 <TableHeader>
                                     <TableColumn>PLACEMENT</TableColumn>
-                                    <TableColumn>JOUEUR</TableColumn>
-                                    <TableColumn>RIOT ID</TableColumn>
+                                    <TableColumn>PSEUDO TR</TableColumn>
                                     <TableColumn>POINTS</TableColumn>
                                 </TableHeader>
                                 <TableBody>
@@ -327,16 +334,13 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <div className="flex items-center gap-2">
-                                                    <span>{result.player_name}</span>
+                                                    <span>{getTrPseudo(result.riot_id, result.player_name)}</span>
                                                     {result.is_finalist && (
                                                         <Chip size="sm" color="warning" variant="flat">
                                                             Finaliste
                                                         </Chip>
                                                     )}
                                                 </div>
-                                            </TableCell>
-                                            <TableCell className="text-default-500">
-                                                {result.riot_id}
                                             </TableCell>
                                             <TableCell>
                                                 <span
@@ -359,8 +363,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                             <Table aria-label={`Assigned players for game ${game.game_number}`}>
                                 <TableHeader>
                                     <TableColumn>SEED</TableColumn>
-                                    <TableColumn>JOUEUR</TableColumn>
-                                    <TableColumn>RIOT ID</TableColumn>
+                                    <TableColumn>PSEUDO TR</TableColumn>
                                     <TableColumn>STATUT</TableColumn>
                                     <TableColumn>ACTION</TableColumn>
                                 </TableHeader>
@@ -372,16 +375,13 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <div className="flex items-center gap-2">
-                                                    <span>{player.player_name}</span>
+                                                    <span>{getTrPseudo(player.riot_id, player.player_name)}</span>
                                                     {player.is_finalist && (
                                                         <Chip size="sm" color="warning" variant="flat">
                                                             Finaliste
                                                         </Chip>
                                                     )}
                                                 </div>
-                                            </TableCell>
-                                            <TableCell className="text-default-500">
-                                                {player.riot_id}
                                             </TableCell>
                                             <TableCell>
                                                 <span className="text-default-400 italic">En attente</span>
@@ -393,7 +393,10 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                                     variant="flat"
                                                     onPress={async () => {
                                                         try {
-                                                            await handleForfeitPlayer(player.player_id, player.player_name);
+                                                            await handleForfeitPlayer(
+                                                                player.player_id,
+                                                                getTrPseudo(player.riot_id, player.player_name),
+                                                            );
                                                         } catch (error) {
                                                             alert(
                                                                 error instanceof Error

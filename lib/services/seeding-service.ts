@@ -31,28 +31,24 @@ export async function seedPlayersForPhase(
   phaseId: string,
   playerIds?: string[],
 ): Promise<SeededPlayer[]> {
-  // Get players (either specified IDs or all players with rank data)
+  // Get players (either specified IDs or all players)
   const players = await db.query.player.findMany({
     where: playerIds ? inArray(player.id, playerIds) : undefined,
   });
 
-  // Filter players who have ranking data
-  const playersWithRank = players.filter(
-    (p) => p.tier && p.league_points !== null && p.league_points !== undefined,
-  );
-
-  if (playersWithRank.length === 0) {
-    throw new Error("No players with rank data found");
+  if (players.length === 0) {
+    throw new Error("No players found for seeding");
   }
 
-  // Convert to SeedingInput format
-  const seedingInput: SeedingInput[] = playersWithRank.map((p) => ({
+  // Convert to SeedingInput format.
+  // Players without rank data are seeded as UNRANKED with 0 LP.
+  const seedingInput: SeedingInput[] = players.map((p) => ({
     player_id: p.id,
     name: p.name,
     riot_id: p.riot_id,
-    tier: p.tier!,
-    division: p.division as any,
-    league_points: p.league_points!,
+    tier: p.tier || "UNRANKED",
+    division: (p.division as any) || null,
+    league_points: p.league_points ?? 0,
   }));
 
   // Assign seeds using the algorithm

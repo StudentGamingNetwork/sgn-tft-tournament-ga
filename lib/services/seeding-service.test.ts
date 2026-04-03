@@ -74,7 +74,7 @@ describe('seedingService', () => {
             expect(result[1].player_id).toBe('p2');
         });
 
-        it('lance une erreur si aucun joueur avec rang', async () => {
+        it('considere les joueurs sans rank comme UNRANKED avec 0 LP', async () => {
             const mockPlayers = [
                 {
                     id: 'p1',
@@ -92,8 +92,23 @@ describe('seedingService', () => {
 
             (db.query.player.findMany as any).mockResolvedValue(mockPlayers);
 
+            const result = await seedPlayersForPhase('phase-id');
+
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                player_id: 'p1',
+                tier: 'UNRANKED',
+                division: null,
+                league_points: 0,
+                seed: 1,
+            });
+        });
+
+        it('lance une erreur si aucun joueur n est disponible', async () => {
+            (db.query.player.findMany as any).mockResolvedValue([]);
+
             await expect(seedPlayersForPhase('phase-id')).rejects.toThrow(
-                'No players with rank data found'
+                'No players found for seeding'
             );
         });
     });

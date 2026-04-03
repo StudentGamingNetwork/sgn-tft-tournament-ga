@@ -2,22 +2,22 @@
 
 ## Vue d'ensemble
 
-Système de tournoi TFT à 5 phases avec éliminations progressives, fusions de brackets, relégations et resets de points stratégiques. Le tournoi supporte de 64 à 128 joueurs, toujours par multiple de 8.
+Système de tournoi TFT à 5 phases avec éliminations progressives, fusions de brackets, relégations et resets de points stratégiques.
 
 ## Flux du Tournoi
 
 ```
-Phase 1 (64 a 128 joueurs)
-    ↓ [Passage du top 32 en Phase 3]
-Phase 2 (taille variable selon le palier)
+Phase 1 (52 joueurs)
+    ↓ [Top 16 éliminés, 36 continuent en Phase 2]
+Phase 2 (36 joueurs)
     ↓ [Fusion P1+P2 / RESET points]
-Phase 3 (64 joueurs en Master + Amateur variable)
-    ├── Master (64): Top 32 P1 + Top 32 P2
-  └── Amateur (0 a 64): reliquat de P2
+Phase 3 (32 Master + 20 Amateur)
+    ├── Master (32): Top 16 P1 + Top 16 P2
+  └── Amateur (20): Bottom 20 P2
     ↓
-Phase 4 (32 joueurs en Master + Amateur variable puis plafonne a 64)
-    ├── Master (32): Top 32 P3 Master
-  └── Amateur (32 a 64, RESET): meilleurs P3 Amateur + 32 derniers P3 Master
+Phase 4 (16 Master + 24 Amateur)
+    ├── Master (16): Top 16 P3 Master
+  └── Amateur (24, RESET): Bottom 16 P3 Master + Top 8 P3 Amateur
     ↓
 Phase 5 (24 joueurs, 3 brackets - FINALES)
     ├── Challenger (8): Top 8 P4 Master
@@ -27,70 +27,62 @@ Phase 5 (24 joueurs, 3 brackets - FINALES)
 
 ## Détails par Phase
 
-## Table Par Palier
+## Format Fixe
 
 | Joueurs | P2  | P3 Master | P3 Amateur | P4 Master | P4 Amateur | P5        |
 | ------- | --- | --------- | ---------- | --------- | ---------- | --------- |
-| 64      | 32  | 64        | 0          | 32        | 32         | 8 / 8 / 8 |
-| 72      | 40  | 64        | 8          | 32        | 40         | 8 / 8 / 8 |
-| 80      | 48  | 64        | 16         | 32        | 48         | 8 / 8 / 8 |
-| 88      | 56  | 64        | 24         | 32        | 56         | 8 / 8 / 8 |
-| 96      | 64  | 64        | 32         | 32        | 64         | 8 / 8 / 8 |
-| 104     | 72  | 64        | 40         | 32        | 64         | 8 / 8 / 8 |
-| 112     | 80  | 64        | 48         | 32        | 64         | 8 / 8 / 8 |
-| 120     | 88  | 64        | 56         | 32        | 64         | 8 / 8 / 8 |
-| 128     | 96  | 64        | 64         | 32        | 64         | 8 / 8 / 8 |
+| 52      | 36  | 32        | 20         | 16        | 24         | 8 / 8 / 8 |
 
 ### Phase 1
 
-- **Joueurs** : de 64 à 128 (tous les inscrits), par multiple de 8
+- **Joueurs** : 52 (tous les inscrits confirmés)
 - **Bracket** : 1 (common)
 - **Lobbies** : nombre variable, toujours 8 joueurs par lobby
-- **Games** : 6 games
-- **Transition** : Les 32 premiers sont **promus** vers le bracket master de la phase 3, les autres passent en Phase 2 selon le palier du tournoi
+- **Games** : 4 games
+- **Transition** : Les 16 premiers sont éliminés, les 36 suivants passent en Phase 2
 
 ### Phase 2
 
-- **Joueurs** : taille variable selon le palier (de 32 à 96)
+- **Joueurs** : 36
 - **Bracket** : 1 (common)
 - **Lobbies** : nombre variable (8 joueurs par lobby)
-- **Games** : 6 games
+- **Games** : 4 games
 - **Seeding** : Les joueurs conservent leur rang original de Phase 1
   - Exemple: Le joueur classé 33ème en Phase 1 a le seed 33 en Phase 2 (pas le seed 1)
   - Cela préserve le contexte de classement et facilite le suivi des performances
 - **Transition** :
-  - Top 32 P1 + Top 32 P2 → Master (64 joueurs)
-  - Reliquat de P2 → Amateur (0 à 64 joueurs)
+  - Top 16 P1 + Top 16 P2 → Master (32 joueurs)
+  - Bottom 20 P2 → Amateur (20 joueurs)
   - **RESET des points** pour Phase 3
 
 ### Phase 3
 
-- **Joueurs** : taille variable selon le palier
+- **Joueurs** : 52
 - **Brackets** : 2
-  - **Master** : 64 joueurs
-    - Source : Top 32 Phase 1 + Top 32 Phase 2
-    - Lobbies : 8 (8 joueurs par lobby)
-  - **Amateur** : 64 joueurs
-    - Source : reliquat Phase 2
+  - **Master** : 32 joueurs
+    - Source : Top 16 Phase 1 + Top 16 Phase 2
+    - Lobbies : 4 (8 joueurs par lobby)
+  - **Amateur** : 20 joueurs
+    - Source : Bottom 20 Phase 2
     - Lobbies : nombre variable (8 joueurs par lobby)
-- **Games** : 6 games par bracket
+- **Games** : 4 games par bracket
 - **Points** : RESET (nouveau départ)
 - **Transition** :
-  - Top 32 Master → Phase 4 Master (32 joueurs)
-  - Meilleurs Amateur + 32 derniers Master → Phase 4 Amateur (taille variable, RESET)
+  - Top 16 Master → Phase 4 Master (16 joueurs)
+  - Bottom 16 Master + Top 8 Amateur → Phase 4 Amateur (24 joueurs, RESET)
 
 ### Phase 4
 
-- **Joueurs** : de 64 à 96 selon le palier
+- **Joueurs** : 40
 - **Brackets** : 2
-  - **Master** : 32 joueurs
-    - Source : Top 32 Phase 3 Master
-    - Lobbies : 4 (8 joueurs par lobby)
-  - **Amateur** : 64 joueurs
-    - Source : meilleurs Phase 3 Amateur + 32 derniers Phase 3 Master
+  - **Master** : 16 joueurs
+    - Source : Top 16 Phase 3 Master
+    - Lobbies : 2 (8 joueurs par lobby)
+  - **Amateur** : 24 joueurs
+    - Source : Bottom 16 Phase 3 Master + Top 8 Phase 3 Amateur
     - Lobbies : nombre variable (8 joueurs par lobby)
     - **RESET des points** (relégation)
-- **Games** : 6 games par bracket
+- **Games** : 4 games par bracket
 - **Transition** :
   - Top 8 Master → Challenger Finale (8 joueurs)
   - Ranks 9-16 Master → Master Finale (8 joueurs)
@@ -109,7 +101,7 @@ Phase 5 (24 joueurs, 3 brackets - FINALES)
   - **Amateur** : 8 joueurs
     - Source : Top 8 Phase 4 Amateur
     - Lobbies : 1 (8 joueurs)
-- **Games** : 6 games par bracket
+- **Games** : 7 games max (règle checkmate selon bracket)
 - **Winner** : Champion de chaque bracket
 
 ## Reset de Points
@@ -122,9 +114,10 @@ Les resets de points interviennent aux moments suivants :
    - Tout le monde repart à 0 points en Phase 3
 
 2. **Phase 3 → Phase 4 (Amateur bracket uniquement)** :
-   - Les 32 joueurs relégués du bracket Master perdent leurs points
-   - Ils repartent à 0 avec les 32 meilleurs du bracket Amateur
-   - Le bracket Master conserve ses points
+
+- Les 16 joueurs relégués du bracket Master perdent leurs points
+- Ils repartent à 0 avec les 8 meilleurs du bracket Amateur
+- Le bracket Master conserve ses points
 
 ## Algorithmes Utilisés
 
