@@ -160,8 +160,20 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
             return;
         }
 
-        const mostRecentDraft = candidates.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-        const draftGame = games.find((g) => g.game_id === mostRecentDraft.gameId);
+        const sortedCandidates = candidates.sort((a, b) => b.updatedAt - a.updatedAt);
+        let draftGame: GameWithResults | null = null;
+
+        for (const candidate of sortedCandidates) {
+            const matchedGame = games.find((g) => g.game_id === candidate.gameId);
+
+            if (!matchedGame || matchedGame.hasResults) {
+                window.localStorage.removeItem(`${RESULTS_DRAFT_PREFIX}${candidate.gameId}`);
+                continue;
+            }
+
+            draftGame = matchedGame;
+            break;
+        }
 
         if (!draftGame) {
             setHasRestoredDraft(true);
