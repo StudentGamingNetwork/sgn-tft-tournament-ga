@@ -479,6 +479,7 @@ export async function startPhase3FromPhase1And2(
     masterBracket.id,
     1,
     masterSeededPlayers,
+    true, // Use snake seeding for Master bracket
   );
 
   // Seed Amateur
@@ -491,6 +492,7 @@ export async function startPhase3FromPhase1And2(
         amateurBracket.id,
         1,
         amateurSeededPlayers,
+        false, // Use contiguous seeding for Amateur bracket
       )
     : [];
 
@@ -591,6 +593,7 @@ export async function startPhase4FromPhase3(
     phase4Master.id,
     1,
     masterSeededPlayers,
+    true, // Use snake seeding for Master bracket
   );
 
   // Seed et créer games pour Amateur
@@ -604,6 +607,7 @@ export async function startPhase4FromPhase3(
         phase4Amateur.id,
         1,
         amateurSeededPlayers,
+        false, // Use contiguous seeding for Amateur bracket
       )
     : [];
 
@@ -684,6 +688,7 @@ export async function continuePhase4MasterBracket(phase4Id: string) {
     phase4Master.id,
     3,
     seededPlayers,
+    true, // Use snake seeding for Master bracket
   );
 
   const games4 = await assignPlayersToLobbies(
@@ -691,6 +696,7 @@ export async function continuePhase4MasterBracket(phase4Id: string) {
     phase4Master.id,
     4,
     seededPlayers,
+    true, // Use snake seeding for Master bracket
   );
 
   return {

@@ -14,6 +14,7 @@ import { eq, and, inArray } from "drizzle-orm";
 import { assignSeeds, comparePlayers } from "@/utils/seeding-algorithm";
 import {
   generateSnakeDraftMatrix,
+  generateSnakeSeedMatrix,
   applySeedingMatrix,
 } from "@/utils/seeding-matrices";
 import { createGame } from "./game-service";
@@ -110,13 +111,14 @@ export async function seedPlayersBasedOnLeaderboard(
 }
 
 /**
- * Assign players to lobbies using dynamically generated snake draft matrix
+ * Assign players to lobbies using dynamically generated seeding matrix
  * Creates games and lobby player assignments
  *
  * @param phaseId - Phase ID
  * @param bracketId - Bracket ID
  * @param gameNumber - Game number (1-based)
  * @param seededPlayers - Players with assigned seeds
+ * @param useSnakeSeeding - If true, use snake seeding pattern (alternating); if false, use contiguous seeding (default: false)
  * @returns Created games with lobby assignments
  */
 export async function assignPlayersToLobbies(
@@ -124,9 +126,12 @@ export async function assignPlayersToLobbies(
   bracketId: string,
   gameNumber: number,
   seededPlayers: SeededPlayer[],
+  useSnakeSeeding: boolean = false,
 ): Promise<{ game: any; assignment: LobbyAssignment }[]> {
-  // Generate snake draft matrix dynamically based on player count
-  const seedingMatrix = generateSnakeDraftMatrix(seededPlayers.length);
+  // Generate seeding matrix based on mode
+  const seedingMatrix = useSnakeSeeding
+    ? generateSnakeSeedMatrix(seededPlayers.length)
+    : generateSnakeDraftMatrix(seededPlayers.length);
 
   // Apply seeding matrix
   const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
