@@ -498,7 +498,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                 >
                                     {game.hasResults ? "Modifier résultats" : "Saisir résultats"}
                                 </Button>
-                                {!game.hasResults && game.game_number > 1 && (
+                                {!game.hasResults && (
                                     <Button
                                         color="secondary"
                                         size="sm"

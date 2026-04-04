@@ -22,6 +22,7 @@ import {
 } from "@/lib/services/scoring-service";
 import {
   generateSnakeDraftMatrix,
+  generateSnakeSeedMatrix,
   applySeedingMatrix,
 } from "@/utils/seeding-matrices";
 import { syncTournamentStatusByPhaseId } from "@/lib/services/tournament-status-service";
@@ -29,6 +30,13 @@ import {
   getFinalistThresholdByBracket,
   getFinalsMaxGamesByBracket,
 } from "@/lib/services/finals-rules";
+
+const PHASE3_MASTER_FROM_P1 = 16;
+const PHASE3_MASTER_FROM_P2 = 16;
+const PHASE3_AMATEUR_FROM_P2 = 20;
+const PHASE4_MASTER_FROM_P3_MASTER = 16;
+const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
+const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;
 
 /**
  * Create a new game
@@ -273,18 +281,24 @@ async function createGamesFromSeededPlayers(params: {
   bracketId: string;
   gameNumber: number;
   seededPlayers: SeededPlayer[];
+  useSnakeSeeding?: boolean;
 }): Promise<number> {
-  const { phaseId, bracketId, gameNumber, seededPlayers } = params;
+  const {
+    phaseId,
+    bracketId,
+    gameNumber,
+    seededPlayers,
+    useSnakeSeeding = false,
+  } = params;
 
   if (seededPlayers.length === 0) {
     return 0;
   }
 
   const startSeed = Math.min(...seededPlayers.map((p) => p.seed));
-  const seedingMatrix = generateSnakeDraftMatrix(
-    seededPlayers.length,
-    startSeed,
-  );
+  const seedingMatrix = useSnakeSeeding
+    ? generateSnakeSeedMatrix(seededPlayers.length, startSeed)
+    : generateSnakeDraftMatrix(seededPlayers.length, startSeed);
   const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
 
   let gamesCreated = 0;
@@ -311,6 +325,164 @@ async function createGamesFromSeededPlayers(params: {
   }
 
   return gamesCreated;
+}
+
+async function buildSeededPlayersFromLeaderboard(
+  leaderboard: Array<{
+    rank: number;
+    player_id: string;
+    player_name: string;
+    riot_id: string;
+  }>,
+  preserveOriginalRank: boolean,
+): Promise<SeededPlayer[]> {
+  if (leaderboard.length === 0) {
+    return [];
+  }
+
+  const playerIds = leaderboard.map((entry) => entry.player_id);
+  const playersData = await db.query.player.findMany({
+    where: inArray(player.id, playerIds),
+  });
+  const playersMap = new Map(playersData.map((p) => [p.id, p]));
+
+  return leaderboard.map((entry, index) => {
+    const playerData = playersMap.get(entry.player_id);
+    if (!playerData) {
+      throw new Error(`Player ${entry.player_id} not found`);
+    }
+
+    return {
+      player_id: entry.player_id,
+      name: entry.player_name,
+      riot_id: entry.riot_id,
+      tier: playerData.tier!,
+      division: playerData.division as any,
+      league_points: playerData.league_points!,
+      seed: preserveOriginalRank ? entry.rank : index + 1,
+    };
+  });
+}
+
+async function getInitialGameOneSeeding(
+  phaseId: string,
+  bracketId: string,
+): Promise<{ seededPlayers: SeededPlayer[]; useSnakeSeeding: boolean } | null> {
+  const currentPhase = await db.query.phase.findFirst({
+    where: eq(phase.id, phaseId),
+    columns: {
+      order_index: true,
+      tournament_id: true,
+    },
+  });
+
+  const currentBracket = await db.query.bracket.findFirst({
+    where: eq(bracket.id, bracketId),
+    columns: {
+      name: true,
+    },
+  });
+
+  if (!currentPhase || !currentBracket || !currentPhase.tournament_id) {
+    return null;
+  }
+
+  const tournamentPhases = await db.query.phase.findMany({
+    where: eq(phase.tournament_id, currentPhase.tournament_id),
+    columns: {
+      id: true,
+      order_index: true,
+    },
+  });
+
+  if (currentPhase.order_index === 3) {
+    const phase1 = tournamentPhases.find((p) => p.order_index === 1);
+    const phase2 = tournamentPhases.find((p) => p.order_index === 2);
+
+    if (!phase1 || !phase2) {
+      return null;
+    }
+
+    const phase1Leaderboard = await getLeaderboard(phase1.id);
+    const phase2Leaderboard = await getLeaderboard(phase2.id);
+
+    if (currentBracket.name === "master") {
+      const ordered = [
+        ...phase1Leaderboard.slice(0, PHASE3_MASTER_FROM_P1),
+        ...phase2Leaderboard.slice(0, PHASE3_MASTER_FROM_P2),
+      ];
+
+      return {
+        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
+        useSnakeSeeding: true,
+      };
+    }
+
+    if (currentBracket.name === "amateur") {
+      const ordered = phase2Leaderboard.slice(
+        PHASE3_MASTER_FROM_P2,
+        PHASE3_MASTER_FROM_P2 + PHASE3_AMATEUR_FROM_P2,
+      );
+
+      return {
+        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
+        useSnakeSeeding: false,
+      };
+    }
+  }
+
+  if (currentPhase.order_index === 4) {
+    const phase3 = tournamentPhases.find((p) => p.order_index === 3);
+    if (!phase3) {
+      return null;
+    }
+
+    const phase3Brackets = await db.query.bracket.findMany({
+      where: eq(bracket.phase_id, phase3.id),
+      columns: {
+        id: true,
+        name: true,
+      },
+    });
+
+    const phase3Master = phase3Brackets.find((b) => b.name === "master");
+    const phase3Amateur = phase3Brackets.find((b) => b.name === "amateur");
+
+    if (!phase3Master || !phase3Amateur) {
+      return null;
+    }
+
+    const masterLeaderboard = await getLeaderboard(phase3.id, phase3Master.id);
+    const amateurLeaderboard = await getLeaderboard(
+      phase3.id,
+      phase3Amateur.id,
+    );
+
+    if (currentBracket.name === "master") {
+      const ordered = masterLeaderboard.slice(0, PHASE4_MASTER_FROM_P3_MASTER);
+      return {
+        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, true),
+        useSnakeSeeding: true,
+      };
+    }
+
+    if (currentBracket.name === "amateur") {
+      const ordered = [
+        ...masterLeaderboard.slice(
+          PHASE4_MASTER_FROM_P3_MASTER,
+          PHASE4_MASTER_FROM_P3_MASTER + PHASE4_AMATEUR_FROM_P3_MASTER,
+        ),
+        ...amateurLeaderboard.slice(0, PHASE4_AMATEUR_FROM_P3_AMATEUR),
+      ];
+
+      return {
+        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
+        useSnakeSeeding: false,
+      };
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -364,6 +536,35 @@ export async function resetGameSeeding(gameId: string) {
   }
 
   const isFirstGame = targetGame.game_number === 1;
+
+  if (isFirstGame) {
+    const initialSeeding = await getInitialGameOneSeeding(
+      targetGame.phase_id,
+      targetGame.bracket_id,
+    );
+
+    if (initialSeeding && initialSeeding.seededPlayers.length > 0) {
+      await db.delete(game).where(
+        inArray(
+          game.id,
+          siblingGames.map((g) => g.id),
+        ),
+      );
+
+      const gamesCreated = await createGamesFromSeededPlayers({
+        phaseId: targetGame.phase_id,
+        bracketId: targetGame.bracket_id,
+        gameNumber: targetGame.game_number,
+        seededPlayers: initialSeeding.seededPlayers,
+        useSnakeSeeding: initialSeeding.useSnakeSeeding,
+      });
+
+      return {
+        reset: gamesCreated > 0,
+        gamesCreated,
+      };
+    }
+  }
 
   const previousGames = isFirstGame
     ? []
