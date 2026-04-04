@@ -27,8 +27,6 @@ import { getBracketChipColor } from "@/utils/bracket-colors";
 type RankTabKey = "rank-global" | "rank-master" | "rank-amateur" | "rank-challenger";
 
 function getGlobalRankOffset(phaseOrder: number, tab: RankTabKey): number {
-  if (phaseOrder === 2 && tab === "rank-global") return 16;
-
   if (phaseOrder === 3) {
     if (tab === "rank-amateur") return 32;
     return 0;

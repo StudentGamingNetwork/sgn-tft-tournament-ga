@@ -873,16 +873,41 @@ export async function getPhaseDetails(
       orderBy: (game, { asc }) => [asc(game.game_number)],
     });
 
-    const leaderboard = await getLeaderboard(phaseId);
+    let leaderboard = await getLeaderboard(phaseId);
+
+    // Phase 2 public ranking must include Phase 1 points/tie-breakers and full global ordering.
+    if (phaseData.order_index === 2) {
+      const phase1 = await db.query.phase.findFirst({
+        where: sql`${phase.tournament_id} = ${phaseData.tournament.id} AND ${phase.order_index} = 1`,
+      });
+
+      if (phase1) {
+        leaderboard = await getCumulativeLeaderboard([phase1.id, phaseId]);
+      }
+    }
 
     const participantsMap = new Map<string, PhasePlayerStats>();
 
     if (leaderboard.length > 0) {
       for (const [index, entry] of leaderboard.entries()) {
-        const stats = await calculatePlayerStatsForPhase(
-          entry.player_id,
-          phaseId,
-        );
+        const stats =
+          phaseData.order_index === 2
+            ? {
+                player_id: entry.player_id,
+                total_points: entry.total_points,
+                total_games: entry.games_played,
+                avg_placement: entry.avg_placement,
+                top1_count: entry.top1_count,
+                top2_count: entry.top2_count,
+                top3_count: entry.top3_count,
+                top4_count: entry.top4_count,
+                top5_count: entry.top5_count,
+                top6_count: entry.top6_count,
+                top7_count: entry.top7_count,
+                top8_count: entry.top8_count,
+                placements: [],
+              }
+            : await calculatePlayerStatsForPhase(entry.player_id, phaseId);
 
         const top4OrBetterCount =
           stats.top1_count +
