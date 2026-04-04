@@ -24,6 +24,30 @@ import {
 import type { PhaseDetails } from "@/app/actions/tournaments";
 import { getBracketChipColor } from "@/utils/bracket-colors";
 
+type RankTabKey = "rank-global" | "rank-master" | "rank-amateur" | "rank-challenger";
+
+function getGlobalRankOffset(phaseOrder: number, tab: RankTabKey): number {
+  if (phaseOrder === 2 && tab === "rank-global") return 16;
+
+  if (phaseOrder === 3) {
+    if (tab === "rank-amateur") return 32;
+    return 0;
+  }
+
+  if (phaseOrder === 4) {
+    if (tab === "rank-amateur") return 16;
+    return 0;
+  }
+
+  if (phaseOrder === 5) {
+    if (tab === "rank-master") return 8;
+    if (tab === "rank-amateur") return 16;
+    return 0;
+  }
+
+  return 0;
+}
+
 function getSortedTournaments(
   tournaments: Awaited<ReturnType<typeof getTournaments>> | undefined,
 ) {
@@ -40,7 +64,7 @@ function getSortedTournaments(
 export function PublicTournamentPhasesView() {
   const [selectedTournamentId, setSelectedTournamentId] = useState("");
   const [selectedPhaseId, setSelectedPhaseId] = useState("");
-  const [selectedSubTab, setSelectedSubTab] = useState("rank");
+  const [selectedSubTab, setSelectedSubTab] = useState<RankTabKey | `game-${number}`>("rank-global");
   const [selectedBracketFilter, setSelectedBracketFilter] = useState<string | null>(null);
 
   const {
@@ -162,26 +186,141 @@ export function PublicTournamentPhasesView() {
     [selectedTournamentId],
   );
 
+  const rankTabs = useMemo(() => {
+    if (!phaseDetails) {
+      return [{ key: "rank-global", title: "Rank global" }] as Array<{
+        key: RankTabKey;
+        title: string;
+      }>;
+    }
+
+    const tabs: Array<{ key: RankTabKey; title: string }> = [
+      { key: "rank-global", title: "Rank global" },
+    ];
+
+    if (phaseDetails.phase.order_index >= 3) {
+      tabs.push({ key: "rank-master", title: "Rank master" });
+      tabs.push({ key: "rank-amateur", title: "Rank amateur" });
+    }
+
+    if (phaseDetails.phase.order_index >= 5) {
+      tabs.push({ key: "rank-challenger", title: "Rank challenger" });
+    }
+
+    return tabs;
+  }, [phaseDetails]);
+
+  const participantsByRankTab = useMemo(() => {
+    const empty: Record<RankTabKey, PhaseDetails["participants"]> = {
+      "rank-global": [],
+      "rank-master": [],
+      "rank-amateur": [],
+      "rank-challenger": [],
+    };
+
+    if (!phaseDetails) {
+      return empty;
+    }
+
+    const sortedParticipants = [...phaseDetails.participants].sort(
+      (a, b) => a.current_rank - b.current_rank,
+    );
+
+    const playerBracketMap = new Map<string, string>();
+    for (const game of phaseDetails.games) {
+      for (const player of game.assignedPlayers) {
+        playerBracketMap.set(player.player_id, game.bracket_name.toLowerCase());
+      }
+      for (const result of game.results) {
+        if (!playerBracketMap.has(result.player_id)) {
+          playerBracketMap.set(result.player_id, game.bracket_name.toLowerCase());
+        }
+      }
+    }
+
+    const master = sortedParticipants.filter(
+      (player) => playerBracketMap.get(player.player_id) === "master",
+    );
+    const amateur = sortedParticipants.filter(
+      (player) => playerBracketMap.get(player.player_id) === "amateur",
+    );
+    const challenger = sortedParticipants.filter(
+      (player) => playerBracketMap.get(player.player_id) === "challenger",
+    );
+
+    const phaseOrder = phaseDetails.phase.order_index;
+
+    let global = sortedParticipants;
+    if (phaseOrder === 3) {
+      global = [...master, ...amateur];
+    } else if (phaseOrder === 4) {
+      global = [...master, ...amateur];
+    } else if (phaseOrder === 5) {
+      global = [...challenger, ...master, ...amateur];
+    }
+
+    return {
+      "rank-global": global,
+      "rank-master": master,
+      "rank-amateur": amateur,
+      "rank-challenger": challenger,
+    };
+  }, [phaseDetails]);
+
+  const cutoffByRankTab = useMemo(() => {
+    const noCutoff: Record<RankTabKey, null | {
+      cutoffAfterIndex: number;
+      className: string;
+    }> = {
+      "rank-global": null,
+      "rank-master": null,
+      "rank-amateur": null,
+      "rank-challenger": null,
+    };
+
+    if (!phaseDetails) {
+      return noCutoff;
+    }
+
+    const phaseOrder = phaseDetails.phase.order_index;
+    const configuredCutoffByTab: Partial<Record<RankTabKey, number>> = {
+      "rank-global": phaseOrder === 1 || phaseOrder === 2 ? 16 : undefined,
+      "rank-master": phaseOrder === 3 ? 16 : phaseOrder === 4 ? 8 : undefined,
+      "rank-amateur": phaseOrder === 3 ? 8 : phaseOrder === 4 ? 8 : undefined,
+      "rank-challenger": phaseOrder === 5 ? 8 : undefined,
+    };
+
+    for (const tab of Object.keys(noCutoff) as RankTabKey[]) {
+      const cutoffRank = configuredCutoffByTab[tab];
+      const listLength = participantsByRankTab[tab].length;
+
+      if (!cutoffRank || listLength <= cutoffRank) {
+        continue;
+      }
+
+      const isRedCutoff =
+        tab === "rank-amateur" && (phaseOrder === 3 || phaseOrder === 4);
+
+      noCutoff[tab] = {
+        cutoffAfterIndex: cutoffRank - 1,
+        className: isRedCutoff ? "bg-danger-500" : "bg-success-500",
+      };
+    }
+
+    return noCutoff;
+  }, [phaseDetails, participantsByRankTab]);
+
   useEffect(() => {
     const hasTab =
-      selectedSubTab === "rank" ||
+      rankTabs.some((tab) => tab.key === selectedSubTab) ||
       filteredGamesByNumber.some((group) => `game-${group.gameNumber}` === selectedSubTab);
 
     if (hasTab) {
       return;
     }
 
-    // Si le tab sélectionné n'existe pas, vérifier si on peut sélectionner "game-1"
-    if (filteredGamesByNumber.some((group) => group.gameNumber === 1)) {
-      setSelectedSubTab("game-1");
-    } else if (filteredGamesByNumber.length > 0) {
-      // Sinon, sélectionner la première partie disponible
-      setSelectedSubTab(`game-${filteredGamesByNumber[0].gameNumber}`);
-    } else {
-      // Sinon, revenir au classement
-      setSelectedSubTab("rank");
-    }
-  }, [filteredGamesByNumber, selectedSubTab]);
+    setSelectedSubTab("rank-global");
+  }, [filteredGamesByNumber, rankTabs, selectedSubTab]);
 
   if (tournamentsLoading) {
     return (
@@ -230,7 +369,7 @@ export function PublicTournamentPhasesView() {
               const value = Array.from(keys)[0] as string | undefined;
               setSelectedTournamentId(value || "");
               setSelectedPhaseId("");
-              setSelectedSubTab("rank");
+              setSelectedSubTab("rank-global");
             }}
           >
             {sortedTournaments.map((tournament) => (
@@ -276,7 +415,7 @@ export function PublicTournamentPhasesView() {
           selectedKey={selectedPhaseId}
           onSelectionChange={(key) => {
             setSelectedPhaseId(String(key));
-            setSelectedSubTab("game-1");
+            setSelectedSubTab("rank-global");
             setSelectedBracketFilter(null);
           }}
           color="primary"
@@ -341,55 +480,90 @@ export function PublicTournamentPhasesView() {
                   <Tabs
                     aria-label="Sous-onglets phase"
                     selectedKey={selectedSubTab}
-                    defaultSelectedKey={`game-1`}
-                    onSelectionChange={(key) => setSelectedSubTab(String(key))}
+                    defaultSelectedKey="rank-global"
+                    onSelectionChange={(key) => {
+                      const nextKey = String(key);
+
+                      if (nextKey.startsWith("game-")) {
+                        setSelectedSubTab(nextKey as `game-${number}`);
+                        return;
+                      }
+
+                      setSelectedSubTab(nextKey as RankTabKey);
+                    }}
                     color="secondary"
                     variant="bordered"
                   >
-                    <Tab key="rank" title="Rank">
-                      <Card className="p-4 border border-divider">
-                        {phaseDetails.participants.length === 0 ? (
-                          <p className="text-default-500">Aucun classement disponible.</p>
-                        ) : (
-                          <div className="overflow-x-auto">
-                            <Table aria-label="Classement de la phase" className="min-w-[1100px] whitespace-nowrap">
-                              <TableHeader>
-                                <TableColumn>RANK</TableColumn>
-                                <TableColumn>PSEUDO TR</TableColumn>
-                                <TableColumn>POINTS</TableColumn>
-                                <TableColumn>TOP 1</TableColumn>
-                                <TableColumn>TOP 4+</TableColumn>
-                                <TableColumn>TOP 2</TableColumn>
-                                <TableColumn>TOP 3</TableColumn>
-                                <TableColumn>TOP 4</TableColumn>
-                                <TableColumn>TOP 5</TableColumn>
-                                <TableColumn>TOP 6</TableColumn>
-                                <TableColumn>TOP 7</TableColumn>
-                                <TableColumn>TOP 8</TableColumn>
-                              </TableHeader>
-                              <TableBody>
-                                {phaseDetails.participants.map((player) => (
-                                  <TableRow key={player.player_id}>
-                                    <TableCell>#{player.current_rank}</TableCell>
-                                    <TableCell>{player.player_name || "-"}</TableCell>
-                                    <TableCell>{player.total_points}</TableCell>
-                                    <TableCell>{player.top1_count}</TableCell>
-                                    <TableCell>{player.top4_or_better_count}</TableCell>
-                                    <TableCell>{player.top2_count}</TableCell>
-                                    <TableCell>{player.top3_count}</TableCell>
-                                    <TableCell>{player.top4_count}</TableCell>
-                                    <TableCell>{player.top5_count}</TableCell>
-                                    <TableCell>{player.top6_count}</TableCell>
-                                    <TableCell>{player.top7_count}</TableCell>
-                                    <TableCell>{player.top8_count}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        )}
-                      </Card>
-                    </Tab>
+                    {rankTabs.map((rankTab) => (
+                      <Tab key={rankTab.key} title={rankTab.title}>
+                        <Card className="p-4 border border-divider">
+                          {participantsByRankTab[rankTab.key].length === 0 ? (
+                            <p className="text-default-500">Aucun classement disponible.</p>
+                          ) : (
+                            <div className="overflow-x-auto">
+                              <Table aria-label="Classement de la phase" className="min-w-[1100px] whitespace-nowrap">
+                                <TableHeader>
+                                  <TableColumn>RANK GLOBAL</TableColumn>
+                                  <TableColumn>PSEUDO TR</TableColumn>
+                                  <TableColumn>POINTS</TableColumn>
+                                  <TableColumn>TOP 1</TableColumn>
+                                  <TableColumn>TOP 4+</TableColumn>
+                                  <TableColumn>TOP 2</TableColumn>
+                                  <TableColumn>TOP 3</TableColumn>
+                                  <TableColumn>TOP 4</TableColumn>
+                                  <TableColumn>TOP 5</TableColumn>
+                                  <TableColumn>TOP 6</TableColumn>
+                                  <TableColumn>TOP 7</TableColumn>
+                                  <TableColumn>TOP 8</TableColumn>
+                                </TableHeader>
+                                <TableBody>
+                                  {participantsByRankTab[rankTab.key].flatMap((player, index) => {
+                                    const displayedGlobalRank =
+                                      index +
+                                      1 +
+                                      getGlobalRankOffset(
+                                        phaseDetails.phase.order_index,
+                                        rankTab.key,
+                                      );
+
+                                    const rows = [
+                                      <TableRow key={player.player_id}>
+                                        <TableCell>#{displayedGlobalRank}</TableCell>
+                                        <TableCell>{player.player_name || "-"}</TableCell>
+                                        <TableCell>{player.total_points}</TableCell>
+                                        <TableCell>{player.top1_count}</TableCell>
+                                        <TableCell>{player.top4_or_better_count}</TableCell>
+                                        <TableCell>{player.top2_count}</TableCell>
+                                        <TableCell>{player.top3_count}</TableCell>
+                                        <TableCell>{player.top4_count}</TableCell>
+                                        <TableCell>{player.top5_count}</TableCell>
+                                        <TableCell>{player.top6_count}</TableCell>
+                                        <TableCell>{player.top7_count}</TableCell>
+                                        <TableCell>{player.top8_count}</TableCell>
+                                      </TableRow>,
+                                    ];
+
+                                    const cutoffConfig = cutoffByRankTab[rankTab.key];
+
+                                    if (cutoffConfig && index === cutoffConfig.cutoffAfterIndex) {
+                                      rows.push(
+                                        <TableRow key={`cutoff-${rankTab.key}-${index}`}>
+                                          <TableCell colSpan={12} className="p-0">
+                                            <div className={`h-[3px] w-full ${cutoffConfig.className}`} />
+                                          </TableCell>
+                                        </TableRow>,
+                                      );
+                                    }
+
+                                    return rows;
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </Card>
+                      </Tab>
+                    ))}
 
                     {filteredGamesByNumber.map((group) => (
                       <Tab
