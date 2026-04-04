@@ -25,6 +25,7 @@ interface GamesTabProps {
 }
 
 const RESULTS_DRAFT_PREFIX = "tft-results-draft:";
+const RESULTS_DRAFT_DISABLE_AUTOOPEN_PREFIX = "tft-results-draft-disable-autoopen:";
 
 
 export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabProps) {
@@ -38,12 +39,30 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
     const [selectedGameNumber, setSelectedGameNumber] = useState<number>(1);
     const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
+    const setDraftAutoOpenDisabled = (gameId: string, disabled: boolean) => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const key = `${RESULTS_DRAFT_DISABLE_AUTOOPEN_PREFIX}${gameId}`;
+        if (disabled) {
+            window.localStorage.setItem(key, "1");
+        } else {
+            window.localStorage.removeItem(key);
+        }
+    };
+
     const handleOpenModal = (game: GameWithResults) => {
+        setDraftAutoOpenDisabled(game.game_id, false);
         setSelectedGame(game);
         setIsModalOpen(true);
     };
 
-    const handleCloseModal = () => {
+    const handleCloseModal = (reason: "cancel" | "submit" = "cancel") => {
+        if (reason === "cancel" && selectedGame) {
+            setDraftAutoOpenDisabled(selectedGame.game_id, true);
+        }
+
         setSelectedGame(null);
         setIsModalOpen(false);
     };
@@ -54,7 +73,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         const result = await submitGameResultsAction(selectedGame.game_id, results);
 
         if (result.success) {
-            handleCloseModal();
+            handleCloseModal("submit");
             // Recharger les données
             if (onResultsSubmitted) {
                 onResultsSubmitted();
@@ -165,9 +184,19 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
 
         for (const candidate of sortedCandidates) {
             const matchedGame = games.find((g) => g.game_id === candidate.gameId);
+            const autoOpenDisabled = window.localStorage.getItem(
+                `${RESULTS_DRAFT_DISABLE_AUTOOPEN_PREFIX}${candidate.gameId}`,
+            ) === "1";
 
             if (!matchedGame || matchedGame.hasResults) {
                 window.localStorage.removeItem(`${RESULTS_DRAFT_PREFIX}${candidate.gameId}`);
+                window.localStorage.removeItem(
+                    `${RESULTS_DRAFT_DISABLE_AUTOOPEN_PREFIX}${candidate.gameId}`,
+                );
+                continue;
+            }
+
+            if (autoOpenDisabled) {
                 continue;
             }
 
@@ -639,7 +668,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
             {selectedGame && (
                 <EnterResultsModal
                     isOpen={isModalOpen}
-                    onClose={handleCloseModal}
+                    onClose={() => handleCloseModal("cancel")}
                     game={selectedGame}
                     onSubmit={handleSubmitResults}
                 />

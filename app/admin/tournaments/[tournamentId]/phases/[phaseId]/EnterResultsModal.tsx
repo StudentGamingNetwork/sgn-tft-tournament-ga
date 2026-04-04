@@ -243,7 +243,6 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
 
             await onSubmit(results);
             clearDraft();
-            onClose();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Erreur lors de la soumission");
         } finally {
