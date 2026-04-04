@@ -882,6 +882,7 @@ export async function getPhaseDetails(
       });
 
       if (phase1) {
+        const phase1Leaderboard = await getLeaderboard(phase1.id);
         const cumulativeLeaderboard = await getCumulativeLeaderboard([
           phase1.id,
           phaseId,
@@ -894,8 +895,28 @@ export async function getPhaseDetails(
             .filter((playerId): playerId is string => Boolean(playerId)),
         );
 
-        // Public phase 2 ranking should only display players actually in phase 2.
-        leaderboard = cumulativeLeaderboard.filter((entry) =>
+        // Keep Phase 1 top16 locked at global ranks 1..16 for Phase 2 global ranking.
+        const fixedTop16 = phase1Leaderboard.slice(0, 16);
+        const fixedTop16Ids = new Set(
+          fixedTop16.map((entry) => entry.player_id),
+        );
+
+        const orderedPhase2Players = cumulativeLeaderboard.filter(
+          (entry) =>
+            phase2Players.has(entry.player_id) &&
+            !fixedTop16Ids.has(entry.player_id),
+        );
+
+        const fullGlobalLeaderboard = [
+          ...fixedTop16,
+          ...orderedPhase2Players,
+        ].map((entry, index) => ({
+          ...entry,
+          rank: index + 1,
+        }));
+
+        // Public phase 2 view only shows players actually in phase 2, with preserved global ranks.
+        leaderboard = fullGlobalLeaderboard.filter((entry) =>
           phase2Players.has(entry.player_id),
         );
       }
