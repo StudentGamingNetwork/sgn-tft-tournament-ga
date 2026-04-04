@@ -391,10 +391,43 @@ export async function resetGameSeeding(gameId: string) {
     );
   }
 
-  const bracketLeaderboard = await getLeaderboard(
+  let bracketLeaderboard = await getLeaderboard(
     targetGame.phase_id,
     targetGame.bracket_id,
   );
+
+  // Phase 2 reset must use the same cumulative P1+P2 ordering as next-game auto reseeding.
+  const currentPhase = await db.query.phase.findFirst({
+    where: eq(phase.id, targetGame.phase_id),
+    columns: {
+      order_index: true,
+      tournament_id: true,
+    },
+  });
+
+  if (currentPhase?.order_index === 2 && currentPhase.tournament_id) {
+    const phase1 = await db.query.phase.findFirst({
+      where: and(
+        eq(phase.tournament_id, currentPhase.tournament_id),
+        eq(phase.order_index, 1),
+      ),
+    });
+
+    if (phase1) {
+      const bracketPlayerIds = new Set(
+        bracketLeaderboard.map((entry) => entry.player_id),
+      );
+      const cumulativeLeaderboard = await getCumulativeLeaderboard([
+        phase1.id,
+        targetGame.phase_id,
+      ]);
+
+      bracketLeaderboard = cumulativeLeaderboard.filter((entry) =>
+        bracketPlayerIds.has(entry.player_id),
+      );
+    }
+  }
+
   const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(
     targetGame.phase_id,
   );
