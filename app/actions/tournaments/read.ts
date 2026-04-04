@@ -775,7 +775,7 @@ export interface GamePlayerResult {
   riot_id: string;
   placement: number;
   points: number;
-  result_status: "normal" | "forfeit";
+  result_status: "normal" | "forfeit" | "absent";
   is_finalist?: boolean;
 }
 
@@ -1001,12 +1001,17 @@ export async function getPhaseDetails(
           is_finalist: finalistByPlayerId.get(r.player_id as string) ?? false,
         }))
         .sort((a, b) => {
-          if (a.result_status === "forfeit" && b.result_status !== "forfeit") {
-            return 1;
+          const statusOrder: Record<GamePlayerResult["result_status"], number> =
+            {
+              normal: 0,
+              absent: 1,
+              forfeit: 2,
+            };
+
+          if (statusOrder[a.result_status] !== statusOrder[b.result_status]) {
+            return statusOrder[a.result_status] - statusOrder[b.result_status];
           }
-          if (b.result_status === "forfeit" && a.result_status !== "forfeit") {
-            return -1;
-          }
+
           return a.placement - b.placement;
         }),
       assignedPlayers: (g.lobbyPlayers || [])

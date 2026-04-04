@@ -287,6 +287,25 @@ describe("gameService", () => {
       expect(forfeited?.points).toBe(0);
     });
 
+    it("accepte un absent avec 0 point sans forfeit", async () => {
+      const resultsWithAbsent: GameResult[] = [
+        { player_id: "p1", placement: 1 },
+        { player_id: "p2", placement: 2 },
+        { player_id: "p3", placement: 3 },
+        { player_id: "p4", placement: 4 },
+        { player_id: "p5", placement: 5 },
+        { player_id: "p6", placement: 0, result_status: "absent" },
+        { player_id: "p7", placement: 6 },
+        { player_id: "p8", placement: 7 },
+      ];
+
+      const submitted = await submitGameResults(validGameId, resultsWithAbsent);
+
+      const absent = submitted.find((r) => r.player_id === "p6");
+      expect(absent?.result_status).toBe("absent");
+      expect(absent?.points).toBe(0);
+    });
+
     it("marque le joueur forfait dans l'inscription du tournoi", async () => {
       const resultsWithForfeit: GameResult[] = [
         { player_id: "p1", placement: 1 },
@@ -341,7 +360,7 @@ describe("gameService", () => {
 
       await expect(
         submitGameResults(validGameId, invalidForfeit),
-      ).rejects.toThrow("Forfeit results must use placement 0");
+      ).rejects.toThrow("Forfeit or absent results must use placement 0");
     });
 
     describe("forfeitPlayerFromTournament", () => {

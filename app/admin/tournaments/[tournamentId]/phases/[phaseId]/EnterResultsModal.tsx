@@ -3,9 +3,17 @@ import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter } from "@herou
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Card } from "@heroui/card";
-import { Checkbox } from "@heroui/checkbox";
 import type { GameWithResults, LobbyPlayerInfo } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
+
+type PlayerResultStatus = "normal" | "absent" | "forfeit";
+const RESULTS_DRAFT_PREFIX = "tft-results-draft:";
+
+interface ResultsDraftPayload {
+    placements: Record<string, string>;
+    statuses: Record<string, PlayerResultStatus>;
+    updatedAt: number;
+}
 
 interface EnterResultsModalProps {
     isOpen: boolean;
@@ -17,29 +25,38 @@ interface EnterResultsModalProps {
 interface PlayerInputProps {
     player: LobbyPlayerInfo;
     placement: string;
-    isForfeit: boolean;
+    status: PlayerResultStatus;
     maxPlacement: number;
     onChange: (value: string) => void;
-    onForfeitChange: (value: boolean) => void;
+    onStatusChange: (value: PlayerResultStatus) => void;
 }
 
 
 const PlayerInputRow = memo(function PlayerInputRow({
     player,
     placement,
-    isForfeit,
+    status,
     maxPlacement,
     onChange,
-    onForfeitChange,
+    onStatusChange,
 }: PlayerInputProps) {
     return (
         <div className="flex items-center gap-4">
             <div className="flex-1">
                 <p className="font-medium">{player.player_name || "-"}</p>
             </div>
-            <Checkbox isSelected={isForfeit} onValueChange={onForfeitChange}>
-                Forfait
-            </Checkbox>
+            <div className="w-40">
+                <label className="text-xs text-default-500">Statut</label>
+                <select
+                    className="w-full rounded-md border border-default-200 bg-content1 px-2 py-1 text-sm"
+                    value={status}
+                    onChange={(e) => onStatusChange(e.target.value as PlayerResultStatus)}
+                >
+                    <option value="normal">Normal</option>
+                    <option value="absent">Absent (0 pt)</option>
+                    <option value="forfeit">Forfait (sort du tournoi)</option>
+                </select>
+            </div>
             <Input
                 type="number"
                 label="Placement"
@@ -49,7 +66,7 @@ const PlayerInputRow = memo(function PlayerInputRow({
                 value={placement}
                 onChange={(e) => onChange(e.target.value)}
                 className="w-32"
-                isDisabled={isForfeit}
+                isDisabled={status !== "normal"}
                 isRequired
             />
         </div>
@@ -57,63 +74,134 @@ const PlayerInputRow = memo(function PlayerInputRow({
 });
 
 export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResultsModalProps) {
-    const initialState = useCallback(() => {
+    const draftStorageKey = `${RESULTS_DRAFT_PREFIX}${game.game_id}`;
+
+    const getStoredDraft = useCallback((): ResultsDraftPayload | null => {
+        if (typeof window === "undefined") {
+            return null;
+        }
+
+        const raw = window.localStorage.getItem(draftStorageKey);
+        if (!raw) {
+            return null;
+        }
+
+        try {
+            const parsed = JSON.parse(raw) as ResultsDraftPayload;
+            if (!parsed || typeof parsed !== "object") {
+                return null;
+            }
+            return {
+                placements: parsed.placements ?? {},
+                statuses: parsed.statuses ?? {},
+                updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+            };
+        } catch {
+            return null;
+        }
+    }, [draftStorageKey]);
+
+    const persistDraft = useCallback((next: { placements: Record<string, string>; statuses: Record<string, PlayerResultStatus> }) => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        const payload: ResultsDraftPayload = {
+            placements: next.placements,
+            statuses: next.statuses,
+            updatedAt: Date.now(),
+        };
+        window.localStorage.setItem(draftStorageKey, JSON.stringify(payload));
+    }, [draftStorageKey]);
+
+    const clearDraft = useCallback(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        window.localStorage.removeItem(draftStorageKey);
+    }, [draftStorageKey]);
+
+    const buildState = useCallback((includeDraft: boolean) => {
         const resultMap = new Map(game.results.map((result) => [result.player_id, result]));
+        const storedDraft = includeDraft ? getStoredDraft() : null;
 
         return {
             placements: Object.fromEntries(
                 game.assignedPlayers.map((player) => {
+                    const draftPlacement = storedDraft?.placements?.[player.player_id];
+                    if (typeof draftPlacement === "string") {
+                        return [player.player_id, draftPlacement];
+                    }
+
                     const existing = resultMap.get(player.player_id);
                     return [
                         player.player_id,
-                        existing && existing.result_status !== "forfeit"
+                        existing && existing.result_status === "normal"
                             ? String(existing.placement)
                             : "",
                     ];
                 }),
             ),
-            forfeits: Object.fromEntries(
+            statuses: Object.fromEntries(
                 game.assignedPlayers.map((player) => {
+                    const draftStatus = storedDraft?.statuses?.[player.player_id];
+                    if (
+                        draftStatus === "normal" ||
+                        draftStatus === "absent" ||
+                        draftStatus === "forfeit"
+                    ) {
+                        return [player.player_id, draftStatus];
+                    }
+
                     const existing = resultMap.get(player.player_id);
-                    return [player.player_id, existing?.result_status === "forfeit"];
+                    return [player.player_id, (existing?.result_status ?? "normal") as PlayerResultStatus];
                 }),
             ),
         };
-    }, [game.assignedPlayers, game.results]);
+    }, [game.assignedPlayers, game.results, getStoredDraft]);
 
-    const [placements, setPlacements] = useState<Record<string, string>>(() => initialState().placements);
-    const [forfeits, setForfeits] = useState<Record<string, boolean>>(() => initialState().forfeits);
+    const [placements, setPlacements] = useState<Record<string, string>>(() => buildState(true).placements);
+    const [statuses, setStatuses] = useState<Record<string, PlayerResultStatus>>(() => buildState(true).statuses);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const next = initialState();
+        const next = buildState(true);
         setPlacements(next.placements);
-        setForfeits(next.forfeits);
+        setStatuses(next.statuses);
         setError(null);
-    }, [initialState, isOpen]);
+    }, [buildState, isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) {
+            return;
+        }
+
+        persistDraft({ placements, statuses });
+    }, [isOpen, placements, statuses, persistDraft]);
 
     const handlePlacementChange = useCallback((playerId: string, value: string) => {
         setPlacements(prev => ({ ...prev, [playerId]: value }));
         setError(null);
     }, []);
 
-    const handleForfeitChange = useCallback((playerId: string, value: boolean) => {
-        setForfeits((prev) => ({ ...prev, [playerId]: value }));
-        if (value) {
+    const handleStatusChange = useCallback((playerId: string, value: PlayerResultStatus) => {
+        setStatuses((prev) => ({ ...prev, [playerId]: value }));
+        if (value !== "normal") {
             setPlacements((prev) => ({ ...prev, [playerId]: "" }));
         }
         setError(null);
     }, []);
 
     const activePlayersCount = useMemo(
-        () => game.assignedPlayers.filter((player) => !forfeits[player.player_id]).length,
-        [forfeits, game.assignedPlayers],
+        () => game.assignedPlayers.filter((player) => statuses[player.player_id] === "normal").length,
+        [statuses, game.assignedPlayers],
     );
 
     const validatePlacements = (): boolean => {
         const activePlacements = game.assignedPlayers
-            .filter((player) => !forfeits[player.player_id])
+            .filter((player) => statuses[player.player_id] === "normal")
             .map((player) => placements[player.player_id]);
 
         if (activePlacements.some((value) => value === "")) {
@@ -145,15 +233,16 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
         setIsSubmitting(true);
         try {
             const results: GameResult[] = game.assignedPlayers.map((player) => {
-                const isForfeit = forfeits[player.player_id];
+                const status = statuses[player.player_id] ?? "normal";
                 return {
                     player_id: player.player_id,
-                    placement: isForfeit ? 0 : parseInt(placements[player.player_id], 10),
-                    result_status: isForfeit ? "forfeit" : "normal",
+                    placement: status === "normal" ? parseInt(placements[player.player_id], 10) : 0,
+                    result_status: status,
                 };
             });
 
             await onSubmit(results);
+            clearDraft();
             onClose();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Erreur lors de la soumission");
@@ -161,6 +250,14 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
             setIsSubmitting(false);
         }
     };
+
+    const handleClearDraft = useCallback(() => {
+        clearDraft();
+        const next = buildState(false);
+        setPlacements(next.placements);
+        setStatuses(next.statuses);
+        setError(null);
+    }, [buildState, clearDraft]);
 
     return (
         <Modal
@@ -177,7 +274,7 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
                 </ModalHeader>
                 <ModalBody>
                     <p className="text-sm text-default-500 mb-4">
-                        Entrez le placement final des joueurs actifs ({activePlayersCount} joueurs actifs).
+                        Entrez le placement final des joueurs en statut normal ({activePlayersCount} joueurs actifs).
                     </p>
                     {error && (
                         <Card className="p-3 bg-danger-50 border border-danger-200 mb-4">
@@ -192,15 +289,18 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
                                     key={player.player_id}
                                     player={player}
                                     placement={placements[player.player_id]}
-                                    isForfeit={forfeits[player.player_id]}
+                                    status={statuses[player.player_id] ?? "normal"}
                                     maxPlacement={Math.max(activePlayersCount, 1)}
                                     onChange={(value) => handlePlacementChange(player.player_id, value)}
-                                    onForfeitChange={(value) => handleForfeitChange(player.player_id, value)}
+                                    onStatusChange={(value) => handleStatusChange(player.player_id, value)}
                                 />
                             ))}
                     </div>
                 </ModalBody>
                 <ModalFooter>
+                    <Button color="warning" variant="light" onPress={handleClearDraft}>
+                        Effacer brouillon
+                    </Button>
                     <Button color="danger" variant="light" onPress={onClose}>
                         Annuler
                     </Button>

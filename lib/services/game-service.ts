@@ -13,7 +13,7 @@ import {
   bracket,
   tournamentRegistration,
 } from "@/models/schema";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql, gt } from "drizzle-orm";
 import type { GameResult, StatusType, SeededPlayer } from "@/types/tournament";
 import { calculatePoints } from "@/utils/tie-breakers";
 import { getLeaderboard } from "@/lib/services/scoring-service";
@@ -157,12 +157,15 @@ export async function submitGameResults(
 
   const normalResults = gameResults.filter((result) => {
     const resultStatus = result.result_status ?? "normal";
-    return resultStatus !== "forfeit";
+    return resultStatus === "normal";
   });
-  const forfeitResults = gameResults.filter((result) => {
+  const zeroPointResults = gameResults.filter((result) => {
     const resultStatus = result.result_status ?? "normal";
-    return resultStatus === "forfeit";
+    return resultStatus === "forfeit" || resultStatus === "absent";
   });
+  const forfeitResults = zeroPointResults.filter(
+    (result) => (result.result_status ?? "normal") === "forfeit",
+  );
   const forfeitedPlayerIds = forfeitResults.map((result) => result.player_id);
 
   // Validation: normal placements must be in [1..normalPlayersCount]
@@ -176,12 +179,12 @@ export async function submitGameResults(
     );
   }
 
-  // Validation: forfeits must use placement 0
-  const invalidForfeitPlacements = forfeitResults
+  // Validation: forfeit/absent must use placement 0
+  const invalidZeroPlacements = zeroPointResults
     .map((r) => r.placement)
     .filter((placement) => placement !== 0);
-  if (invalidForfeitPlacements.length > 0) {
-    throw new Error("Forfeit results must use placement 0");
+  if (invalidZeroPlacements.length > 0) {
+    throw new Error("Forfeit or absent results must use placement 0");
   }
 
   // Validation: normal placements are unique
@@ -196,7 +199,7 @@ export async function submitGameResults(
     player_id: result.player_id,
     placement: result.placement,
     points:
-      (result.result_status ?? "normal") === "forfeit"
+      (result.result_status ?? "normal") !== "normal"
         ? 0
         : (result.points ?? calculatePoints(result.placement)),
     result_status: result.result_status ?? "normal",
@@ -243,6 +246,189 @@ export async function submitGameResults(
   }
 
   return resultsWithPoints;
+}
+
+async function createGamesFromSeededPlayers(params: {
+  phaseId: string;
+  bracketId: string;
+  gameNumber: number;
+  seededPlayers: SeededPlayer[];
+}): Promise<number> {
+  const { phaseId, bracketId, gameNumber, seededPlayers } = params;
+
+  if (seededPlayers.length === 0) {
+    return 0;
+  }
+
+  const startSeed = Math.min(...seededPlayers.map((p) => p.seed));
+  const seedingMatrix = generateSnakeDraftMatrix(
+    seededPlayers.length,
+    startSeed,
+  );
+  const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
+
+  let gamesCreated = 0;
+  for (const assignment of assignments) {
+    if (assignment.players.length === 0) {
+      continue;
+    }
+
+    const newGame = await createGame({
+      bracket_id: bracketId,
+      phase_id: phaseId,
+      lobby_name: assignment.lobby_name,
+      game_number: gameNumber,
+    });
+
+    const lobbyPlayerAssignments = assignment.players.map((player: any) => ({
+      game_id: newGame.id,
+      player_id: player.player_id,
+      seed: player.seed,
+    }));
+
+    await db.insert(lobbyPlayer).values(lobbyPlayerAssignments);
+    gamesCreated++;
+  }
+
+  return gamesCreated;
+}
+
+/**
+ * Reset seeding for a pending game number after previous game edits.
+ * Recreates all lobbies for the same phase/bracket/game_number.
+ */
+export async function resetGameSeeding(gameId: string) {
+  const targetGame = await db.query.game.findFirst({
+    where: eq(game.id, gameId),
+  });
+
+  if (!targetGame?.phase_id || !targetGame.bracket_id) {
+    throw new Error("Game not found");
+  }
+
+  if (targetGame.game_number <= 1) {
+    throw new Error(
+      "Le reset de seeding n'est disponible qu'a partir de la partie 2",
+    );
+  }
+
+  const siblingGames = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, targetGame.phase_id),
+      eq(game.bracket_id, targetGame.bracket_id),
+      eq(game.game_number, targetGame.game_number),
+    ),
+    with: {
+      results: true,
+    },
+  });
+
+  if (siblingGames.length === 0) {
+    throw new Error("Aucune partie a reset pour ce bracket");
+  }
+
+  const hasAnyResult = siblingGames.some((g) => g.results.length > 0);
+  if (hasAnyResult) {
+    throw new Error(
+      "Impossible de reset le seeding: des resultats existent deja sur cette partie",
+    );
+  }
+
+  const followingGames = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, targetGame.phase_id),
+      eq(game.bracket_id, targetGame.bracket_id),
+      gt(game.game_number, targetGame.game_number),
+    ),
+  });
+
+  if (followingGames.length > 0) {
+    throw new Error(
+      "Impossible de reset cette partie: des parties suivantes existent deja dans ce bracket",
+    );
+  }
+
+  const previousGames = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, targetGame.phase_id),
+      eq(game.bracket_id, targetGame.bracket_id),
+      eq(game.game_number, targetGame.game_number - 1),
+    ),
+    with: {
+      results: true,
+      bracket: true,
+    },
+  });
+
+  if (previousGames.length === 0) {
+    throw new Error("Partie precedente introuvable pour recalculer le seeding");
+  }
+
+  const allPreviousCompleted = previousGames.every((g) => g.results.length > 0);
+  if (!allPreviousCompleted) {
+    throw new Error(
+      "La partie precedente doit etre completement terminee avant un reset de seeding",
+    );
+  }
+
+  const bracketLeaderboard = await getLeaderboard(
+    targetGame.phase_id,
+    targetGame.bracket_id,
+  );
+  const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(
+    targetGame.phase_id,
+  );
+  const filteredLeaderboard = bracketLeaderboard.filter(
+    (entry) => !forfeitedPlayerIds.has(entry.player_id),
+  );
+
+  if (filteredLeaderboard.length === 0) {
+    throw new Error("Impossible de recalculer le seeding sans leaderboard");
+  }
+
+  const playerIds = filteredLeaderboard.map((entry) => entry.player_id);
+  const playersData = await db.query.player.findMany({
+    where: inArray(player.id, playerIds),
+  });
+  const playersMap = new Map(playersData.map((p) => [p.id, p]));
+
+  const seededPlayers: SeededPlayer[] = filteredLeaderboard.map(
+    (entry, index) => {
+      const playerData = playersMap.get(entry.player_id);
+      if (!playerData) {
+        throw new Error(`Player ${entry.player_id} not found`);
+      }
+
+      return {
+        player_id: entry.player_id,
+        name: entry.player_name,
+        riot_id: entry.riot_id,
+        tier: playerData.tier!,
+        division: playerData.division as any,
+        league_points: playerData.league_points!,
+        seed: index + 1,
+      };
+    },
+  );
+
+  await db.delete(game).where(
+    inArray(
+      game.id,
+      siblingGames.map((g) => g.id),
+    ),
+  );
+
+  const gamesCreated = await createGamesFromSeededPlayers({
+    phaseId: targetGame.phase_id,
+    bracketId: targetGame.bracket_id,
+    gameNumber: targetGame.game_number,
+    seededPlayers,
+  });
+
+  return {
+    reset: gamesCreated > 0,
+    gamesCreated,
+  };
 }
 
 async function getForfeitedPlayerIdsForPhase(
@@ -902,46 +1088,12 @@ async function createNextGameWithReseed(
     },
   );
 
-  // 4. Determine starting seed
-  const playerCount = seededPlayers.length;
-  const startSeed =
-    seededPlayers.length > 0
-      ? Math.min(...seededPlayers.map((p) => p.seed))
-      : 1;
-
-  // 5. Generate seeding matrix dynamically based on player count and starting seed
-  const seedingMatrix = generateSnakeDraftMatrix(playerCount, startSeed);
-
-  // 6. Apply seeding matrix to get lobby assignments
-  const newAssignments = applySeedingMatrix(seededPlayers, seedingMatrix);
-
-  // 7. Create new games with re-seeded player assignments for this bracket
-  let gamesCreated = 0;
-
-  for (const assignment of newAssignments) {
-    // Skip empty lobbies
-    if (assignment.players.length === 0) {
-      continue;
-    }
-
-    // Create the game for this specific bracket
-    const newGame = await createGame({
-      bracket_id: bracketId,
-      phase_id: phaseId,
-      lobby_name: assignment.lobby_name,
-      game_number: nextGameNumber,
-    });
-
-    // Assign players to this lobby
-    const lobbyPlayerAssignments = assignment.players.map((player: any) => ({
-      game_id: newGame.id,
-      player_id: player.player_id,
-      seed: player.seed, // Preserve seed (1-128 for Phase 1, 33-128 for Phase 2, etc.)
-    }));
-
-    await db.insert(lobbyPlayer).values(lobbyPlayerAssignments);
-    gamesCreated++;
-  }
+  const gamesCreated = await createGamesFromSeededPlayers({
+    phaseId,
+    bracketId,
+    gameNumber: nextGameNumber,
+    seededPlayers,
+  });
 
   return { created: gamesCreated > 0, gamesCreated };
 }

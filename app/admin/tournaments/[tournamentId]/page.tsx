@@ -129,7 +129,9 @@ export default function TournamentManagePage({ params }: TournamentManagePagePro
         }
     };
 
-    if (isPending || loading) {
+    const shouldShowLoading = (!session && isPending) || (loading && !tournament);
+
+    if (shouldShowLoading) {
         return <div className="flex items-center justify-center h-96">Chargement...</div>;
     }
 

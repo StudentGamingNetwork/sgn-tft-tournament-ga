@@ -4,11 +4,12 @@ import { Chip } from "@heroui/chip";
 import { Button } from "@heroui/button";
 import { Table, TableHeader, TableColumn, TableBody, TableRow, TableCell } from "@heroui/table";
 import { Tabs, Tab } from "@heroui/tabs";
-import { Gamepad2, Target, Award, Edit } from "lucide-react";
+import { Gamepad2, Target, Award, Edit, RotateCcw } from "lucide-react";
 import type { GameWithResults } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
 import {
     forfeitPlayerAction,
+    resetGameSeedingAction,
     submitGameResultsAction,
     reassignPlayerBetweenLobbiesAction,
     swapPlayersBetweenLobbiesAction,
@@ -23,6 +24,8 @@ interface GamesTabProps {
     onResultsSubmitted?: () => void;
 }
 
+const RESULTS_DRAFT_PREFIX = "tft-results-draft:";
+
 
 export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabProps) {
     const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
@@ -33,6 +36,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedBracket, setSelectedBracket] = useState<string>("all");
     const [selectedGameNumber, setSelectedGameNumber] = useState<number>(1);
+    const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
 
     const handleOpenModal = (game: GameWithResults) => {
         setSelectedGame(game);
@@ -90,11 +94,86 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         setIsReassignModalOpen(true);
     };
 
+    const handleResetSeeding = async (game: GameWithResults) => {
+        const accepted = window.confirm(
+            `Reset le seeding de ${game.lobby_name} (partie #${game.game_number}) ?\n\n` +
+            "Cette action recree toutes les lobbies de cette partie pour le meme bracket.\n" +
+            "Les resultats existants sur cette partie doivent etre vides.",
+        );
+
+        if (!accepted) {
+            return;
+        }
+
+        const result = await resetGameSeedingAction(game.game_id);
+        if (!result.success) {
+            throw new Error(result.error || "Erreur lors du reset du seeding");
+        }
+
+        if (onResultsSubmitted) {
+            onResultsSubmitted();
+        }
+    };
+
     const handleCloseReassignModal = () => {
         setIsReassignModalOpen(false);
         setReassignSourceGame(null);
         setReassignSourcePlayer(null);
     };
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+
+        if (hasRestoredDraft || isModalOpen || games.length === 0) {
+            return;
+        }
+
+        const candidates: Array<{ gameId: string; updatedAt: number }> = [];
+
+        for (let index = 0; index < window.localStorage.length; index += 1) {
+            const key = window.localStorage.key(index);
+            if (!key || !key.startsWith(RESULTS_DRAFT_PREFIX)) {
+                continue;
+            }
+
+            const gameId = key.slice(RESULTS_DRAFT_PREFIX.length);
+            const raw = window.localStorage.getItem(key);
+            if (!raw) {
+                continue;
+            }
+
+            try {
+                const parsed = JSON.parse(raw) as { updatedAt?: number };
+                candidates.push({
+                    gameId,
+                    updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
+                });
+            } catch {
+                // Ignore invalid draft payloads
+            }
+        }
+
+        if (candidates.length === 0) {
+            setHasRestoredDraft(true);
+            return;
+        }
+
+        const mostRecentDraft = candidates.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+        const draftGame = games.find((g) => g.game_id === mostRecentDraft.gameId);
+
+        if (!draftGame) {
+            setHasRestoredDraft(true);
+            return;
+        }
+
+        setSelectedBracket(draftGame.bracket_name);
+        setSelectedGameNumber(draftGame.game_number);
+        setSelectedGame(draftGame);
+        setIsModalOpen(true);
+        setHasRestoredDraft(true);
+    }, [games, hasRestoredDraft, isModalOpen]);
 
     const bracketTabs = useMemo(() => {
         const bracketOrder = ["master", "amateur", "challenger", "common"];
@@ -378,6 +457,23 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                 >
                                     {game.hasResults ? "Modifier résultats" : "Saisir résultats"}
                                 </Button>
+                                {!game.hasResults && game.game_number > 1 && (
+                                    <Button
+                                        color="secondary"
+                                        size="sm"
+                                        variant="flat"
+                                        startContent={<RotateCcw size={16} />}
+                                        onPress={async () => {
+                                            try {
+                                                await handleResetSeeding(game);
+                                            } catch (error) {
+                                                alert(error instanceof Error ? error.message : "Erreur lors du reset");
+                                            }
+                                        }}
+                                    >
+                                        Reset seeding
+                                    </Button>
+                                )}
                             </div>
                         </div>
                         {game.hasResults ? (
@@ -402,7 +498,11 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                                         <Award size={16} className="text-amber-700" />
                                                     )}
                                                     <span className="font-bold">
-                                                        {result.result_status === "forfeit" ? "FORFAIT" : `#${result.placement}`}
+                                                        {result.result_status === "forfeit"
+                                                            ? "FORFAIT"
+                                                            : result.result_status === "absent"
+                                                            ? "ABSENT"
+                                                            : `#${result.placement}`}
                                                     </span>
                                                 </div>
                                             </TableCell>
@@ -419,7 +519,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                             <TableCell>
                                                 <span
                                                     className={
-                                                        result.result_status === "forfeit"
+                                                        result.result_status !== "normal"
                                                             ? "font-semibold text-danger"
                                                             : result.placement <= 4
                                                             ? "font-bold text-success"

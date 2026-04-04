@@ -237,7 +237,11 @@ export const lobbyPlayer = pgTable(
   ],
 );
 
-export const resultStatusEnum = pgEnum("result_status", ["normal", "forfeit"]);
+export const resultStatusEnum = pgEnum("result_status", [
+  "normal",
+  "forfeit",
+  "absent",
+]);
 
 export const results = pgTable(
   "results",

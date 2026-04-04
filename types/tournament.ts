@@ -186,7 +186,7 @@ export interface GameResult {
   player_id: string;
   placement: number; // 0 (forfait) or rank in lobby (1..N)
   points?: number; // Optional, can be calculated from placement
-  result_status?: "normal" | "forfeit";
+  result_status?: "normal" | "forfeit" | "absent";
 }
 
 /**

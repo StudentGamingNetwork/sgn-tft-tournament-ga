@@ -78,7 +78,9 @@ export default function TournamentsPage() {
         }
     };
 
-    if (isPending || loading) {
+    const shouldShowLoading = (!session && isPending) || (loading && tournaments.length === 0);
+
+    if (shouldShowLoading) {
         return <div className="flex items-center justify-center h-96">Chargement...</div>;
     }
 

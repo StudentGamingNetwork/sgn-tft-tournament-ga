@@ -73,7 +73,9 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
         return () => clearInterval(intervalId);
     }, [session, loadPhaseDetails]);
 
-    if (isPending || loading) {
+    const shouldShowLoading = (!session && isPending) || (loading && !phaseDetails);
+
+    if (shouldShowLoading) {
         return <div className="flex items-center justify-center h-96">Chargement...</div>;
     }
 

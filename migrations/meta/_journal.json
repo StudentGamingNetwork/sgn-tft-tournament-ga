@@ -57,6 +57,13 @@
       "when": 1775138008523,
       "tag": "0007_faulty_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1775300000000,
+      "tag": "0008_absent_status",
+      "breakpoints": true
     }
   ]
 }

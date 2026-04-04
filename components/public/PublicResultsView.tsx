@@ -358,7 +358,11 @@ export function PublicResultsView() {
                       {game.results.map((result) => (
                         <TableRow key={result.player_id}>
                           <TableCell>
-                            {result.result_status === "forfeit" ? "FORFAIT" : `#${result.placement}`}
+                            {result.result_status === "forfeit"
+                              ? "FORFAIT"
+                              : result.result_status === "absent"
+                              ? "ABSENT"
+                              : `#${result.placement}`}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">

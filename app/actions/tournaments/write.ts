@@ -37,6 +37,7 @@ import {
 import {
   submitGameResults,
   forfeitPlayerFromTournament,
+  resetGameSeeding,
 } from "@/lib/services/game-service";
 import {
   movePlayerBetweenLobbies,
@@ -1407,6 +1408,30 @@ export async function forfeitPlayerAction(
         error instanceof Error
           ? error.message
           : "Erreur lors du forfait du joueur",
+    };
+  }
+}
+
+/**
+ * Reset du seeding d'une partie (recréation des lobbies d'un game_number).
+ */
+export async function resetGameSeedingAction(
+  gameId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+
+    await resetGameSeeding(gameId);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error resetting game seeding:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors du reset du seeding",
     };
   }
 }
