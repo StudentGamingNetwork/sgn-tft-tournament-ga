@@ -387,6 +387,8 @@ async function getInitialGameOneSeeding(
     return null;
   }
 
+  const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phaseId);
+
   const tournamentPhases = await db.query.phase.findMany({
     where: eq(phase.tournament_id, currentPhase.tournament_id),
     columns: {
@@ -410,7 +412,7 @@ async function getInitialGameOneSeeding(
       const ordered = [
         ...phase1Leaderboard.slice(0, PHASE3_MASTER_FROM_P1),
         ...phase2Leaderboard.slice(0, PHASE3_MASTER_FROM_P2),
-      ];
+      ].filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
 
       return {
         seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
@@ -419,10 +421,12 @@ async function getInitialGameOneSeeding(
     }
 
     if (currentBracket.name === "amateur") {
-      const ordered = phase2Leaderboard.slice(
-        PHASE3_MASTER_FROM_P2,
-        PHASE3_MASTER_FROM_P2 + PHASE3_AMATEUR_FROM_P2,
-      );
+      const ordered = phase2Leaderboard
+        .slice(
+          PHASE3_MASTER_FROM_P2,
+          PHASE3_MASTER_FROM_P2 + PHASE3_AMATEUR_FROM_P2,
+        )
+        .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
 
       return {
         seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
@@ -459,7 +463,9 @@ async function getInitialGameOneSeeding(
     );
 
     if (currentBracket.name === "master") {
-      const ordered = masterLeaderboard.slice(0, PHASE4_MASTER_FROM_P3_MASTER);
+      const ordered = masterLeaderboard
+        .slice(0, PHASE4_MASTER_FROM_P3_MASTER)
+        .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
       return {
         seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, true),
         useSnakeSeeding: true,
@@ -473,7 +479,7 @@ async function getInitialGameOneSeeding(
           PHASE4_MASTER_FROM_P3_MASTER + PHASE4_AMATEUR_FROM_P3_MASTER,
         ),
         ...amateurLeaderboard.slice(0, PHASE4_AMATEUR_FROM_P3_AMATEUR),
-      ];
+      ].filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
 
       return {
         seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
