@@ -26,26 +26,6 @@ import { getBracketChipColor } from "@/utils/bracket-colors";
 
 type RankTabKey = "rank-global" | "rank-master" | "rank-amateur" | "rank-challenger";
 
-function getGlobalRankOffset(phaseOrder: number, tab: RankTabKey): number {
-  if (phaseOrder === 3) {
-    if (tab === "rank-amateur") return 32;
-    return 0;
-  }
-
-  if (phaseOrder === 4) {
-    if (tab === "rank-amateur") return 16;
-    return 0;
-  }
-
-  if (phaseOrder === 5) {
-    if (tab === "rank-master") return 8;
-    if (tab === "rank-amateur") return 16;
-    return 0;
-  }
-
-  return 0;
-}
-
 function getSortedTournaments(
   tournaments: Awaited<ReturnType<typeof getTournaments>> | undefined,
 ) {
@@ -281,18 +261,39 @@ export function PublicTournamentPhasesView() {
     }
 
     const phaseOrder = phaseDetails.phase.order_index;
-    const configuredCutoffByTab: Partial<Record<RankTabKey, number>> = {
-      "rank-global": phaseOrder === 1 || phaseOrder === 2 ? 16 : undefined,
-      "rank-master": phaseOrder === 3 ? 16 : phaseOrder === 4 ? 8 : undefined,
-      "rank-amateur": phaseOrder === 3 ? 8 : phaseOrder === 4 ? 8 : undefined,
+    // Seuils exprimes en rang global affiche.
+    const globalCutoffByTab: Partial<Record<RankTabKey, number>> = {
+      "rank-global": phaseOrder === 1 ? 16 : phaseOrder === 2 ? 32 : undefined,
+      "rank-master": phaseOrder === 3 ? 16 : phaseOrder === 4 ? 8 : phaseOrder === 5 ? 16 : undefined,
+      "rank-amateur": phaseOrder === 3 ? 40 : phaseOrder === 4 ? 24 : phaseOrder === 5 ? 24 : undefined,
       "rank-challenger": phaseOrder === 5 ? 8 : undefined,
     };
 
     for (const tab of Object.keys(noCutoff) as RankTabKey[]) {
-      const cutoffRank = configuredCutoffByTab[tab];
-      const listLength = participantsByRankTab[tab].length;
+      const cutoffGlobalRank = globalCutoffByTab[tab];
+      const participants = participantsByRankTab[tab];
+      const listLength = participants.length;
 
-      if (!cutoffRank || listLength <= cutoffRank) {
+      if (!cutoffGlobalRank || listLength < 2) {
+        continue;
+      }
+
+      // Cherche la frontiere de cutoff dans la liste locale via le rang global.
+      let cutoffAfterIndex = participants.findIndex(
+        (player) => player.current_rank === cutoffGlobalRank,
+      );
+
+      if (cutoffAfterIndex === -1) {
+        cutoffAfterIndex = participants.reduce((bestIndex, player, index) => {
+          if (player.current_rank <= cutoffGlobalRank) {
+            return index;
+          }
+
+          return bestIndex;
+        }, -1);
+      }
+
+      if (cutoffAfterIndex < 0 || cutoffAfterIndex >= listLength - 1) {
         continue;
       }
 
@@ -300,7 +301,7 @@ export function PublicTournamentPhasesView() {
         tab === "rank-amateur" && (phaseOrder === 3 || phaseOrder === 4);
 
       noCutoff[tab] = {
-        cutoffAfterIndex: cutoffRank - 1,
+        cutoffAfterIndex,
         className: isRedCutoff ? "bg-danger-500" : "bg-success-500",
       };
     }
@@ -516,13 +517,7 @@ export function PublicTournamentPhasesView() {
                                 </TableHeader>
                                 <TableBody>
                                   {participantsByRankTab[rankTab.key].flatMap((player, index) => {
-                                    const displayedGlobalRank =
-                                      index +
-                                      1 +
-                                      getGlobalRankOffset(
-                                        phaseDetails.phase.order_index,
-                                        rankTab.key,
-                                      );
+                                    const displayedGlobalRank = player.current_rank;
 
                                     const rows = [
                                       <TableRow key={player.player_id}>

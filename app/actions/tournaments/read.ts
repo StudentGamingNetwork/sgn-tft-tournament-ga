@@ -882,7 +882,22 @@ export async function getPhaseDetails(
       });
 
       if (phase1) {
-        leaderboard = await getCumulativeLeaderboard([phase1.id, phaseId]);
+        const cumulativeLeaderboard = await getCumulativeLeaderboard([
+          phase1.id,
+          phaseId,
+        ]);
+
+        const phase2Players = new Set(
+          gamesData
+            .flatMap((g) => g.lobbyPlayers || [])
+            .map((lp) => lp.player_id)
+            .filter((playerId): playerId is string => Boolean(playerId)),
+        );
+
+        // Public phase 2 ranking should only display players actually in phase 2.
+        leaderboard = cumulativeLeaderboard.filter((entry) =>
+          phase2Players.has(entry.player_id),
+        );
       }
     }
 
@@ -920,7 +935,7 @@ export async function getPhaseDetails(
           player_name: entry.player_name,
           riot_id: entry.riot_id,
           team_name: entry.team_name,
-          current_rank: index + 1,
+          current_rank: phaseData.order_index === 2 ? entry.rank : index + 1,
           top4_or_better_count: top4OrBetterCount,
         });
       }
