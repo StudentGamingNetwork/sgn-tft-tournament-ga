@@ -399,17 +399,38 @@ export async function resetGameSeeding(gameId: string) {
     (entry) => !forfeitedPlayerIds.has(entry.player_id),
   );
 
-  if (filteredLeaderboard.length === 0) {
+  const previousGamePlayerIds = Array.from(
+    new Set(
+      previousGames
+        .flatMap((g) => g.results ?? [])
+        .map((result) => result.player_id)
+        .filter((playerId): playerId is string => !!playerId),
+    ),
+  ).filter((playerId) => !forfeitedPlayerIds.has(playerId));
+
+  if (filteredLeaderboard.length === 0 && previousGamePlayerIds.length === 0) {
     throw new Error("Impossible de recalculer le seeding sans leaderboard");
   }
 
-  const playerIds = filteredLeaderboard.map((entry) => entry.player_id);
+  const leaderboardPlayerIdSet = new Set(
+    filteredLeaderboard.map((entry) => entry.player_id),
+  );
+  const missingFromLeaderboardIds = previousGamePlayerIds.filter(
+    (playerId) => !leaderboardPlayerIdSet.has(playerId),
+  );
+
+  const playerIds = Array.from(
+    new Set([
+      ...filteredLeaderboard.map((entry) => entry.player_id),
+      ...missingFromLeaderboardIds,
+    ]),
+  );
   const playersData = await db.query.player.findMany({
     where: inArray(player.id, playerIds),
   });
   const playersMap = new Map(playersData.map((p) => [p.id, p]));
 
-  const seededPlayers: SeededPlayer[] = filteredLeaderboard.map(
+  const seededPlayersFromLeaderboard: SeededPlayer[] = filteredLeaderboard.map(
     (entry, index) => {
       const playerData = playersMap.get(entry.player_id);
       if (!playerData) {
@@ -427,6 +448,30 @@ export async function resetGameSeeding(gameId: string) {
       };
     },
   );
+
+  const seededPlayersMissingFromLeaderboard: SeededPlayer[] =
+    missingFromLeaderboardIds.map((playerId, index) => {
+      const playerData = playersMap.get(playerId);
+      if (!playerData) {
+        throw new Error(`Player ${playerId} not found`);
+      }
+
+      return {
+        player_id: playerId,
+        name: playerData.name,
+        riot_id: playerData.riot_id,
+        tier: playerData.tier!,
+        division: playerData.division as any,
+        league_points: playerData.league_points!,
+        // If leaderboard misses a player from previous completed game, append at the end.
+        seed: seededPlayersFromLeaderboard.length + index + 1,
+      };
+    });
+
+  const seededPlayers: SeededPlayer[] = [
+    ...seededPlayersFromLeaderboard,
+    ...seededPlayersMissingFromLeaderboard,
+  ];
 
   await db.delete(game).where(
     inArray(
