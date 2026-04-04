@@ -163,7 +163,14 @@ export function EnterResultsModal({ isOpen, onClose, game, onSubmit }: EnterResu
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} size="3xl" scrollBehavior="inside">
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            size="3xl"
+            scrollBehavior="inside"
+            isDismissable={false}
+            isKeyboardDismissDisabled
+        >
             <ModalContent>
                 <ModalHeader className="flex flex-col gap-1">
                     {game.hasResults ? "Modifier" : "Saisir"} les résultats - {game.lobby_name} (Partie #{game.game_number})

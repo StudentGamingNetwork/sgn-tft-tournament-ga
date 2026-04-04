@@ -507,13 +507,10 @@ export async function importPlayersAndRegisterToTournament(
           }
           result.updated++;
         } else {
-          const createResult = await createPlayerAndRegister(
-            tournamentId,
-            {
-              ...playerData,
-              name: importedName,
-            },
-          );
+          const createResult = await createPlayerAndRegister(tournamentId, {
+            ...playerData,
+            name: importedName,
+          });
 
           if (createResult.success) {
             result.created++;
