@@ -7,8 +7,14 @@ import { Tabs, Tab } from "@heroui/tabs";
 import { Gamepad2, Target, Award, Edit } from "lucide-react";
 import type { GameWithResults } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
-import { forfeitPlayerAction, submitGameResultsAction } from "@/app/actions/tournaments";
+import {
+    forfeitPlayerAction,
+    submitGameResultsAction,
+    reassignPlayerBetweenLobbiesAction,
+    swapPlayersBetweenLobbiesAction,
+} from "@/app/actions/tournaments";
 import { EnterResultsModal } from "./EnterResultsModal";
+import { ReassignPlayersModal } from "./ReassignPlayersModal";
 import { getBracketChipColor } from "@/utils/bracket-colors";
 
 interface GamesTabProps {
@@ -17,15 +23,12 @@ interface GamesTabProps {
     onResultsSubmitted?: () => void;
 }
 
-const getTrPseudo = (
-    riotId: string | null | undefined,
-    fallbackName?: string | null,
-): string => {
-    const pseudo = riotId?.split("#")[0]?.trim();
-    return pseudo || fallbackName || "-";
-};
 
 export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabProps) {
+    const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+    const [reassignMode, setReassignMode] = useState<"move" | "swap">("move");
+    const [reassignSourceGame, setReassignSourceGame] = useState<GameWithResults | null>(null);
+    const [reassignSourcePlayer, setReassignSourcePlayer] = useState<GameWithResults["assignedPlayers"][number] | null>(null);
     const [selectedGame, setSelectedGame] = useState<GameWithResults | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedBracket, setSelectedBracket] = useState<string>("all");
@@ -74,6 +77,23 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         if (onResultsSubmitted) {
             onResultsSubmitted();
         }
+    };
+
+    const handleOpenReassignModal = (
+        mode: "move" | "swap",
+        sourceGame: GameWithResults,
+        sourcePlayer: GameWithResults["assignedPlayers"][number],
+    ) => {
+        setReassignMode(mode);
+        setReassignSourceGame(sourceGame);
+        setReassignSourcePlayer(sourcePlayer);
+        setIsReassignModalOpen(true);
+    };
+
+    const handleCloseReassignModal = () => {
+        setIsReassignModalOpen(false);
+        setReassignSourceGame(null);
+        setReassignSourcePlayer(null);
     };
 
     const bracketTabs = useMemo(() => {
@@ -127,6 +147,60 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
             return a.lobby_name.localeCompare(b.lobby_name);
         });
     }, [gamesForSelectedBracket, selectedGameNumber]);
+
+    const reassignCandidateGames = useMemo(() => {
+        if (!reassignSourceGame) {
+            return [] as GameWithResults[];
+        }
+
+        return filteredGames.filter((candidate) =>
+            candidate.game_id !== reassignSourceGame.game_id &&
+            candidate.bracket_name === reassignSourceGame.bracket_name &&
+            candidate.game_number === reassignSourceGame.game_number &&
+            !candidate.hasResults,
+        );
+    }, [filteredGames, reassignSourceGame]);
+
+    const handleMovePlayer = async (targetGameId: string) => {
+        if (!reassignSourceGame || !reassignSourcePlayer) {
+            return;
+        }
+
+        const result = await reassignPlayerBetweenLobbiesAction(
+            reassignSourceGame.game_id,
+            targetGameId,
+            reassignSourcePlayer.player_id,
+        );
+
+        if (!result.success) {
+            throw new Error(result.error || "Erreur lors du deplacement du joueur");
+        }
+
+        if (onResultsSubmitted) {
+            onResultsSubmitted();
+        }
+    };
+
+    const handleSwapPlayers = async (targetGameId: string, targetPlayerId: string) => {
+        if (!reassignSourceGame || !reassignSourcePlayer) {
+            return;
+        }
+
+        const result = await swapPlayersBetweenLobbiesAction(
+            reassignSourceGame.game_id,
+            reassignSourcePlayer.player_id,
+            targetGameId,
+            targetPlayerId,
+        );
+
+        if (!result.success) {
+            throw new Error(result.error || "Erreur lors de l'echange des joueurs");
+        }
+
+        if (onResultsSubmitted) {
+            onResultsSubmitted();
+        }
+    };
 
     // Calculer les stats pour chaque game number
     const gameStats = useMemo(() => {
@@ -334,7 +408,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <div className="flex items-center gap-2">
-                                                    <span>{getTrPseudo(result.riot_id, result.player_name)}</span>
+                                                    <span>{result.player_name || "-"}</span>
                                                     {result.is_finalist && (
                                                         <Chip size="sm" color="warning" variant="flat">
                                                             Finaliste
@@ -375,7 +449,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <div className="flex items-center gap-2">
-                                                    <span>{getTrPseudo(player.riot_id, player.player_name)}</span>
+                                                    <span>{player.player_name || "-"}</span>
                                                     {player.is_finalist && (
                                                         <Chip size="sm" color="warning" variant="flat">
                                                             Finaliste
@@ -387,27 +461,59 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                                 <span className="text-default-400 italic">En attente</span>
                                             </TableCell>
                                             <TableCell>
-                                                <Button
-                                                    size="sm"
-                                                    color="danger"
-                                                    variant="flat"
-                                                    onPress={async () => {
-                                                        try {
-                                                            await handleForfeitPlayer(
-                                                                player.player_id,
-                                                                getTrPseudo(player.riot_id, player.player_name),
-                                                            );
-                                                        } catch (error) {
-                                                            alert(
-                                                                error instanceof Error
-                                                                    ? error.message
-                                                                    : "Erreur lors du forfait",
-                                                            );
-                                                        }
-                                                    }}
-                                                >
-                                                    Forfait
-                                                </Button>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        color="primary"
+                                                        variant="flat"
+                                                        isDisabled={filteredGames.filter((g) =>
+                                                            g.game_id !== game.game_id &&
+                                                            g.bracket_name === game.bracket_name &&
+                                                            g.game_number === game.game_number &&
+                                                            !g.hasResults &&
+                                                            g.assignedPlayers.length < 8,
+                                                        ).length === 0}
+                                                        onPress={() => handleOpenReassignModal("move", game, player)}
+                                                    >
+                                                        Deplacer
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        color="secondary"
+                                                        variant="flat"
+                                                        isDisabled={filteredGames.filter((g) =>
+                                                            g.game_id !== game.game_id &&
+                                                            g.bracket_name === game.bracket_name &&
+                                                            g.game_number === game.game_number &&
+                                                            !g.hasResults &&
+                                                            g.assignedPlayers.length > 0,
+                                                        ).length === 0}
+                                                        onPress={() => handleOpenReassignModal("swap", game, player)}
+                                                    >
+                                                        Echanger
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        color="danger"
+                                                        variant="flat"
+                                                        onPress={async () => {
+                                                            try {
+                                                                await handleForfeitPlayer(
+                                                                    player.player_id,
+                                                                    player.player_name || "-",
+                                                                );
+                                                            } catch (error) {
+                                                                alert(
+                                                                    error instanceof Error
+                                                                        ? error.message
+                                                                        : "Erreur lors du forfait",
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        Forfait
+                                                    </Button>
+                                                </div>
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -426,6 +532,35 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                     onSubmit={handleSubmitResults}
                 />
             )}
+
+            <ReassignPlayersModal
+                isOpen={isReassignModalOpen}
+                onClose={handleCloseReassignModal}
+                mode={reassignMode}
+                sourceGame={reassignSourceGame}
+                sourcePlayer={reassignSourcePlayer}
+                candidateGames={
+                    reassignMode === "move"
+                        ? reassignCandidateGames.filter((candidate) => candidate.assignedPlayers.length < 8)
+                        : reassignCandidateGames
+                }
+                onMovePlayer={async (targetGameId) => {
+                    try {
+                        await handleMovePlayer(targetGameId);
+                    } catch (error) {
+                        alert(error instanceof Error ? error.message : "Erreur lors du deplacement");
+                        throw error;
+                    }
+                }}
+                onSwapPlayers={async (targetGameId, targetPlayerId) => {
+                    try {
+                        await handleSwapPlayers(targetGameId, targetPlayerId);
+                    } catch (error) {
+                        alert(error instanceof Error ? error.message : "Erreur lors de l'echange");
+                        throw error;
+                    }
+                }}
+            />
         </div>
     );
 }

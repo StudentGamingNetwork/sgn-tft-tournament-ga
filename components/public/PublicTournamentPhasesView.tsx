@@ -36,13 +36,6 @@ function getSortedTournaments(
   });
 }
 
-const getTrPseudo = (
-  riotId: string | null | undefined,
-  fallbackName?: string | null,
-): string => {
-  const pseudo = riotId?.split("#")[0]?.trim();
-  return pseudo || fallbackName || "-";
-};
 
 export function PublicTournamentPhasesView() {
   const [selectedTournamentId, setSelectedTournamentId] = useState("");
@@ -378,7 +371,7 @@ export function PublicTournamentPhasesView() {
                                 {phaseDetails.participants.map((player) => (
                                   <TableRow key={player.player_id}>
                                     <TableCell>#{player.current_rank}</TableCell>
-                                    <TableCell>{getTrPseudo(player.riot_id, player.player_name)}</TableCell>
+                                    <TableCell>{player.player_name || "-"}</TableCell>
                                     <TableCell>{player.total_points}</TableCell>
                                     <TableCell>{player.top1_count}</TableCell>
                                     <TableCell>{player.top4_or_better_count}</TableCell>
@@ -428,7 +421,7 @@ export function PublicTournamentPhasesView() {
                                     {game.results.map((result) => (
                                       <TableRow key={result.player_id}>
                                         <TableCell>#{result.placement}</TableCell>
-                                        <TableCell>{getTrPseudo(result.riot_id, result.player_name)}</TableCell>
+                                        <TableCell>{result.player_name || "-"}</TableCell>
                                         <TableCell>{result.points}</TableCell>
                                       </TableRow>
                                     ))}
@@ -444,7 +437,7 @@ export function PublicTournamentPhasesView() {
                                     {game.assignedPlayers.map((player) => (
                                       <TableRow key={player.player_id}>
                                         <TableCell>#{player.seed}</TableCell>
-                                        <TableCell>{getTrPseudo(player.riot_id, player.player_name)}</TableCell>
+                                        <TableCell>{player.player_name || "-"}</TableCell>
                                       </TableRow>
                                     ))}
                                   </TableBody>

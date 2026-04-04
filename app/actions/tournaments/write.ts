@@ -39,6 +39,10 @@ import {
   forfeitPlayerFromTournament,
 } from "@/lib/services/game-service";
 import {
+  movePlayerBetweenLobbies,
+  swapPlayersBetweenLobbies,
+} from "@/lib/services/lobby-reassignment-service";
+import {
   ensureRankSyncSchedulerStarted,
   getRankSyncState,
   triggerTournamentRankSync,
@@ -1397,6 +1401,64 @@ export async function forfeitPlayerAction(
         error instanceof Error
           ? error.message
           : "Erreur lors du forfait du joueur",
+    };
+  }
+}
+
+/**
+ * Deplacer un joueur d'un lobby vers un autre (meme phase/bracket/game number).
+ */
+export async function reassignPlayerBetweenLobbiesAction(
+  sourceGameId: string,
+  targetGameId: string,
+  playerId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+
+    await movePlayerBetweenLobbies(sourceGameId, targetGameId, playerId);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error reassigning player between lobbies:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors du deplacement du joueur",
+    };
+  }
+}
+
+/**
+ * Echanger deux joueurs entre deux lobbies (meme phase/bracket/game number).
+ */
+export async function swapPlayersBetweenLobbiesAction(
+  sourceGameId: string,
+  sourcePlayerId: string,
+  targetGameId: string,
+  targetPlayerId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+
+    await swapPlayersBetweenLobbies(
+      sourceGameId,
+      sourcePlayerId,
+      targetGameId,
+      targetPlayerId,
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error swapping players between lobbies:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors de l'echange des joueurs",
     };
   }
 }

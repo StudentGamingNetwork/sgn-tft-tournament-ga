@@ -25,13 +25,6 @@ import { getBracketChipColor } from "@/utils/bracket-colors";
 
 const ALL_BRACKETS = ["common", "amateur", "master", "challenger"] as const;
 
-const getTrPseudo = (
-  riotId: string | null | undefined,
-  fallbackName?: string | null,
-): string => {
-  const pseudo = riotId?.split("#")[0]?.trim();
-  return pseudo || fallbackName || "-";
-};
 
 export function PublicResultsView() {
   const [selectedTournamentId, setSelectedTournamentId] = useState<string>("");
@@ -369,7 +362,7 @@ export function PublicResultsView() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span>{getTrPseudo(result.riot_id, result.player_name)}</span>
+                              <span>{result.player_name || "-"}</span>
                               {result.is_finalist ? (
                                 <Chip size="sm" color="warning" variant="flat">
                                   Finaliste
@@ -394,7 +387,7 @@ export function PublicResultsView() {
                           <TableCell>#{assigned.seed}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span>{getTrPseudo(assigned.riot_id, assigned.player_name)}</span>
+                              <span>{assigned.player_name || "-"}</span>
                               {assigned.is_finalist ? (
                                 <Chip size="sm" color="warning" variant="flat">
                                   Finaliste

@@ -11,13 +11,6 @@ interface ResultsTabProps {
     tournamentId: string;
 }
 
-const getTrPseudo = (
-    riotId: string | null | undefined,
-    fallbackName?: string | null,
-): string => {
-    const pseudo = riotId?.split("#")[0]?.trim();
-    return pseudo || fallbackName || "-";
-};
 
 export function ResultsTab({ tournamentId }: ResultsTabProps) {
     const { data, isLoading, error } = useTournamentGlobalResults(tournamentId);
@@ -285,7 +278,7 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                                     <td className="py-2 pr-3 font-semibold">{entry.rank}</td>
                                                     <td className="py-2 pr-3">
                                                         <div className="flex items-center gap-2">
-                                                            <span>{getTrPseudo(entry.riot_id, entry.player_name)}</span>
+                                                            <span>{entry.player_name || "-"}</span>
                                                             {entry.is_finalist && (
                                                                 <Chip size="sm" color="warning" variant="flat">
                                                                     Finaliste

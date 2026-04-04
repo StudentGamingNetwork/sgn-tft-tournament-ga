@@ -26,10 +26,6 @@ type LobbyPlayer = {
   riotId: string;
 };
 
-const getTrPseudo = (riotId: string | null | undefined): string => {
-  const pseudo = riotId?.split("#")[0]?.trim();
-  return pseudo || "-";
-};
 
 type ScheduleGame = {
   phaseId: string;
@@ -86,7 +82,7 @@ function getGamePlayers(detailsGame: PhaseDetails["games"][number]): LobbyPlayer
 
   return source
     .map((player) => ({
-      playerName: getTrPseudo(player.riot_id),
+      playerName: player.player_name || "-",
       riotId: player.riot_id,
     }))
     .sort((a, b) => a.playerName.localeCompare(b.playerName));

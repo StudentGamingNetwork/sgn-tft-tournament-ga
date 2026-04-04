@@ -57,13 +57,6 @@ const escapeCsvCell = (value: string | number): string => {
     return text;
 };
 
-const getTrPseudo = (
-    riotId: string | null | undefined,
-    fallbackName?: string | null,
-): string => {
-    const pseudo = riotId?.split("#")[0]?.trim();
-    return pseudo || fallbackName || "-";
-};
 
 interface PlayersTabProps {
     tournamentId: string;
@@ -562,7 +555,7 @@ export function PlayersTab({
                         {paginatedPlayers.map((player) => (
                             <TableRow key={player.id}>
                                 <TableCell>
-                                    {getTrPseudo(player.riot_id, player.name)}
+                                    {player.name || "-"}
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex flex-col">
