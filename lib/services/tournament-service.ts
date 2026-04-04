@@ -437,25 +437,25 @@ export async function startPhase3FromPhase1And2(
   const phase1Leaderboard = await getLeaderboard(phase1Id);
   const phase2Leaderboard = await getLeaderboard(phase2Id);
 
-  // Master bracket: fixed top block from P1 and P2
-  const phase1MasterQualifiers = phase1Leaderboard
-    .slice(0, PHASE3_MASTER_FROM_P1)
-    .map((p) => p.player_id);
-  const phase2MasterQualifiers = phase2Leaderboard
-    .slice(0, PHASE3_MASTER_FROM_P2)
-    .map((p) => p.player_id);
-  const masterPlayerIds = [
+  // Master bracket: top 16 P1, then top 16 P2, preserving this order
+  const phase1MasterQualifiers = phase1Leaderboard.slice(
+    0,
+    PHASE3_MASTER_FROM_P1,
+  );
+  const phase2MasterQualifiers = phase2Leaderboard.slice(
+    0,
+    PHASE3_MASTER_FROM_P2,
+  );
+  const phase3MasterOrderedLeaderboard = [
     ...phase1MasterQualifiers,
     ...phase2MasterQualifiers,
   ];
 
-  // Amateur bracket: remaining P2 players after Master allocation
-  const amateurPlayerIds = phase2Leaderboard
-    .slice(
-      PHASE3_MASTER_FROM_P2,
-      PHASE3_MASTER_FROM_P2 + PHASE3_AMATEUR_FROM_P2,
-    )
-    .map((p) => p.player_id);
+  // Amateur bracket: bottom block from P2, preserving finish order from P2
+  const phase3AmateurOrderedLeaderboard = phase2Leaderboard.slice(
+    PHASE3_MASTER_FROM_P2,
+    PHASE3_MASTER_FROM_P2 + PHASE3_AMATEUR_FROM_P2,
+  );
 
   // Obtenir les brackets de Phase 3
   const brackets = await db.query.bracket.findMany({
@@ -469,10 +469,10 @@ export async function startPhase3FromPhase1And2(
     throw new Error('Phase 3 must have both "master" and "amateur" brackets');
   }
 
-  // Seed Master (basé sur le tier/LP initial, pas sur les points P1/P2 car RESET)
-  const masterSeededPlayers = await seedPlayersForPhase(
-    phase3Id,
-    masterPlayerIds,
+  // Seed Master from ordered leaderboard (P1 top16 then P2 top16), reseeded 1..N
+  const masterSeededPlayers = await seedPlayersBasedOnLeaderboard(
+    phase3MasterOrderedLeaderboard,
+    false,
   );
   const masterGames = await assignPlayersToLobbies(
     phase3Id,
@@ -482,9 +482,12 @@ export async function startPhase3FromPhase1And2(
     true, // Use snake seeding for Master bracket
   );
 
-  // Seed Amateur
-  const amateurSeededPlayers = amateurPlayerIds.length
-    ? await seedPlayersForPhase(phase3Id, amateurPlayerIds)
+  // Seed Amateur from ordered P2 finish positions, reseeded 1..N
+  const amateurSeededPlayers = phase3AmateurOrderedLeaderboard.length
+    ? await seedPlayersBasedOnLeaderboard(
+        phase3AmateurOrderedLeaderboard,
+        false,
+      )
     : [];
   const amateurGames = amateurSeededPlayers.length
     ? await assignPlayersToLobbies(
@@ -552,17 +555,16 @@ export async function startPhase4FromPhase3(
     .slice(0, PHASE4_MASTER_FROM_P3_MASTER)
     .map((p) => p.player_id);
 
-  // Phase 4 Amateur: relegated Master + top Amateur until capacity is reached
-  const topAmateur = amateurLeaderboard
-    .slice(0, PHASE4_AMATEUR_FROM_P3_AMATEUR)
-    .map((p) => p.player_id);
-  const relegatedMaster = masterLeaderboard
-    .slice(
-      PHASE4_MASTER_FROM_P3_MASTER,
-      PHASE4_MASTER_FROM_P3_MASTER + PHASE4_AMATEUR_FROM_P3_MASTER,
-    )
-    .map((p) => p.player_id);
-  const phase4AmateurPlayerIds = [...topAmateur, ...relegatedMaster];
+  // Phase 4 Amateur: bottom 16 P3 Master, then top 8 P3 Amateur (preserve order)
+  const relegatedMaster = masterLeaderboard.slice(
+    PHASE4_MASTER_FROM_P3_MASTER,
+    PHASE4_MASTER_FROM_P3_MASTER + PHASE4_AMATEUR_FROM_P3_MASTER,
+  );
+  const topAmateur = amateurLeaderboard.slice(
+    0,
+    PHASE4_AMATEUR_FROM_P3_AMATEUR,
+  );
+  const phase4AmateurOrderedLeaderboard = [...relegatedMaster, ...topAmateur];
 
   // Obtenir les brackets de Phase 4
   const phase4Brackets = await db.query.bracket.findMany({
@@ -596,10 +598,12 @@ export async function startPhase4FromPhase3(
     true, // Use snake seeding for Master bracket
   );
 
-  // Seed et créer games pour Amateur
-  // RESET : on utilise le rank Riot initial pour le seeding des lobbies
-  const amateurSeededPlayers = phase4AmateurPlayerIds.length
-    ? await seedPlayersForPhase(phase4Id, phase4AmateurPlayerIds)
+  // Seed et créer games pour Amateur depuis l'ordre de leaderboard combiné, reseeded 1..N
+  const amateurSeededPlayers = phase4AmateurOrderedLeaderboard.length
+    ? await seedPlayersBasedOnLeaderboard(
+        phase4AmateurOrderedLeaderboard,
+        false,
+      )
     : [];
   const amateurGames = amateurSeededPlayers.length
     ? await assignPlayersToLobbies(
@@ -624,7 +628,7 @@ export async function startPhase4FromPhase3(
       bracket: phase4Amateur,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
-      source: `Top ${PHASE4_AMATEUR_FROM_P3_AMATEUR} P3 Amateur + Bottom ${PHASE4_AMATEUR_FROM_P3_MASTER} P3 Master (RESET)`,
+      source: `Bottom ${PHASE4_AMATEUR_FROM_P3_MASTER} P3 Master + Top ${PHASE4_AMATEUR_FROM_P3_AMATEUR} P3 Amateur (RESET)`,
     },
   };
 }

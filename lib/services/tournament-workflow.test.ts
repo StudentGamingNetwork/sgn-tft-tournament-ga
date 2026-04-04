@@ -99,7 +99,7 @@ describe("Tournament Workflow", () => {
       vi.clearAllMocks();
     });
 
-    it("Phase 1 -> Phase 2: eliminate top 16 and keep up to bottom 48", async () => {
+    it("Phase 1 -> Phase 2: eliminate top 16 and keep up to bottom 36", async () => {
       const { getLeaderboard } = await import("./scoring-service");
       vi.mocked(getLeaderboard).mockResolvedValue(buildLeaderboard("p1", 128));
 
@@ -121,11 +121,11 @@ describe("Tournament Workflow", () => {
       const result = await startPhase2FromPhase1("phase-1", "phase-2");
 
       expect(result.eliminatedPlayers).toHaveLength(16);
-      expect(result.qualifiedPlayers).toHaveLength(48);
+      expect(result.qualifiedPlayers).toHaveLength(36);
       expect(result.qualifiedPlayers[0].rank).toBe(17);
       expect(
         result.qualifiedPlayers[result.qualifiedPlayers.length - 1].rank,
-      ).toBe(64);
+      ).toBe(52);
     });
 
     it("Phase 1 -> Phase 2: truncates for smaller field (52 -> 36)", async () => {
@@ -154,7 +154,7 @@ describe("Tournament Workflow", () => {
       expect(result.qualifiedPlayers[0].rank).toBe(17);
     });
 
-    it("Phase 2 -> Phase 3: Master 16+16 and Amateur bottom 32 from P2", async () => {
+    it("Phase 2 -> Phase 3: Master 16+16 and Amateur bottom 20 from P2", async () => {
       const { getLeaderboard } = await import("./scoring-service");
       vi.mocked(getLeaderboard).mockImplementation(async (phaseId: string) => {
         if (phaseId === "phase-1") return buildLeaderboard("p1", 80);
@@ -168,17 +168,16 @@ describe("Tournament Workflow", () => {
         { id: "bracket-amateur", phase_id: "phase-3", name: "amateur" },
       ]);
 
-      const { seedPlayersForPhase, assignPlayersToLobbies } = await import(
-        "./seeding-service"
-      );
-      vi.mocked(seedPlayersForPhase)
+      const { seedPlayersBasedOnLeaderboard, assignPlayersToLobbies } =
+        await import("./seeding-service");
+      vi.mocked(seedPlayersBasedOnLeaderboard)
         .mockResolvedValueOnce(
           Array.from({ length: 32 }, (_, i) => ({
             player_id: `m-${i}`,
           })) as any,
         )
         .mockResolvedValueOnce(
-          Array.from({ length: 32 }, (_, i) => ({
+          Array.from({ length: 20 }, (_, i) => ({
             player_id: `a-${i}`,
           })) as any,
         );
@@ -193,16 +192,24 @@ describe("Tournament Workflow", () => {
       );
 
       expect(result.masterBracket.players).toHaveLength(32);
-      expect(result.amateurBracket.players).toHaveLength(32);
-      expect(vi.mocked(seedPlayersForPhase).mock.calls[0]?.[1]).toHaveLength(
-        32,
+      expect(result.amateurBracket.players).toHaveLength(20);
+      expect(
+        vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[0]?.[0],
+      ).toHaveLength(32);
+      expect(
+        vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[1]?.[0],
+      ).toHaveLength(20);
+      expect(vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[0]?.[1]).toBe(
+        false,
       );
-      expect(vi.mocked(seedPlayersForPhase).mock.calls[1]?.[1]).toHaveLength(
-        32,
+      expect(vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[1]?.[1]).toBe(
+        false,
       );
+      expect(vi.mocked(assignPlayersToLobbies).mock.calls[0]?.[4]).toBe(true);
+      expect(vi.mocked(assignPlayersToLobbies).mock.calls[1]?.[4]).toBe(false);
     });
 
-    it("Phase 3 -> Phase 4: Master top 16, Amateur top16+bottom16", async () => {
+    it("Phase 3 -> Phase 4: Master top 16, Amateur bottom16+top8", async () => {
       const { getLeaderboard } = await import("./scoring-service");
       vi.mocked(getLeaderboard).mockImplementation(
         async (_phaseId, bracketId) => {
@@ -236,17 +243,19 @@ describe("Tournament Workflow", () => {
           ];
         });
 
-      const {
-        seedPlayersForPhase,
-        seedPlayersBasedOnLeaderboard,
-        assignPlayersToLobbies,
-      } = await import("./seeding-service");
-      vi.mocked(seedPlayersBasedOnLeaderboard).mockResolvedValue(
-        Array.from({ length: 16 }, (_, i) => ({ player_id: `m-${i}` })) as any,
-      );
-      vi.mocked(seedPlayersForPhase).mockResolvedValue(
-        Array.from({ length: 32 }, (_, i) => ({ player_id: `a-${i}` })) as any,
-      );
+      const { seedPlayersBasedOnLeaderboard, assignPlayersToLobbies } =
+        await import("./seeding-service");
+      vi.mocked(seedPlayersBasedOnLeaderboard)
+        .mockResolvedValueOnce(
+          Array.from({ length: 16 }, (_, i) => ({
+            player_id: `m-${i}`,
+          })) as any,
+        )
+        .mockResolvedValueOnce(
+          Array.from({ length: 24 }, (_, i) => ({
+            player_id: `a-${i}`,
+          })) as any,
+        );
       vi.mocked(assignPlayersToLobbies).mockResolvedValue([
         { game: { id: "game-1" }, lobbyPlayers: [] },
       ]);
@@ -254,13 +263,18 @@ describe("Tournament Workflow", () => {
       const result = await startPhase4FromPhase3("phase-3", "phase-4");
 
       expect(result.masterBracket.players).toHaveLength(16);
-      expect(result.amateurBracket.players).toHaveLength(32);
+      expect(result.amateurBracket.players).toHaveLength(24);
       expect(
         vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[0]?.[0],
       ).toHaveLength(16);
-      expect(vi.mocked(seedPlayersForPhase).mock.calls[0]?.[1]).toHaveLength(
-        32,
+      expect(
+        vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[1]?.[0],
+      ).toHaveLength(24);
+      expect(vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[1]?.[1]).toBe(
+        false,
       );
+      expect(vi.mocked(assignPlayersToLobbies).mock.calls[0]?.[4]).toBe(true);
+      expect(vi.mocked(assignPlayersToLobbies).mock.calls[1]?.[4]).toBe(false);
     });
 
     it("Phase 4 -> Phase 5: creates 8/8/8 brackets", async () => {

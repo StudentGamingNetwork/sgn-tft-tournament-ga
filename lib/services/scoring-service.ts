@@ -4,7 +4,13 @@
  */
 
 import { db } from "@/lib/db";
-import { results, game, bracket, tournament } from "@/models/schema";
+import {
+  results,
+  game,
+  bracket,
+  tournament,
+  lobbyPlayer,
+} from "@/models/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import {
   calculatePlayerStats as calculateStatsUtil,
@@ -166,6 +172,65 @@ export async function getLeaderboard(
       },
     },
   });
+
+  // If games are created but no results are submitted yet, expose an initial ranking
+  // based on game 1 seeding so the leaderboard reflects the configured phase seeding.
+  if (allResults.length === 0) {
+    const firstGameNumber = Math.min(...games.map((g) => g.game_number));
+    const firstGameIds = games
+      .filter((g) => g.game_number === firstGameNumber)
+      .map((g) => g.id);
+
+    const seededAssignments = await db.query.lobbyPlayer.findMany({
+      where: inArray(lobbyPlayer.game_id, firstGameIds),
+      with: {
+        player: {
+          with: {
+            team: true,
+          },
+        },
+      },
+    });
+
+    const bestSeedByPlayer = new Map<string, { seed: number; player: any }>();
+
+    for (const assignment of seededAssignments) {
+      if (!assignment.player_id || !assignment.player) {
+        continue;
+      }
+
+      const current = bestSeedByPlayer.get(assignment.player_id);
+      if (!current || assignment.seed < current.seed) {
+        bestSeedByPlayer.set(assignment.player_id, {
+          seed: assignment.seed,
+          player: assignment.player,
+        });
+      }
+    }
+
+    const ordered = Array.from(bestSeedByPlayer.entries())
+      .sort((a, b) => a[1].seed - b[1].seed)
+      .map(([playerId, value]) => ({ playerId, ...value }));
+
+    return ordered.map((entry, index) => ({
+      rank: index + 1,
+      player_id: entry.playerId,
+      player_name: entry.player.name,
+      riot_id: entry.player.riot_id,
+      team_name: entry.player.team?.name,
+      total_points: 0,
+      games_played: 0,
+      avg_placement: 0,
+      top1_count: 0,
+      top2_count: 0,
+      top3_count: 0,
+      top4_count: 0,
+      top5_count: 0,
+      top6_count: 0,
+      top7_count: 0,
+      top8_count: 0,
+    }));
+  }
 
   // Group results by player
   const playerResultsMap = new Map<string, typeof allResults>();

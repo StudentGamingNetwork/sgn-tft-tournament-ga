@@ -65,7 +65,8 @@ export async function seedPlayersForPhase(
  * and maintains the original ranking context (e.g., Phase 2 players keep ranks 33-128)
  *
  * @param leaderboard - Leaderboard from previous phase(s)
- * @returns Seeded players with their original leaderboard rank preserved as seed
+ * @param preserveOriginalRank - If true, keep leaderboard rank as seed. If false, reseed sequentially (1..N) following input order.
+ * @returns Seeded players seeded from leaderboard order
  */
 export async function seedPlayersBasedOnLeaderboard(
   leaderboard: Array<{
@@ -74,6 +75,7 @@ export async function seedPlayersBasedOnLeaderboard(
     player_name: string;
     riot_id: string;
   }>,
+  preserveOriginalRank: boolean = true,
 ): Promise<SeededPlayer[]> {
   if (leaderboard.length === 0) {
     throw new Error("Leaderboard is empty");
@@ -103,7 +105,7 @@ export async function seedPlayersBasedOnLeaderboard(
       tier: playerData.tier || "UNRANKED",
       division: (playerData.division as any) || null,
       league_points: playerData.league_points || 0,
-      seed: entry.rank, // Preserve original leaderboard rank as seed
+      seed: preserveOriginalRank ? entry.rank : index + 1,
     };
   });
 

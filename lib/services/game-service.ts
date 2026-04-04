@@ -326,12 +326,6 @@ export async function resetGameSeeding(gameId: string) {
     throw new Error("Game not found");
   }
 
-  if (targetGame.game_number <= 1) {
-    throw new Error(
-      "Le reset de seeding n'est disponible qu'a partir de la partie 2",
-    );
-  }
-
   const siblingGames = await db.query.game.findMany({
     where: and(
       eq(game.phase_id, targetGame.phase_id),
@@ -340,6 +334,7 @@ export async function resetGameSeeding(gameId: string) {
     ),
     with: {
       results: true,
+      lobbyPlayers: true,
     },
   });
 
@@ -368,27 +363,35 @@ export async function resetGameSeeding(gameId: string) {
     );
   }
 
-  const previousGames = await db.query.game.findMany({
-    where: and(
-      eq(game.phase_id, targetGame.phase_id),
-      eq(game.bracket_id, targetGame.bracket_id),
-      eq(game.game_number, targetGame.game_number - 1),
-    ),
-    with: {
-      results: true,
-      bracket: true,
-    },
-  });
+  const isFirstGame = targetGame.game_number === 1;
 
-  if (previousGames.length === 0) {
+  const previousGames = isFirstGame
+    ? []
+    : await db.query.game.findMany({
+        where: and(
+          eq(game.phase_id, targetGame.phase_id),
+          eq(game.bracket_id, targetGame.bracket_id),
+          eq(game.game_number, targetGame.game_number - 1),
+        ),
+        with: {
+          results: true,
+          bracket: true,
+        },
+      });
+
+  if (!isFirstGame && previousGames.length === 0) {
     throw new Error("Partie precedente introuvable pour recalculer le seeding");
   }
 
-  const allPreviousCompleted = previousGames.every((g) => g.results.length > 0);
-  if (!allPreviousCompleted) {
-    throw new Error(
-      "La partie precedente doit etre completement terminee avant un reset de seeding",
+  if (!isFirstGame) {
+    const allPreviousCompleted = previousGames.every(
+      (g) => g.results.length > 0,
     );
+    if (!allPreviousCompleted) {
+      throw new Error(
+        "La partie precedente doit etre completement terminee avant un reset de seeding",
+      );
+    }
   }
 
   let bracketLeaderboard = await getLeaderboard(
@@ -435,14 +438,23 @@ export async function resetGameSeeding(gameId: string) {
     (entry) => !forfeitedPlayerIds.has(entry.player_id),
   );
 
-  const previousGamePlayerIds = Array.from(
-    new Set(
-      previousGames
-        .flatMap((g) => g.results ?? [])
-        .map((result) => result.player_id)
-        .filter((playerId): playerId is string => !!playerId),
-    ),
-  ).filter((playerId) => !forfeitedPlayerIds.has(playerId));
+  const previousGamePlayerIds = isFirstGame
+    ? Array.from(
+        new Set(
+          siblingGames
+            .flatMap((g) => g.lobbyPlayers ?? [])
+            .map((lp) => lp.player_id)
+            .filter((playerId): playerId is string => !!playerId),
+        ),
+      ).filter((playerId) => !forfeitedPlayerIds.has(playerId))
+    : Array.from(
+        new Set(
+          previousGames
+            .flatMap((g) => g.results ?? [])
+            .map((result) => result.player_id)
+            .filter((playerId): playerId is string => !!playerId),
+        ),
+      ).filter((playerId) => !forfeitedPlayerIds.has(playerId));
 
   if (filteredLeaderboard.length === 0 && previousGamePlayerIds.length === 0) {
     throw new Error("Impossible de recalculer le seeding sans leaderboard");
@@ -968,6 +980,29 @@ export async function checkAndCreateNextGame(
       continue;
     }
 
+    // Phase 3 Amateur special flow:
+    // - Game 2 is auto-created after Game 1
+    // - Games 3-4 are auto-created with only top 8 after Game 2 is fully completed
+    if (
+      phaseData.order_index === 3 &&
+      bracketName === "amateur" &&
+      currentGameNumber === 2
+    ) {
+      const result = await createPhase3AmateurTop8Games(phaseId, bracketId);
+      if (result.created && result.gamesCreated) {
+        totalGamesCreated += result.gamesCreated;
+      }
+      continue;
+    }
+
+    if (
+      phaseData.order_index === 3 &&
+      bracketName === "amateur" &&
+      currentGameNumber >= 3
+    ) {
+      continue;
+    }
+
     const result = await createNextGameWithReseed(
       phaseId,
       bracketId,
@@ -1060,6 +1095,70 @@ async function createPhase4MasterTop16Games(
       await db.insert(lobbyPlayer).values(lobbyPlayerAssignments);
       gamesCreated++;
     }
+  }
+
+  return { created: gamesCreated > 0, gamesCreated };
+}
+
+async function createPhase3AmateurTop8Games(
+  phaseId: string,
+  bracketId: string,
+): Promise<{ created: boolean; gamesCreated?: number }> {
+  const existingGames3 = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, phaseId),
+      eq(game.bracket_id, bracketId),
+      eq(game.game_number, 3),
+    ),
+  });
+
+  if (existingGames3.length > 0) {
+    return { created: false, gamesCreated: 0 };
+  }
+
+  const leaderboard = await getLeaderboard(phaseId, bracketId);
+  const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phaseId);
+  const top8 = leaderboard
+    .filter((entry) => !forfeitedPlayerIds.has(entry.player_id))
+    .slice(0, 8);
+
+  if (top8.length < 8) {
+    throw new Error(
+      `Phase 3 amateur requires 8 players for games 3-4, found ${top8.length}`,
+    );
+  }
+
+  const playerIds = top8.map((entry) => entry.player_id);
+  const playersData = await db.query.player.findMany({
+    where: inArray(player.id, playerIds),
+  });
+  const playersMap = new Map(playersData.map((p) => [p.id, p]));
+
+  const seededPlayers: SeededPlayer[] = top8.map((entry, index) => {
+    const playerData = playersMap.get(entry.player_id);
+    if (!playerData) {
+      throw new Error(`Player ${entry.player_id} not found`);
+    }
+
+    return {
+      player_id: entry.player_id,
+      name: entry.player_name,
+      riot_id: entry.riot_id,
+      tier: playerData.tier!,
+      division: playerData.division as any,
+      league_points: playerData.league_points!,
+      seed: index + 1,
+    };
+  });
+
+  let gamesCreated = 0;
+  for (const gameNumber of [3, 4]) {
+    gamesCreated += await createGamesFromSeededPlayers({
+      phaseId,
+      bracketId,
+      gameNumber,
+      seededPlayers,
+    });
   }
 
   return { created: gamesCreated > 0, gamesCreated };
