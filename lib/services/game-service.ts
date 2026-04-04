@@ -167,6 +167,9 @@ export async function submitGameResults(
     (result) => (result.result_status ?? "normal") === "forfeit",
   );
   const forfeitedPlayerIds = forfeitResults.map((result) => result.player_id);
+  const nonForfeitedPlayerIds = gameResults
+    .filter((result) => (result.result_status ?? "normal") !== "forfeit")
+    .map((result) => result.player_id);
 
   // Validation: normal placements must be in [1..normalPlayersCount]
   const normalPlayersCount = normalResults.length;
@@ -213,16 +216,30 @@ export async function submitGameResults(
     // Insert new results
     await tx.insert(results).values(resultsWithPoints);
 
-    if (phaseInfo?.tournament_id && forfeitedPlayerIds.length > 0) {
-      await tx
-        .update(tournamentRegistration)
-        .set({ forfeited_at: new Date(), updatedAt: new Date() })
-        .where(
-          and(
-            eq(tournamentRegistration.tournament_id, phaseInfo.tournament_id),
-            inArray(tournamentRegistration.player_id, forfeitedPlayerIds),
-          ),
-        );
+    if (phaseInfo?.tournament_id) {
+      if (nonForfeitedPlayerIds.length > 0) {
+        await tx
+          .update(tournamentRegistration)
+          .set({ forfeited_at: null, updatedAt: new Date() })
+          .where(
+            and(
+              eq(tournamentRegistration.tournament_id, phaseInfo.tournament_id),
+              inArray(tournamentRegistration.player_id, nonForfeitedPlayerIds),
+            ),
+          );
+      }
+
+      if (forfeitedPlayerIds.length > 0) {
+        await tx
+          .update(tournamentRegistration)
+          .set({ forfeited_at: new Date(), updatedAt: new Date() })
+          .where(
+            and(
+              eq(tournamentRegistration.tournament_id, phaseInfo.tournament_id),
+              inArray(tournamentRegistration.player_id, forfeitedPlayerIds),
+            ),
+          );
+      }
     }
 
     // Update game status to completed

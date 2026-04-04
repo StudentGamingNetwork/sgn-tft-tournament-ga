@@ -342,8 +342,8 @@ describe("gameService", () => {
 
       await submitGameResults(validGameId, resultsWithForfeit);
 
-      expect(txUpdate).toHaveBeenCalledTimes(3);
-      expect(txUpdateWhere).toHaveBeenCalledTimes(3);
+      expect(txUpdate).toHaveBeenCalledTimes(4);
+      expect(txUpdateWhere).toHaveBeenCalledTimes(4);
     });
 
     it("rejette un forfait avec placement non nul", async () => {
