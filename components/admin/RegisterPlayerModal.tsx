@@ -200,11 +200,9 @@ export function RegisterPlayerModal({
     const validateForm = (): boolean => {
         const newErrors: Record<string, string> = {};
 
-        if (formData.name.trim().length > 0) {
-            const nameValidation = validatePlayerName(formData.name);
-            if (!nameValidation.valid) {
-                newErrors.name = nameValidation.error!;
-            }
+        const nameValidation = validatePlayerName(formData.name);
+        if (!nameValidation.valid) {
+            newErrors.name = nameValidation.error!;
         }
 
         const riotIdValidation = validateRiotId(formData.riot_id);
@@ -298,10 +296,11 @@ export function RegisterPlayerModal({
                             placeholder="Jean Dupont"
                             value={formData.name}
                             onValueChange={(value) => handleChange("name", value)}
+                            isRequired
                             errorMessage={errors.name}
                             isInvalid={!!errors.name}
                             isDisabled={existingPlayerFound}
-                            description="Optionnel: si vide, le nom du Riot ID sera utilisé"
+                            description="Requis"
                         />
 
                         {/* Riot ID */}

@@ -284,7 +284,7 @@ describe("playerService", () => {
       expect(result[0].team_id).toBe("team-id");
     });
 
-    it("utilise le Riot ID comme fallback si name est absent", async () => {
+    it("refuse l'import si name est absent", async () => {
       const csvData: PlayerCSVImport[] = [
         {
           riot_id: "NoNamePlayer#NA1",
@@ -299,17 +299,15 @@ describe("playerService", () => {
       const returningMock = vi.fn().mockResolvedValue([
         {
           id: "player-id",
-          name: "NoNamePlayer",
           ...csvData[0],
         },
       ]);
       const valuesMock = vi.fn().mockReturnValue({ returning: returningMock });
       (db.insert as any).mockReturnValue({ values: valuesMock });
 
-      await importPlayersFromCSV(csvData);
-
-      const insertCall = valuesMock.mock.calls[0][0];
-      expect(insertCall.name).toBe("NoNamePlayer");
+      await expect(importPlayersFromCSV(csvData)).rejects.toThrow(
+        "Le nom du joueur est requis",
+      );
     });
   });
 });

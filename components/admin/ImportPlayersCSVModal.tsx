@@ -36,7 +36,7 @@ export function ImportPlayersCSVModal({
         label: string;
         required: boolean;
     }> = [
-        { key: "name", label: "name", required: false },
+        { key: "name", label: "name", required: true },
         { key: "riot_id", label: "riot_id", required: true },
         { key: "tier", label: "tier", required: false },
         { key: "division", label: "division", required: false },
@@ -210,7 +210,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                 name,riot_id,tier,division,league_points,discord_tag,team_name
                             </code>
                             <ul className="text-sm mt-2 space-y-1 text-default-500">
-                                <li>• <strong>name</strong> : Nom du joueur (optionnel, fallback Riot ID)</li>
+                                <li>• <strong>name</strong> : Nom du joueur (requis)</li>
                                 <li>• <strong>riot_id</strong> : Format Nom#TAG (requis)</li>
                                 <li>• <strong>tier</strong> : IRON à CHALLENGER (optionnel)</li>
                                 <li>
@@ -287,7 +287,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                 </div>
                                 {!hasRequiredMapping && (
                                     <p className="text-danger text-sm mt-3">
-                                        Les colonnes obligatoires (riot_id) doivent être mappées.
+                                        Les colonnes obligatoires (name, riot_id) doivent être mappées.
                                     </p>
                                 )}
                             </Card>
@@ -336,8 +336,8 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                     <table className="w-full text-sm">
                                         <thead className="bg-secondary/40 sticky top-0">
                                             <tr>
-                                                <th className="p-2 text-left">Nom</th>
                                                 <th className="p-2 text-left">Pseudo TR</th>
+                                                <th className="p-2 text-left">Riot ID</th>
                                                 <th className="p-2 text-left">Tier</th>
                                                 <th className="p-2 text-left">Division</th>
                                                 <th className="p-2 text-left">LP</th>
@@ -351,7 +351,7 @@ Pierre Durand,PierreD#9999,PLATINUM,I,67,pierred#1111,Team Beta`;
                                                     className="border-b border-divider"
                                                 >
                                                     <td className="p-2">{player.name}</td>
-                                                    <td className="p-2">{player.name || "-"}</td>
+                                                    <td className="p-2">{player.riot_id || "-"}</td>
                                                     <td className="p-2">{player.tier}</td>
                                                     <td className="p-2">{player.division || "-"}</td>
                                                     <td className="p-2">{player.league_points}</td>

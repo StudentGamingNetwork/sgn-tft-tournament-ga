@@ -112,9 +112,20 @@ export async function importPlayersFromCSV(csvData: PlayerCSVImport[]) {
   const createdPlayers = [];
 
   for (const playerData of csvData) {
+    const effectiveName = (playerData.name || "").trim();
+    if (!effectiveName) {
+      throw new Error("Le nom du joueur est requis");
+    }
+
     // Check if player already exists
     const existing = await getPlayerByRiotId(playerData.riot_id);
     if (existing) {
+      if (existing.name !== effectiveName) {
+        await updatePlayer(existing.id, {
+          name: effectiveName,
+        });
+      }
+
       // Update existing player
       if (playerData.tier !== undefined) {
         const updated = await updatePlayerRank(existing.id, {
@@ -152,13 +163,6 @@ export async function importPlayersFromCSV(csvData: PlayerCSVImport[]) {
     }
 
     // Create player
-    const fallbackName = playerData.riot_id.split("#")[0]?.trim();
-    const effectiveName = (
-      playerData.name?.trim() ||
-      fallbackName ||
-      ""
-    ).trim();
-
     const newPlayer = await createPlayer({
       name: effectiveName,
       riot_id: playerData.riot_id,

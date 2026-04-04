@@ -151,6 +151,7 @@ describe("validation utils", () => {
 
       expect(result.success).toBe(false);
       expect(result.errors?.[0].message).toContain("Colonnes manquantes");
+      expect(result.errors?.[0].message).toContain("name");
       expect(result.errors?.[0].message).toContain("riot_id");
     });
 
@@ -184,15 +185,15 @@ describe("validation utils", () => {
       expect(result.data?.[0].league_points).toBeUndefined();
     });
 
-    it("accepte un CSV sans colonne name", () => {
+    it("refuse un CSV sans colonne name", () => {
       const csv = ["riot_id,discord_tag", "PlayerOne#EUW,player.one"].join(
         "\n",
       );
 
       const result = parsePlayersCSV(csv);
 
-      expect(result.success).toBe(true);
-      expect(result.data?.[0].name).toBe("PlayerOne");
+      expect(result.success).toBe(false);
+      expect(result.errors?.[0].message).toContain("name");
     });
   });
 });

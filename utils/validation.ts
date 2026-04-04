@@ -20,7 +20,10 @@ export const PLAYER_CSV_COLUMNS = [
 
 export type PlayerCsvColumn = (typeof PLAYER_CSV_COLUMNS)[number];
 
-export const PLAYER_CSV_REQUIRED_COLUMNS: PlayerCsvColumn[] = ["riot_id"];
+export const PLAYER_CSV_REQUIRED_COLUMNS: PlayerCsvColumn[] = [
+  "name",
+  "riot_id",
+];
 
 export type PlayerCsvColumnMapping = Record<PlayerCsvColumn, string | null>;
 
@@ -369,22 +372,17 @@ export function parsePlayersCSV(
         });
       }
 
-      // Validate name only when provided
+      // Validate name (required)
       const rawPlayerName = mappedValue("name");
-      if (rawPlayerName) {
-        const nameValidation = validatePlayerName(rawPlayerName);
-        if (!nameValidation.valid) {
-          errors.push({
-            line: lineNumber,
-            field: "name",
-            value: rawPlayerName,
-            message: nameValidation.error!,
-          });
-        }
+      const nameValidation = validatePlayerName(rawPlayerName);
+      if (!nameValidation.valid) {
+        errors.push({
+          line: lineNumber,
+          field: "name",
+          value: rawPlayerName,
+          message: nameValidation.error!,
+        });
       }
-
-      const fallbackName = riotId.split("#")[0]?.trim();
-      const playerName = rawPlayerName || fallbackName;
 
       const rawTier = mappedValue("tier");
       const tier = rawTier ? (rawTier.toUpperCase() as TierType) : undefined;
@@ -483,7 +481,7 @@ export function parsePlayersCSV(
       // If no errors for this row, add to data
       if (!errors.some((e) => e.line === lineNumber)) {
         data.push({
-          name: playerName,
+          name: rawPlayerName.trim(),
           riot_id: riotId,
           tier,
           division,

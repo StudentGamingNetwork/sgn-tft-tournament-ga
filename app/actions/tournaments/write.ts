@@ -377,12 +377,11 @@ export async function createPlayerAndRegister(
     await requireAuthenticatedUser();
     await requireTournamentNotStarted(tournamentId);
 
-    const fallbackName = playerData.riot_id.split("#")[0]?.trim();
-    const effectiveName = (
-      playerData.name?.trim() ||
-      fallbackName ||
-      ""
-    ).trim();
+    const effectiveName = (playerData.name || "").trim();
+
+    if (!effectiveName) {
+      return { success: false, error: "Le nom du joueur est requis" };
+    }
 
     const validation = validatePlayerData({
       name: effectiveName,
@@ -488,8 +487,15 @@ export async function importPlayersAndRegisterToTournament(
     for (const playerData of csvData) {
       try {
         const existingPlayer = await getPlayerByRiotId(playerData.riot_id);
+        const importedName = (playerData.name || "").trim();
 
         if (existingPlayer) {
+          if (importedName && existingPlayer.name !== importedName) {
+            await updatePlayer(existingPlayer.id, {
+              name: importedName,
+            });
+          }
+
           const existingRegistration =
             await db.query.tournamentRegistration.findFirst({
               where: sql`${tournamentRegistration.tournament_id} = ${tournamentId} AND ${tournamentRegistration.player_id} = ${existingPlayer.id}`,
@@ -503,7 +509,10 @@ export async function importPlayersAndRegisterToTournament(
         } else {
           const createResult = await createPlayerAndRegister(
             tournamentId,
-            playerData,
+            {
+              ...playerData,
+              name: importedName,
+            },
           );
 
           if (createResult.success) {
