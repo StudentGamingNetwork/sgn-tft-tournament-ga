@@ -518,6 +518,11 @@ export function PublicTournamentPhasesView() {
                                 <TableBody>
                                   {participantsByRankTab[rankTab.key].flatMap((player, index) => {
                                     const displayedGlobalRank = player.current_rank;
+                                    const top4OrBetterCount =
+                                      player.top1_count +
+                                      player.top2_count +
+                                      player.top3_count +
+                                      player.top4_count;
 
                                     const rows = [
                                       <TableRow key={player.player_id}>
@@ -525,7 +530,7 @@ export function PublicTournamentPhasesView() {
                                         <TableCell>{player.player_name || "-"}</TableCell>
                                         <TableCell>{player.total_points}</TableCell>
                                         <TableCell>{player.top1_count}</TableCell>
-                                        <TableCell>{player.top4_or_better_count}</TableCell>
+                                        <TableCell>{top4OrBetterCount}</TableCell>
                                         <TableCell>{player.top2_count}</TableCell>
                                         <TableCell>{player.top3_count}</TableCell>
                                         <TableCell>{player.top4_count}</TableCell>

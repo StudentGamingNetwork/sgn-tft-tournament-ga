@@ -16,7 +16,10 @@ import {
 import { eq, and, inArray, sql, gt } from "drizzle-orm";
 import type { GameResult, StatusType, SeededPlayer } from "@/types/tournament";
 import { calculatePoints } from "@/utils/tie-breakers";
-import { getLeaderboard } from "@/lib/services/scoring-service";
+import {
+  getCumulativeLeaderboard,
+  getLeaderboard,
+} from "@/lib/services/scoring-service";
 import {
   generateSnakeDraftMatrix,
   applySeedingMatrix,
@@ -1112,7 +1115,36 @@ async function createNextGameWithReseed(
   }
 
   // 1. Get current leaderboard for THIS BRACKET ONLY
-  const leaderboard = await getLeaderboard(phaseId, bracketId);
+  let leaderboard = await getLeaderboard(phaseId, bracketId);
+
+  // Phase 2 special case: reseeding for next games must follow cumulative P1+P2 order
+  // (same ordering basis used by public ranking), restricted to players still in this bracket.
+  if (phaseOrderIndex === 2) {
+    const currentPhase = await db.query.phase.findFirst({
+      where: eq(phase.id, phaseId),
+    });
+
+    if (currentPhase?.tournament_id) {
+      const phase1 = await db.query.phase.findFirst({
+        where: and(
+          eq(phase.tournament_id, currentPhase.tournament_id),
+          eq(phase.order_index, 1),
+        ),
+      });
+
+      if (phase1) {
+        const bracketPlayerIds = new Set(leaderboard.map((e) => e.player_id));
+        const cumulativeLeaderboard = await getCumulativeLeaderboard([
+          phase1.id,
+          phaseId,
+        ]);
+
+        leaderboard = cumulativeLeaderboard.filter((entry) =>
+          bracketPlayerIds.has(entry.player_id),
+        );
+      }
+    }
+  }
   const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phaseId);
   const filteredLeaderboard = leaderboard.filter(
     (entry) => !forfeitedPlayerIds.has(entry.player_id),
