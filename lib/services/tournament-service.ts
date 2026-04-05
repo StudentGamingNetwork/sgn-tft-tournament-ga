@@ -18,13 +18,12 @@
  */
 
 import { db } from "@/lib/db";
-import { tournament, phase, bracket, game } from "@/models/schema";
+import { tournament, phase, bracket, game, lobbyPlayer } from "@/models/schema";
 import { eq, and } from "drizzle-orm";
 import type { BracketType } from "@/types/tournament";
 import {
   seedAndCreateFirstGame,
   seedAndCreateFirstGameFromLeaderboard,
-  seedPlayersForPhase,
   seedPlayersBasedOnLeaderboard,
   assignPlayersToLobbies,
 } from "./seeding-service";
@@ -172,6 +171,37 @@ async function assertPhaseCanBeStarted(
   if (previousStatus !== "completed") {
     throw new Error("Previous phase is not completed");
   }
+}
+
+async function getInitialSeedsByPhase(
+  phaseId: string,
+): Promise<Map<string, number>> {
+  const firstGames = await db.query.game.findMany({
+    where: and(eq(game.phase_id, phaseId), eq(game.game_number, 1)),
+    with: {
+      lobbyPlayers: true,
+    },
+  });
+
+  const seedByPlayer = new Map<string, number>();
+
+  for (const phaseGame of firstGames) {
+    for (const assignment of phaseGame.lobbyPlayers ?? []) {
+      const playerId = assignment.player_id;
+      const seed = assignment.seed;
+
+      if (!playerId || !seed) {
+        continue;
+      }
+
+      const current = seedByPlayer.get(playerId);
+      if (current === undefined || seed < current) {
+        seedByPlayer.set(playerId, seed);
+      }
+    }
+  }
+
+  return seedByPlayer;
 }
 
 /**
@@ -469,18 +499,65 @@ export async function startPhase3FromPhase1And2(
     throw new Error('Phase 3 must have both "master" and "amateur" brackets');
   }
 
-  // Seed Master from ordered leaderboard (P1 top16 then P2 top16), reseeded 1..N
-  const masterSeededPlayers = await seedPlayersBasedOnLeaderboard(
-    phase3MasterOrderedLeaderboard,
-    false,
+  // Seed Master for lobby distribution from ordered leaderboard (P1 top16 then P2 top16).
+  // Then restore preserved displayed seeds (Phase 1 ranks for P1 qualifiers,
+  // historical Phase 2 initial seeds for P2 qualifiers).
+  const masterSeededPlayersForDistribution =
+    await seedPlayersBasedOnLeaderboard(phase3MasterOrderedLeaderboard, false);
+  const phase2InitialSeedByPlayer = await getInitialSeedsByPhase(phase2Id);
+  const phase3MasterSeedByPlayer = new Map<string, number>();
+
+  phase1MasterQualifiers.forEach((entry, index) => {
+    phase3MasterSeedByPlayer.set(entry.player_id, index + 1);
+  });
+
+  phase2MasterQualifiers.forEach((entry, index) => {
+    const fallbackSeed = PHASE3_MASTER_FROM_P1 + index + 1;
+    phase3MasterSeedByPlayer.set(
+      entry.player_id,
+      phase2InitialSeedByPlayer.get(entry.player_id) ?? fallbackSeed,
+    );
+  });
+
+  const masterSeededPlayers = masterSeededPlayersForDistribution.map(
+    (player) => ({
+      ...player,
+      seed: phase3MasterSeedByPlayer.get(player.player_id) ?? player.seed,
+    }),
   );
+
   const masterGames = await assignPlayersToLobbies(
     phase3Id,
     masterBracket.id,
     1,
-    masterSeededPlayers,
+    masterSeededPlayersForDistribution,
     true, // Use snake seeding for Master bracket
   );
+
+  for (const created of masterGames as Array<{
+    game: { id: string };
+    assignment?: { players?: Array<{ player_id: string; seed: number }> };
+  }>) {
+    for (const assignedPlayer of created.assignment?.players ?? []) {
+      const preservedSeed = phase3MasterSeedByPlayer.get(
+        assignedPlayer.player_id,
+      );
+
+      if (!preservedSeed || preservedSeed === assignedPlayer.seed) {
+        continue;
+      }
+
+      await db
+        .update(lobbyPlayer)
+        .set({ seed: preservedSeed })
+        .where(
+          and(
+            eq(lobbyPlayer.game_id, created.game.id),
+            eq(lobbyPlayer.player_id, assignedPlayer.player_id),
+          ),
+        );
+    }
+  }
 
   // Seed Amateur from ordered P2 finish positions, reseeded 1..N
   const amateurSeededPlayers = phase3AmateurOrderedLeaderboard.length
@@ -742,23 +819,21 @@ export async function startPhase5FromPhase4(
   const masterLeaderboard = await getLeaderboard(phase4Id, phase4Master.id);
   const amateurLeaderboard = await getLeaderboard(phase4Id, phase4Amateur.id);
 
-  // Phase 5 Challenger: top P4 Master
-  const challengerPlayerIds = masterLeaderboard
-    .slice(0, PHASE5_CHALLENGER_FROM_P4_MASTER)
-    .map((p) => p.player_id);
+  // Phase 5 seeding must come from Phase 4 results (not player rank/MMR).
+  const phase5ChallengerOrderedLeaderboard = masterLeaderboard.slice(
+    0,
+    PHASE5_CHALLENGER_FROM_P4_MASTER,
+  );
 
-  // Phase 5 Master: next block from P4 Master
-  const phase5MasterPlayerIds = masterLeaderboard
-    .slice(
-      PHASE5_CHALLENGER_FROM_P4_MASTER,
-      PHASE5_CHALLENGER_FROM_P4_MASTER + PHASE5_MASTER_FROM_P4_MASTER,
-    )
-    .map((p) => p.player_id);
+  const phase5MasterOrderedLeaderboard = masterLeaderboard.slice(
+    PHASE5_CHALLENGER_FROM_P4_MASTER,
+    PHASE5_CHALLENGER_FROM_P4_MASTER + PHASE5_MASTER_FROM_P4_MASTER,
+  );
 
-  // Phase 5 Amateur: top P4 Amateur
-  const phase5AmateurPlayerIds = amateurLeaderboard
-    .slice(0, PHASE5_AMATEUR_FROM_P4_AMATEUR)
-    .map((p) => p.player_id);
+  const phase5AmateurOrderedLeaderboard = amateurLeaderboard.slice(
+    0,
+    PHASE5_AMATEUR_FROM_P4_AMATEUR,
+  );
 
   // Obtenir les brackets de Phase 5
   const phase5Brackets = await db.query.bracket.findMany({
@@ -776,8 +851,11 @@ export async function startPhase5FromPhase4(
   }
 
   // Seed et créer games (8 joueurs = 1 lobby chacun)
-  const challengerSeededPlayers = challengerPlayerIds.length
-    ? await seedPlayersForPhase(phase5Id, challengerPlayerIds)
+  const challengerSeededPlayers = phase5ChallengerOrderedLeaderboard.length
+    ? await seedPlayersBasedOnLeaderboard(
+        phase5ChallengerOrderedLeaderboard,
+        false,
+      )
     : [];
   const challengerGames = challengerSeededPlayers.length
     ? await assignPlayersToLobbies(
@@ -788,8 +866,8 @@ export async function startPhase5FromPhase4(
       )
     : [];
 
-  const masterSeededPlayers = phase5MasterPlayerIds.length
-    ? await seedPlayersForPhase(phase5Id, phase5MasterPlayerIds)
+  const masterSeededPlayers = phase5MasterOrderedLeaderboard.length
+    ? await seedPlayersBasedOnLeaderboard(phase5MasterOrderedLeaderboard, false)
     : [];
   const masterGames = masterSeededPlayers.length
     ? await assignPlayersToLobbies(
@@ -800,8 +878,11 @@ export async function startPhase5FromPhase4(
       )
     : [];
 
-  const amateurSeededPlayers = phase5AmateurPlayerIds.length
-    ? await seedPlayersForPhase(phase5Id, phase5AmateurPlayerIds)
+  const amateurSeededPlayers = phase5AmateurOrderedLeaderboard.length
+    ? await seedPlayersBasedOnLeaderboard(
+        phase5AmateurOrderedLeaderboard,
+        false,
+      )
     : [];
   const amateurGames = amateurSeededPlayers.length
     ? await assignPlayersToLobbies(
