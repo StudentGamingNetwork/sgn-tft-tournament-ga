@@ -36,7 +36,6 @@ import {
   PHASE4_MASTER_FROM_P3_MASTER,
   PHASE4_AMATEUR_FROM_P3_MASTER,
   PHASE4_AMATEUR_FROM_P3_AMATEUR,
-  PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
 } from "@/lib/services/phase-constants";
 
 function shouldUseMasterSnakeSeeding(
@@ -336,12 +335,10 @@ async function createGamesFromSeededPlayers(params: {
     return 0;
   }
 
-  const startSeed = Math.min(...seededPlayers.map((p) => p.seed));
-  const seedingMatrix = useSnakeSeeding
-    ? generateSnakeSeedMatrix(seededPlayers.length, startSeed)
-    : generateSnakeDraftMatrix(seededPlayers.length, startSeed);
-
-  const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
+  const assignments = buildLobbyAssignmentsFromSeededPlayers(
+    seededPlayers,
+    useSnakeSeeding,
+  );
 
   let gamesCreated = 0;
   for (const assignment of assignments) {
@@ -367,6 +364,22 @@ async function createGamesFromSeededPlayers(params: {
   }
 
   return gamesCreated;
+}
+
+function buildLobbyAssignmentsFromSeededPlayers(
+  seededPlayers: SeededPlayer[],
+  useSnakeSeeding: boolean,
+) {
+  if (seededPlayers.length === 0) {
+    return [];
+  }
+
+  const startSeed = Math.min(...seededPlayers.map((p) => p.seed));
+  const seedingMatrix = useSnakeSeeding
+    ? generateSnakeSeedMatrix(seededPlayers.length, startSeed)
+    : generateSnakeDraftMatrix(seededPlayers.length, startSeed);
+
+  return applySeedingMatrix(seededPlayers, seedingMatrix);
 }
 
 async function getBracketGameOnePlayerPool(
@@ -581,30 +594,14 @@ async function getInitialGameOneSeeding(
 
       const topMaster = availableMaster.slice(0, PHASE4_MASTER_FROM_P3_MASTER);
       const topAmateur = availableAmateur.slice(0, PHASE4_AMATEUR_FROM_P3_AMATEUR);
-      const amateurWildcards = availableAmateur.slice(
-        PHASE4_AMATEUR_FROM_P3_AMATEUR,
-        PHASE4_AMATEUR_FROM_P3_AMATEUR +
-          PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
-      );
-
-      const phase4AmateurTarget =
-        PHASE4_AMATEUR_FROM_P3_MASTER +
-        PHASE4_AMATEUR_FROM_P3_AMATEUR +
-        PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR;
-      const remainingAmateurSlots = Math.max(
-        phase4AmateurTarget - topAmateur.length - amateurWildcards.length,
-        0,
-      );
-
       const relegatedMaster = availableMaster.slice(
         topMaster.length,
-        topMaster.length + remainingAmateurSlots,
+        topMaster.length + PHASE4_AMATEUR_FROM_P3_MASTER,
       );
 
       const ordered = [
         ...relegatedMaster,
         ...topAmateur,
-        ...amateurWildcards,
       ];
 
       return {
@@ -646,8 +643,10 @@ export async function resetGameSeeding(gameId: string) {
     throw new Error("Aucune partie a reset pour ce bracket");
   }
 
+  const isFirstGame = targetGame.game_number === 1;
+
   const hasAnyResult = siblingGames.some((g) => g.results.length > 0);
-  if (hasAnyResult) {
+  if (hasAnyResult && !isFirstGame) {
     throw new Error(
       "Impossible de reset le seeding: des resultats existent deja sur cette partie",
     );
@@ -667,8 +666,6 @@ export async function resetGameSeeding(gameId: string) {
     );
   }
 
-  const isFirstGame = targetGame.game_number === 1;
-
   if (isFirstGame) {
     const initialSeeding = await getInitialGameOneSeeding(
       targetGame.phase_id,
@@ -676,20 +673,83 @@ export async function resetGameSeeding(gameId: string) {
     );
 
     if (initialSeeding && initialSeeding.seededPlayers.length > 0) {
-      await db.delete(game).where(
-        inArray(
-          game.id,
-          siblingGames.map((g) => g.id),
+      if (!hasAnyResult) {
+        await db.delete(game).where(
+          inArray(
+            game.id,
+            siblingGames.map((g) => g.id),
+          ),
+        );
+
+        const gamesCreated = await createGamesFromSeededPlayers({
+          phaseId: targetGame.phase_id,
+          bracketId: targetGame.bracket_id,
+          gameNumber: targetGame.game_number,
+          seededPlayers: initialSeeding.seededPlayers,
+          useSnakeSeeding: initialSeeding.useSnakeSeeding,
+        });
+
+        return {
+          reset: gamesCreated > 0,
+          gamesCreated,
+        };
+      }
+
+      const completedGames = siblingGames.filter((g) => g.results.length > 0);
+      const pendingGames = siblingGames.filter((g) => g.results.length === 0);
+
+      if (pendingGames.length === 0) {
+        throw new Error(
+          "Toutes les lobbies de cette partie ont deja des resultats",
+        );
+      }
+
+      const lockedPlayerIds = new Set(
+        completedGames.flatMap((g) =>
+          g.lobbyPlayers
+            .map((lp) => lp.player_id)
+            .filter((playerId): playerId is string => !!playerId),
         ),
       );
 
-      const gamesCreated = await createGamesFromSeededPlayers({
-        phaseId: targetGame.phase_id,
-        bracketId: targetGame.bracket_id,
-        gameNumber: targetGame.game_number,
-        seededPlayers: initialSeeding.seededPlayers,
-        useSnakeSeeding: initialSeeding.useSnakeSeeding,
-      });
+      const assignments = buildLobbyAssignmentsFromSeededPlayers(
+        initialSeeding.seededPlayers,
+        initialSeeding.useSnakeSeeding,
+      );
+
+      const pendingAssignments = assignments
+        .map((assignment) => ({
+          ...assignment,
+          players: assignment.players.filter(
+            (seededPlayer: any) => !lockedPlayerIds.has(seededPlayer.player_id),
+          ),
+        }))
+        .filter((assignment) => assignment.players.length > 0);
+
+      await db
+        .delete(game)
+        .where(inArray(game.id, pendingGames.map((g) => g.id)));
+
+      let gamesCreated = 0;
+      for (const assignment of pendingAssignments) {
+        const newGame = await createGame({
+          bracket_id: targetGame.bracket_id,
+          phase_id: targetGame.phase_id,
+          lobby_name: assignment.lobby_name,
+          game_number: targetGame.game_number,
+        });
+
+        const lobbyPlayerAssignments = assignment.players.map(
+          (seededPlayer: any) => ({
+            game_id: newGame.id,
+            player_id: seededPlayer.player_id,
+            seed: seededPlayer.seed,
+          }),
+        );
+
+        await db.insert(lobbyPlayer).values(lobbyPlayerAssignments);
+        gamesCreated++;
+      }
 
       return {
         reset: gamesCreated > 0,

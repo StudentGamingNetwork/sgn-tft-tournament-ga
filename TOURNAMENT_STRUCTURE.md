@@ -17,7 +17,7 @@ Phase 3 (32 Master + 20 Amateur)
     ↓
 Phase 4 (16 Master + 24 Amateur)
     ├── Master (16): Top 16 P3 Master
-  └── Amateur (24, RESET): Bottom 14 P3 Master + Top 8 P3 Amateur + 2 wildcards P3 Amateur
+  └── Amateur (24, RESET): Bottom 16 P3 Master + Top 8 P3 Amateur
     ↓
 Phase 5 (24 joueurs, 3 brackets - FINALES)
     ├── Challenger (8): Top 8 P4 Master
@@ -69,7 +69,7 @@ Phase 5 (24 joueurs, 3 brackets - FINALES)
 - **Points** : RESET (nouveau départ)
 - **Transition** :
   - Top 16 Master → Phase 4 Master (16 joueurs)
-  - Bottom 14 Master + Top 8 Amateur + 2 wildcards (rangs 9-10 Amateur) → Phase 4 Amateur (24 joueurs, RESET)
+  - Bottom 16 Master + Top 8 Amateur → Phase 4 Amateur (24 joueurs, RESET)
 
 ### Phase 4
 

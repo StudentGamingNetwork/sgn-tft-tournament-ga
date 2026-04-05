@@ -35,7 +35,6 @@ import {
   PHASE3_MASTER_FROM_P2,
   PHASE4_MASTER_FROM_P3_MASTER,
   PHASE4_AMATEUR_FROM_P3_AMATEUR,
-  PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
   PHASE4_AMATEUR_FROM_P3_MASTER,
 } from "./phase-constants";
 
@@ -638,36 +637,19 @@ export async function startPhase4FromPhase3(
     PHASE4_MASTER_FROM_P3_MASTER,
   );
 
-  // Phase 4 Amateur: top 8 P3 Amateur + 2 wildcards (rangs 9-10),
-  // complete ensuite avec les relegues Master pour atteindre 24 joueurs.
+  // Phase 4 Amateur: bottom 16 P3 Master + top 8 P3 Amateur.
   const topAmateur = availableAmateur.slice(
     0,
     PHASE4_AMATEUR_FROM_P3_AMATEUR,
   );
-  const amateurWildcards = availableAmateur.slice(
-    PHASE4_AMATEUR_FROM_P3_AMATEUR,
-    PHASE4_AMATEUR_FROM_P3_AMATEUR + PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
-  );
-
-  const phase4AmateurTarget =
-    PHASE4_AMATEUR_FROM_P3_MASTER +
-    PHASE4_AMATEUR_FROM_P3_AMATEUR +
-    PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR;
-
-  const remainingAmateurSlots = Math.max(
-    phase4AmateurTarget - topAmateur.length - amateurWildcards.length,
-    0,
-  );
-
   const relegatedMaster = availableMaster.slice(
     topMasterLeaderboard.length,
-    topMasterLeaderboard.length + remainingAmateurSlots,
+    topMasterLeaderboard.length + PHASE4_AMATEUR_FROM_P3_MASTER,
   );
 
   const phase4AmateurOrderedLeaderboard = [
     ...relegatedMaster,
     ...topAmateur,
-    ...amateurWildcards,
   ];
 
   // Obtenir les brackets de Phase 4
@@ -728,7 +710,7 @@ export async function startPhase4FromPhase3(
       bracket: phase4Amateur,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
-      source: `Bottom ${relegatedMaster.length} P3 Master + Top ${topAmateur.length} P3 Amateur + ${amateurWildcards.length} wildcards P3 Amateur (RESET)`,
+      source: `Bottom ${relegatedMaster.length} P3 Master + Top ${topAmateur.length} P3 Amateur (RESET)`,
     },
   };
 }
