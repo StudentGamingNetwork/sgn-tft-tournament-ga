@@ -18,6 +18,7 @@ import {
 
 import {
   getPhaseDetails,
+  getTournamentGlobalResults,
   getTournamentPhases,
   getTournaments,
 } from "@/app/actions/tournaments";
@@ -113,6 +114,34 @@ export function PublicResultsView() {
     enabled: !!selectedPhaseId,
     refetchInterval: 5000,
   });
+
+  const {
+    data: globalResults,
+    isLoading: globalResultsLoading,
+    error: globalResultsError,
+  } = useQuery({
+    queryKey: ["public", "tournament-global-results", selectedTournamentId],
+    queryFn: () => getTournamentGlobalResults(selectedTournamentId),
+    enabled: !!selectedTournamentId,
+    refetchInterval: 5000,
+  });
+
+  const finalsTop24 = useMemo(() => {
+    const isFinalsRankingAvailable = globalResults?.filterPhase?.order_index === 5;
+    if (!globalResults || !isFinalsRankingAvailable) {
+      return [];
+    }
+
+    return globalResults.leaderboardsByFilter.global.slice(0, 24);
+  }, [globalResults]);
+
+  const top24ByBracket = useMemo(() => {
+    return {
+      challenger: finalsTop24.filter((entry) => entry.rank >= 1 && entry.rank <= 8),
+      master: finalsTop24.filter((entry) => entry.rank >= 9 && entry.rank <= 16),
+      amateur: finalsTop24.filter((entry) => entry.rank >= 17 && entry.rank <= 24),
+    };
+  }, [finalsTop24]);
 
   const indexedGames = useMemo(() => {
     if (!phaseDetails) return [];
@@ -278,6 +307,81 @@ export function PublicResultsView() {
           </p>
         </Card>
       ) : null}
+
+      <Card className="p-4 border border-divider">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-bold">Top 24 du tournoi</h2>
+            <Chip size="sm" color="primary" variant="flat">
+              Basé sur les résultats de finale
+            </Chip>
+          </div>
+
+          {globalResultsLoading ? (
+            <p className="text-default-500">Chargement du Top 24...</p>
+          ) : null}
+
+          {globalResultsError ? (
+            <p className="text-danger">Erreur lors du chargement du Top 24.</p>
+          ) : null}
+
+          {!globalResultsLoading && !globalResultsError && globalResults?.filterPhase?.order_index !== 5 ? (
+            <p className="text-default-500">
+              Le Top 24 sera affiché dès que la phase finale sera démarrée.
+            </p>
+          ) : null}
+
+          {!globalResultsLoading && !globalResultsError && globalResults?.filterPhase?.order_index === 5 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {([
+                ["challenger", "Challenger (Top 8)"],
+                ["master", "Master (Top 9-16)"],
+                ["amateur", "Amateur (Top 17-24)"],
+              ] as const).map(([bucket, title]) => (
+                <Card key={bucket} className="p-3 border border-divider">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">{title}</h3>
+                    <Chip size="sm" color={getBracketChipColor(bucket)} variant="flat">
+                      {top24ByBracket[bucket].length}/8
+                    </Chip>
+                  </div>
+
+                  <Table aria-label={`Top 24 ${bucket}`}>
+                    <TableHeader>
+                      <TableColumn>RANG</TableColumn>
+                      <TableColumn>PSEUDO TR</TableColumn>
+                      <TableColumn>PTS</TableColumn>
+                    </TableHeader>
+                    <TableBody>
+                      {top24ByBracket[bucket].map((entry) => (
+                        <TableRow key={`${bucket}-${entry.player_id}`}>
+                          <TableCell>#{entry.rank}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span>{entry.player_name || "-"}</span>
+                              {entry.is_finalist ? (
+                                <Chip size="sm" color="warning" variant="flat">
+                                  Finaliste
+                                </Chip>
+                              ) : null}
+                              {entry.used_phase34_tie_break ? (
+                                <Chip size="sm" color="secondary" variant="flat">
+                                  TB P3+P4
+                                </Chip>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell>{entry.total_points}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Card>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </Card>
 
       {phaseDetails ? (
         <>

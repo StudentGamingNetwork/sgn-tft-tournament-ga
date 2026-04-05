@@ -15,9 +15,88 @@ import {
 import { eq, and, inArray } from "drizzle-orm";
 import {
   calculatePlayerStats as calculateStatsUtil,
+  compareTieBreaker,
   sortByTieBreakers,
 } from "@/utils/tie-breakers";
 import type { PlayerStats, LeaderboardEntry } from "@/types/tournament";
+
+async function getHistoricalPhase3And4StatsByPlayer(
+  tournamentId: string,
+  playerIds: string[],
+): Promise<Map<string, PlayerStats>> {
+  if (!playerIds.length) {
+    return new Map();
+  }
+
+  const phases3And4 = await db.query.phase.findMany({
+    where: and(
+      eq(phase.tournament_id, tournamentId),
+      inArray(phase.order_index, [3, 4]),
+    ),
+    columns: {
+      id: true,
+    },
+  });
+
+  if (!phases3And4.length) {
+    return new Map();
+  }
+
+  const phaseIds = phases3And4.map((phaseData) => phaseData.id);
+
+  const historyGames = await db.query.game.findMany({
+    where: inArray(game.phase_id, phaseIds),
+    columns: {
+      id: true,
+    },
+  });
+
+  if (!historyGames.length) {
+    return new Map();
+  }
+
+  const historyResults = await db.query.results.findMany({
+    where: and(
+      inArray(
+        results.game_id,
+        historyGames.map((historyGame) => historyGame.id),
+      ),
+      inArray(results.player_id, playerIds),
+    ),
+    columns: {
+      player_id: true,
+      placement: true,
+      points: true,
+    },
+  });
+
+  const groupedHistory = new Map<string, typeof historyResults>();
+
+  for (const result of historyResults) {
+    if (!result.player_id) {
+      continue;
+    }
+
+    const existing = groupedHistory.get(result.player_id) || [];
+    groupedHistory.set(result.player_id, [...existing, result]);
+  }
+
+  const historyStats = new Map<string, PlayerStats>();
+
+  for (const [playerId, playerHistory] of groupedHistory.entries()) {
+    const placements = playerHistory.map((entry) => entry.placement);
+    const totalPoints = playerHistory.reduce(
+      (sum, entry) => sum + entry.points,
+      0,
+    );
+    historyStats.set(
+      playerId,
+      calculateStatsUtil(playerId, placements, totalPoints),
+    );
+  }
+
+  return historyStats;
+}
 
 export function calculatePlayerScores(
   results: { player_id: string; placement: number }[],
@@ -45,16 +124,18 @@ async function buildLeaderboardFromGameData(
   phaseId: string,
   games: Array<{ id: string; game_number: number }>,
   allResults: Array<
-    (typeof results.$inferSelect) & {
-      player:
-        | {
-            name: string;
-            riot_id: string;
-            team: { name: string | null } | null;
-          }
-        | null;
+    typeof results.$inferSelect & {
+      player: {
+        name: string;
+        riot_id: string;
+        team: { name: string | null } | null;
+      } | null;
     }
   >,
+  options?: {
+    tournamentId?: string;
+    phaseOrderIndex?: number;
+  },
 ): Promise<LeaderboardEntry[]> {
   const gameIds = games.map((g) => g.id);
 
@@ -159,7 +240,61 @@ async function buildLeaderboardFromGameData(
     playerStatsArray.map((p) => ({ stats: p.stats })),
   );
 
-  return sorted.map((item, index) => {
+  const shouldUsePhase34Fallback =
+    options?.phaseOrderIndex === 5 && Boolean(options.tournamentId);
+
+  let finalSorted = sorted;
+  const phase34TieBreakAppliedPlayers = new Set<string>();
+
+  if (shouldUsePhase34Fallback && options?.tournamentId) {
+    const phase34StatsByPlayer = await getHistoricalPhase3And4StatsByPlayer(
+      options.tournamentId,
+      playerStatsArray.map((entry) => entry.stats.player_id),
+    );
+
+    finalSorted = [...sorted].sort((a, b) => {
+      const primary = compareTieBreaker(a.stats, b.stats);
+      if (primary !== 0) {
+        return primary;
+      }
+
+      const historyA = phase34StatsByPlayer.get(a.stats.player_id);
+      const historyB = phase34StatsByPlayer.get(b.stats.player_id);
+
+      if (!historyA || !historyB) {
+        return 0;
+      }
+
+      return compareTieBreaker(historyA, historyB);
+    });
+
+    for (let i = 0; i < finalSorted.length; i += 1) {
+      for (let j = i + 1; j < finalSorted.length; j += 1) {
+        const playerA = finalSorted[i];
+        const playerB = finalSorted[j];
+        const primary = compareTieBreaker(playerA.stats, playerB.stats);
+
+        if (primary !== 0) {
+          continue;
+        }
+
+        const historyA = phase34StatsByPlayer.get(playerA.stats.player_id);
+        const historyB = phase34StatsByPlayer.get(playerB.stats.player_id);
+
+        if (!historyA || !historyB) {
+          continue;
+        }
+
+        const fallback = compareTieBreaker(historyA, historyB);
+        if (fallback !== 0) {
+          phase34TieBreakAppliedPlayers.add(playerA.stats.player_id);
+          phase34TieBreakAppliedPlayers.add(playerB.stats.player_id);
+        }
+      }
+    }
+  }
+
+  return finalSorted.map((item, index) => {
     const playerData = playerStatsArray.find(
       (p) => p.stats.player_id === item.stats.player_id,
     );
@@ -184,6 +319,9 @@ async function buildLeaderboardFromGameData(
       top6_count: item.stats.top6_count,
       top7_count: item.stats.top7_count,
       top8_count: item.stats.top8_count,
+      used_phase34_tie_break: phase34TieBreakAppliedPlayers.has(
+        item.stats.player_id,
+      ),
     };
   });
 }
@@ -323,7 +461,10 @@ export async function getLeaderboard(
   });
 
   let allResults = await db.query.results.findMany({
-    where: inArray(results.game_id, games.map((g) => g.id)),
+    where: inArray(
+      results.game_id,
+      games.map((g) => g.id),
+    ),
     with: {
       player: {
         with: {
@@ -364,7 +505,10 @@ export async function getLeaderboard(
 
     const phase3MasterBracket = phase3
       ? await db.query.bracket.findFirst({
-          where: and(eq(bracket.phase_id, phase3.id), eq(bracket.name, "master")),
+          where: and(
+            eq(bracket.phase_id, phase3.id),
+            eq(bracket.name, "master"),
+          ),
           columns: {
             id: true,
           },
@@ -380,7 +524,10 @@ export async function getLeaderboard(
       });
 
       const phase3Results = await db.query.results.findMany({
-        where: inArray(results.game_id, phase3Games.map((g) => g.id)),
+        where: inArray(
+          results.game_id,
+          phase3Games.map((g) => g.id),
+        ),
         with: {
           player: {
             with: {
@@ -407,7 +554,10 @@ export async function getLeaderboard(
     return [];
   }
 
-  return buildLeaderboardFromGameData(phaseId, games, allResults);
+  return buildLeaderboardFromGameData(phaseId, games, allResults, {
+    tournamentId: phaseInfo?.tournament_id ?? undefined,
+    phaseOrderIndex: phaseInfo?.order_index ?? undefined,
+  });
 }
 
 /**

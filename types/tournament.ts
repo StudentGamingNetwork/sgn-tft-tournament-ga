@@ -236,6 +236,7 @@ export interface LeaderboardEntry {
   top8_count: number;
   is_finalist?: boolean;
   is_forfeited?: boolean;
+  used_phase34_tie_break?: boolean;
 }
 
 /**

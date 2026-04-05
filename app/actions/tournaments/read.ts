@@ -453,6 +453,12 @@ export async function getTournamentGlobalResults(
       const hierarchyRankByPlayerId = new Map(
         hierarchyPhaseLeaderboard.map((entry) => [entry.player_id, entry.rank]),
       );
+      const hierarchyTieBreakByPlayerId = new Map(
+        hierarchyPhaseLeaderboard.map((entry) => [
+          entry.player_id,
+          Boolean(entry.used_phase34_tie_break),
+        ]),
+      );
 
       // Keep a deterministic fallback rank for players missing in the current
       // hierarchy phase (e.g. forfeited and removed from pending lobbies).
@@ -571,6 +577,8 @@ export async function getTournamentGlobalResults(
         return {
           ...entry,
           rank: currentRank,
+          used_phase34_tie_break:
+            hierarchyTieBreakByPlayerId.get(entry.player_id) ?? false,
         };
       });
     } else {
@@ -825,6 +833,7 @@ export interface PhasePlayerStats extends PlayerStats {
   current_rank: number;
   top4_or_better_count: number;
   is_finalist?: boolean;
+  used_phase34_tie_break?: boolean;
 }
 
 /**
@@ -1089,6 +1098,7 @@ export async function getPhaseDetails(
           team_name: entry.team_name,
           current_rank: phaseData.order_index === 2 ? entry.rank : index + 1,
           top4_or_better_count: top4OrBetterCount,
+          used_phase34_tie_break: entry.used_phase34_tie_break,
         });
       }
     }

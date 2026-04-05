@@ -30,6 +30,22 @@ interface GamesTabProps {
 const RESULTS_DRAFT_PREFIX = "tft-results-draft:";
 const RESULTS_DRAFT_DISABLE_AUTOOPEN_PREFIX = "tft-results-draft-disable-autoopen:";
 
+const BRACKET_DISPLAY_ORDER = ["common", "challenger", "master", "amateur"] as const;
+
+function getBracketDisplayName(bracketName: string): string {
+    const normalized = bracketName.toLowerCase();
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function getBracketOrder(bracketName: string): number {
+    const normalized = bracketName.toLowerCase();
+    const index = BRACKET_DISPLAY_ORDER.indexOf(
+        normalized as (typeof BRACKET_DISPLAY_ORDER)[number],
+    );
+
+    return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
 
 export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabProps) {
     const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
@@ -303,18 +319,21 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
     }, [games, hasRestoredDraft, isModalOpen]);
 
     const bracketTabs = useMemo(() => {
-        const bracketOrder = ["master", "amateur", "challenger", "common"];
         const bracketNames = Array.from(new Set(games.map((g) => g.bracket_name)));
 
         const sortedBracketNames = bracketNames.sort((a, b) => {
-            const indexA = bracketOrder.indexOf(a);
-            const indexB = bracketOrder.indexOf(b);
-            if (indexA === -1 && indexB === -1) {
+            const orderDiff = getBracketOrder(a) - getBracketOrder(b);
+            if (orderDiff !== 0) {
+                return orderDiff;
+            }
+
+            const indexA = getBracketOrder(a);
+            const indexB = getBracketOrder(b);
+            if (indexA === Number.MAX_SAFE_INTEGER && indexB === Number.MAX_SAFE_INTEGER) {
                 return a.localeCompare(b);
             }
-            if (indexA === -1) return 1;
-            if (indexB === -1) return -1;
-            return indexA - indexB;
+
+            return a.localeCompare(b);
         });
 
         return ["all", ...sortedBracketNames];
@@ -490,7 +509,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                             color={getBracketChipColor(stat.bracket)}
                                             variant="flat"
                                         >
-                                            {stat.bracket.toUpperCase()}
+                                            {getBracketDisplayName(stat.bracket)}
                                         </Chip>
                                         <Chip
                                             size="sm"
@@ -574,7 +593,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                     color={getBracketChipColor(game.bracket_name)}
                                     variant="flat"
                                 >
-                                    {game.bracket_name.toUpperCase()}
+                                    {getBracketDisplayName(game.bracket_name)}
                                 </Chip>
                                 <Button
                                     color="secondary"

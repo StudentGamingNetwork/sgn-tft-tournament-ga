@@ -834,16 +834,34 @@ describe("gameService", () => {
         riot_id: string;
         total_points: number;
       }>,
+      options?: {
+        bracketName?: "master" | "challenger" | "amateur";
+        totalGames?: number;
+      },
     ) => {
+      (db.query.phase.findFirst as any).mockReset();
+      (db.query.game.findMany as any).mockReset();
+      (db.query.player.findMany as any).mockReset();
+      vi.mocked(getLeaderboard as any).mockReset();
+      (db.insert as any).mockReset();
+
+      const bracketName = options?.bracketName ?? "master";
+      const totalGames = options?.totalGames ?? 7;
+
       (db.query.phase.findFirst as any).mockResolvedValue({
         id: phaseId,
         tournament_id: "tournament-1",
-        total_games: 6,
+        total_games: totalGames,
         order_index: 5,
       });
 
+      const gamesForCurrentNumber = currentGames.map((currentGame) => ({
+        ...currentGame,
+        bracket: { name: bracketName },
+      }));
+
       (db.query.game.findMany as any)
-        .mockResolvedValueOnce(currentGames)
+        .mockResolvedValueOnce(gamesForCurrentNumber)
         .mockResolvedValueOnce([]);
 
       vi.mocked(getLeaderboard as any).mockResolvedValue(leaderboard);
@@ -895,7 +913,7 @@ describe("gameService", () => {
       expect(db.insert).toHaveBeenCalledWith(gameTable);
     });
 
-    it("n'arrête pas la suite quand un joueur déjà finaliste gagne", async () => {
+    it("arrête la progression quand un joueur déjà finaliste gagne", async () => {
       setupGameCreationMocks([
         {
           player_id: "p1",
@@ -915,6 +933,57 @@ describe("gameService", () => {
 
       expect(result.created).toBe(false);
       expect(db.insert).not.toHaveBeenCalledWith(gameTable);
+    });
+
+    it("crée la game suivante quand aucun joueur n'était finaliste avant la game", async () => {
+      setupGameCreationMocks([
+        {
+          player_id: "p1",
+          player_name: "Player 1",
+          riot_id: "p1#1",
+          total_points: 12,
+        },
+        {
+          player_id: "p2",
+          player_name: "Player 2",
+          riot_id: "p2#1",
+          total_points: 14,
+        },
+      ]);
+
+      const result = await checkAndCreateNextGame(phaseId, 2);
+
+      expect(result.created).toBe(true);
+      expect(db.insert).toHaveBeenCalledWith(gameTable);
+    });
+
+    it("respecte le cap master a 6 games et ne crée pas de game 7", async () => {
+      setupGameCreationMocks(
+        [
+          {
+            player_id: "p1",
+            player_name: "Player 1",
+            riot_id: "p1#1",
+            total_points: 30,
+          },
+          {
+            player_id: "p2",
+            player_name: "Player 2",
+            riot_id: "p2#1",
+            total_points: 20,
+          },
+        ],
+        {
+          bracketName: "master",
+          totalGames: 7,
+        },
+      );
+
+      const result = await checkAndCreateNextGame(phaseId, 6);
+
+      expect(result.created).toBe(false);
+      expect(db.insert).not.toHaveBeenCalledWith(gameTable);
+      expect(getLeaderboard).not.toHaveBeenCalled();
     });
   });
 
@@ -1055,9 +1124,7 @@ describe("gameService", () => {
       expect(gameInsertCalls).toHaveLength(3);
       expect(lobbyInsertPayloads).toHaveLength(3);
       expect(lobbyInsertPayloads.map((payload) => payload.length)).toEqual([
-        7,
-        7,
-        6,
+        7, 7, 6,
       ]);
     });
 
@@ -1198,7 +1265,9 @@ describe("gameService", () => {
       const game3LobbyAPlayers = lobbyInsertPayloads
         .filter((payload) => {
           const gameInfo = createdGamesById.get(payload[0]?.game_id);
-          return gameInfo?.game_number === 3 && gameInfo.lobby_name === "Lobby A";
+          return (
+            gameInfo?.game_number === 3 && gameInfo.lobby_name === "Lobby A"
+          );
         })
         .flatMap((payload) => payload.map((entry: any) => entry.player_id));
 
@@ -1324,7 +1393,9 @@ describe("gameService", () => {
       const game3LobbyAPlayers = lobbyInsertPayloads
         .filter((payload) => {
           const gameInfo = createdGamesById.get(payload[0]?.game_id);
-          return gameInfo?.game_number === 3 && gameInfo.lobby_name === "Lobby A";
+          return (
+            gameInfo?.game_number === 3 && gameInfo.lobby_name === "Lobby A"
+          );
         })
         .flatMap((payload) => payload.map((entry: any) => entry.player_id));
 

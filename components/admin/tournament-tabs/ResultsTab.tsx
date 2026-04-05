@@ -289,6 +289,11 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                                                     Finaliste
                                                                 </Chip>
                                                             )}
+                                                            {entry.used_phase34_tie_break && (
+                                                                <Chip size="sm" color="secondary" variant="flat">
+                                                                    TB P3+P4
+                                                                </Chip>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     <td className="py-2 pr-3 font-semibold">{entry.total_points}</td>

@@ -235,11 +235,11 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                 }
 
                 const message = `Démarrer la Phase 5 - FINALES ?\n\n` +
-                    `🏆 Bracket CHALLENGER (8 joueurs):\n` +
+                    `🏆 Bracket Challenger (8 joueurs):\n` +
                     `   - Top 8 du bracket Master P4\n\n` +
-                    `🏅 Bracket MASTER (8 joueurs):\n` +
+                    `🏅 Bracket Master (8 joueurs):\n` +
                     `   - Rangs 9-16 du bracket Master P4\n\n` +
-                    `🥈 Bracket AMATEUR (8 joueurs):\n` +
+                    `🥈 Bracket Amateur (8 joueurs):\n` +
                     `   - Top 8 du bracket Amateur P4\n\n` +
                     `⚡ Règle Checkmate:\n` +
                     `   - Challenger: statut finaliste à 21 points, max 7 games\n` +

@@ -5,6 +5,7 @@ vi.mock("@/lib/db", () => ({
     query: {
       phase: {
         findFirst: vi.fn(),
+        findMany: vi.fn(),
       },
       bracket: {
         findFirst: vi.fn(),
@@ -28,7 +29,7 @@ vi.mock("@/lib/db", () => ({
 
 const { db } = await import("@/lib/db");
 const { calculatePlayerScores, getLeaderboard } = await import(
-  "./scoring-service",
+  "./scoring-service"
 );
 
 function buildResult(params: {
@@ -98,9 +99,7 @@ describe("getLeaderboard", () => {
         { id: "phase4-game-1", game_number: 1 },
         { id: "phase4-game-2", game_number: 2 },
       ] as any)
-      .mockResolvedValueOnce([
-        { id: "phase3-game-1", game_number: 1 },
-      ] as any);
+      .mockResolvedValueOnce([{ id: "phase3-game-1", game_number: 1 }] as any);
 
     vi.mocked(db.query.lobbyPlayer.findMany).mockResolvedValueOnce([
       { player_id: "p1" },
@@ -140,12 +139,8 @@ describe("getLeaderboard", () => {
       .mockResolvedValueOnce({ id: "bracket-p3-master" } as any);
 
     vi.mocked(db.query.game.findMany)
-      .mockResolvedValueOnce([
-        { id: "phase4-game-1", game_number: 1 },
-      ] as any)
-      .mockResolvedValueOnce([
-        { id: "phase3-game-1", game_number: 1 },
-      ] as any);
+      .mockResolvedValueOnce([{ id: "phase4-game-1", game_number: 1 }] as any)
+      .mockResolvedValueOnce([{ id: "phase3-game-1", game_number: 1 }] as any);
 
     vi.mocked(db.query.lobbyPlayer.findMany).mockResolvedValueOnce([
       { player_id: "p1" },
@@ -188,12 +183,8 @@ describe("getLeaderboard", () => {
       .mockResolvedValueOnce({ id: "bracket-p3-master" } as any);
 
     vi.mocked(db.query.game.findMany)
-      .mockResolvedValueOnce([
-        { id: "phase4-game-1", game_number: 1 },
-      ] as any)
-      .mockResolvedValueOnce([
-        { id: "phase3-game-1", game_number: 1 },
-      ] as any);
+      .mockResolvedValueOnce([{ id: "phase4-game-1", game_number: 1 }] as any)
+      .mockResolvedValueOnce([{ id: "phase3-game-1", game_number: 1 }] as any);
 
     vi.mocked(db.query.lobbyPlayer.findMany).mockResolvedValueOnce([
       { player_id: "p1" },
@@ -212,5 +203,90 @@ describe("getLeaderboard", () => {
 
     expect(leaderboard).toHaveLength(2);
     expect(leaderboard.map((entry) => entry.player_id)).toEqual(["p1", "p2"]);
+  });
+
+  it("departage une egalite parfaite en phase 5 avec l'historique des phases 3 et 4", async () => {
+    vi.mocked(db.query.phase.findFirst).mockResolvedValueOnce({
+      tournament_id: "t-1",
+      order_index: 5,
+    } as any);
+
+    vi.mocked(db.query.bracket.findFirst).mockResolvedValueOnce({
+      name: "challenger",
+    } as any);
+
+    vi.mocked(db.query.game.findMany)
+      .mockResolvedValueOnce([{ id: "phase5-game-1", game_number: 1 }] as any)
+      .mockResolvedValueOnce([
+        { id: "phase3-game-1" },
+        { id: "phase4-game-1" },
+      ] as any);
+
+    vi.mocked(db.query.results.findMany)
+      .mockResolvedValueOnce([
+        buildResult({ playerId: "p1", placement: 1, points: 8, name: "P1" }),
+        buildResult({ playerId: "p2", placement: 1, points: 8, name: "P2" }),
+      ] as any)
+      .mockResolvedValueOnce([
+        { player_id: "p1", placement: 1, points: 8 },
+        { player_id: "p1", placement: 2, points: 7 },
+        { player_id: "p2", placement: 3, points: 6 },
+        { player_id: "p2", placement: 4, points: 5 },
+      ] as any);
+
+    vi.mocked(db.query.phase.findMany).mockResolvedValueOnce([
+      { id: "phase-3" },
+      { id: "phase-4" },
+    ] as any);
+
+    const leaderboard = await getLeaderboard(
+      "phase-5",
+      "bracket-p5-challenger",
+    );
+
+    expect(leaderboard).toHaveLength(2);
+    expect(leaderboard[0]?.player_id).toBe("p1");
+    expect(leaderboard[1]?.player_id).toBe("p2");
+    expect(leaderboard[0]?.used_phase34_tie_break).toBe(true);
+    expect(leaderboard[1]?.used_phase34_tie_break).toBe(true);
+  });
+
+  it("conserve l'ordre initial en phase 5 si l'historique des phases 3 et 4 ne departage pas", async () => {
+    vi.mocked(db.query.phase.findFirst).mockResolvedValueOnce({
+      tournament_id: "t-1",
+      order_index: 5,
+    } as any);
+
+    vi.mocked(db.query.bracket.findFirst).mockResolvedValueOnce({
+      name: "challenger",
+    } as any);
+
+    vi.mocked(db.query.game.findMany)
+      .mockResolvedValueOnce([{ id: "phase5-game-1", game_number: 1 }] as any)
+      .mockResolvedValueOnce([{ id: "phase3-game-1" }] as any);
+
+    vi.mocked(db.query.results.findMany)
+      .mockResolvedValueOnce([
+        buildResult({ playerId: "p1", placement: 1, points: 8, name: "P1" }),
+        buildResult({ playerId: "p2", placement: 1, points: 8, name: "P2" }),
+      ] as any)
+      .mockResolvedValueOnce([
+        { player_id: "p1", placement: 2, points: 7 },
+        { player_id: "p2", placement: 2, points: 7 },
+      ] as any);
+
+    vi.mocked(db.query.phase.findMany).mockResolvedValueOnce([
+      { id: "phase-3" },
+    ] as any);
+
+    const leaderboard = await getLeaderboard(
+      "phase-5",
+      "bracket-p5-challenger",
+    );
+
+    expect(leaderboard).toHaveLength(2);
+    expect(leaderboard.map((entry) => entry.player_id)).toEqual(["p1", "p2"]);
+    expect(leaderboard[0]?.used_phase34_tie_break).toBe(false);
+    expect(leaderboard[1]?.used_phase34_tie_break).toBe(false);
   });
 });

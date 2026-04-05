@@ -16,6 +16,10 @@ export const siteConfig = {
       href: "/tournament",
     },
     {
+      label: "Résultats",
+      href: "/results",
+    },
+    {
       label: "Règlement officiel",
       href: OFFICIAL_RULES_URL,
     },
@@ -28,6 +32,10 @@ export const siteConfig = {
     {
       label: "Tournoi",
       href: "/tournament",
+    },
+    {
+      label: "Résultats",
+      href: "/results",
     },
     {
       label: "Règlement officiel",

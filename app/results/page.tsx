@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { PublicResultsView } from "@/components/public/PublicResultsView";
 
 export default function ResultsPage() {
-  redirect("/tournament");
+  return <PublicResultsView />;
 }

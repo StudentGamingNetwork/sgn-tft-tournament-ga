@@ -26,6 +26,17 @@ import { getBracketChipColor } from "@/utils/bracket-colors";
 
 type RankTabKey = "rank-global" | "rank-master" | "rank-amateur" | "rank-challenger";
 
+const BRACKET_DISPLAY_ORDER = ["common", "challenger", "master", "amateur"] as const;
+
+function getBracketOrder(bracketName: string): number {
+  const normalized = bracketName.toLowerCase();
+  const index = BRACKET_DISPLAY_ORDER.indexOf(
+    normalized as (typeof BRACKET_DISPLAY_ORDER)[number],
+  );
+
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+}
+
 function getSortedTournaments(
   tournaments: Awaited<ReturnType<typeof getTournaments>> | undefined,
 ) {
@@ -140,7 +151,15 @@ export function PublicTournamentPhasesView() {
     for (const game of phaseDetails.games) {
       brackets.add(game.bracket_name);
     }
-    return Array.from(brackets).sort();
+
+    return Array.from(brackets).sort((a, b) => {
+      const orderDiff = getBracketOrder(a) - getBracketOrder(b);
+      if (orderDiff !== 0) {
+        return orderDiff;
+      }
+
+      return a.localeCompare(b);
+    });
   }, [phaseDetails]);
 
   const filteredGamesByNumber = useMemo(() => {
@@ -176,13 +195,13 @@ export function PublicTournamentPhasesView() {
       { key: "rank-global", title: "Rank global" },
     ];
 
-    if (phaseDetails.phase.order_index >= 3) {
-      tabs.push({ key: "rank-master", title: "Rank master" });
-      tabs.push({ key: "rank-amateur", title: "Rank amateur" });
-    }
-
     if (phaseDetails.phase.order_index >= 5) {
-      tabs.push({ key: "rank-challenger", title: "Rank challenger" });
+      tabs.push({ key: "rank-challenger", title: "Rank Challenger" });
+      tabs.push({ key: "rank-master", title: "Rank Master" });
+      tabs.push({ key: "rank-amateur", title: "Rank Amateur" });
+    } else if (phaseDetails.phase.order_index >= 3) {
+      tabs.push({ key: "rank-master", title: "Rank Master" });
+      tabs.push({ key: "rank-amateur", title: "Rank Amateur" });
     }
 
     return tabs;
@@ -530,7 +549,16 @@ export function PublicTournamentPhasesView() {
                                     const rows = [
                                       <TableRow key={player.player_id}>
                                         <TableCell>#{displayedGlobalRank}</TableCell>
-                                        <TableCell>{player.player_name || "-"}</TableCell>
+                                        <TableCell>
+                                          <div className="flex items-center gap-2">
+                                            <span>{player.player_name || "-"}</span>
+                                            {player.used_phase34_tie_break && (
+                                              <Chip size="sm" color="secondary" variant="flat">
+                                                TB P3+P4
+                                              </Chip>
+                                            )}
+                                          </div>
+                                        </TableCell>
                                         <TableCell>{player.total_points}</TableCell>
                                         <TableCell>{player.top1_count}</TableCell>
                                         <TableCell>{top4OrBetterCount}</TableCell>
