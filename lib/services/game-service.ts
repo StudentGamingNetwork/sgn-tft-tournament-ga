@@ -370,7 +370,6 @@ async function getInitialGameOneSeeding(
 ): Promise<{
   seededPlayers: SeededPlayer[];
   useSnakeSeeding: boolean;
-  preservedSeedByPlayerId?: Map<string, number>;
 } | null> {
   const currentPhase = await db.query.phase.findFirst({
     where: eq(phase.id, phaseId),
@@ -410,28 +409,17 @@ async function getInitialGameOneSeeding(
     }
 
     const phase1Leaderboard = await getLeaderboard(phase1.id);
-    const phase2Leaderboard = await getLeaderboard(phase2.id);
-
-    const phase2GameOneRows = await db.query.game.findMany({
-      where: and(eq(game.phase_id, phase2.id), eq(game.game_number, 1)),
-      with: {
-        lobbyPlayers: true,
-      },
-    });
-
-    const phase2InitialSeedByPlayer = new Map<string, number>();
-    for (const gameRow of phase2GameOneRows) {
-      for (const assignment of gameRow.lobbyPlayers ?? []) {
-        if (!assignment.player_id || !assignment.seed) {
-          continue;
-        }
-
-        const currentSeed = phase2InitialSeedByPlayer.get(assignment.player_id);
-        if (currentSeed === undefined || assignment.seed < currentSeed) {
-          phase2InitialSeedByPlayer.set(assignment.player_id, assignment.seed);
-        }
-      }
-    }
+    const phase2RawLeaderboard = await getLeaderboard(phase2.id);
+    const phase2PlayerIds = new Set(
+      phase2RawLeaderboard.map((entry) => entry.player_id),
+    );
+    const cumulativePhase1And2 = await getCumulativeLeaderboard([
+      phase1.id,
+      phase2.id,
+    ]);
+    const phase2Leaderboard = cumulativePhase1And2.filter((entry) =>
+      phase2PlayerIds.has(entry.player_id),
+    );
 
     if (currentBracket.name === "master") {
       const phase1MasterQualifiers = phase1Leaderboard
@@ -442,22 +430,9 @@ async function getInitialGameOneSeeding(
         .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
       const ordered = [...phase1MasterQualifiers, ...phase2MasterQualifiers];
 
-      const preservedSeedByPlayerId = new Map<string, number>();
-      phase1MasterQualifiers.forEach((entry, index) => {
-        preservedSeedByPlayerId.set(entry.player_id, index + 1);
-      });
-      phase2MasterQualifiers.forEach((entry, index) => {
-        const fallbackSeed = PHASE3_MASTER_FROM_P1 + index + 1;
-        preservedSeedByPlayerId.set(
-          entry.player_id,
-          phase2InitialSeedByPlayer.get(entry.player_id) ?? fallbackSeed,
-        );
-      });
-
       return {
         seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
         useSnakeSeeding: true,
-        preservedSeedByPlayerId,
       };
     }
 
@@ -605,45 +580,6 @@ export async function resetGameSeeding(gameId: string) {
         seededPlayers: initialSeeding.seededPlayers,
         useSnakeSeeding: initialSeeding.useSnakeSeeding,
       });
-
-      if (initialSeeding.preservedSeedByPlayerId) {
-        const recreatedGames = await db.query.game.findMany({
-          where: and(
-            eq(game.phase_id, targetGame.phase_id),
-            eq(game.bracket_id, targetGame.bracket_id),
-            eq(game.game_number, targetGame.game_number),
-          ),
-          with: {
-            lobbyPlayers: true,
-          },
-        });
-
-        for (const recreatedGame of recreatedGames) {
-          for (const assignment of recreatedGame.lobbyPlayers ?? []) {
-            if (!assignment.game_id || !assignment.player_id) {
-              continue;
-            }
-
-            const preservedSeed = initialSeeding.preservedSeedByPlayerId.get(
-              assignment.player_id,
-            );
-
-            if (!preservedSeed || preservedSeed === assignment.seed) {
-              continue;
-            }
-
-            await db
-              .update(lobbyPlayer)
-              .set({ seed: preservedSeed })
-              .where(
-                and(
-                  eq(lobbyPlayer.game_id, assignment.game_id),
-                  eq(lobbyPlayer.player_id, assignment.player_id),
-                ),
-              );
-          }
-        }
-      }
 
       return {
         reset: gamesCreated > 0,
