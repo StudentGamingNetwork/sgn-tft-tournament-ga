@@ -400,6 +400,11 @@ export async function getTournamentGlobalResults(
         : await getLeaderboard(activePhase.id);
 
     const tournamentPlayers = await getTournamentPlayers(tournamentId);
+    const forfeitedPlayerIds = new Set(
+      tournamentPlayers
+        .filter((p) => Boolean(p.registration.forfeited_at))
+        .map((p) => p.id),
+    );
     const leaderboardByPlayerId = new Map(
       leaderboard.map((entry) => [entry.player_id, entry]),
     );
@@ -424,11 +429,17 @@ export async function getTournamentGlobalResults(
           top6_count: 0,
           top7_count: 0,
           top8_count: 0,
+          is_forfeited: forfeitedPlayerIds.has(p.id),
         }),
       )
       .sort((a, b) => a.player_name.localeCompare(b.player_name));
 
-    const globalWithAllPlayers = [...leaderboard, ...missingPlayers];
+    const rankedPlayers = leaderboard.map((entry) => ({
+      ...entry,
+      is_forfeited: forfeitedPlayerIds.has(entry.player_id),
+    }));
+
+    const globalWithAllPlayers = [...rankedPlayers, ...missingPlayers];
 
     const hierarchyPhase = [...startedPhases]
       .sort((a, b) => b.order_index - a.order_index)
@@ -443,21 +454,39 @@ export async function getTournamentGlobalResults(
         hierarchyPhaseLeaderboard.map((entry) => [entry.player_id, entry.rank]),
       );
 
-      const hierarchyGames = await db.query.game.findMany({
-        where: eq(game.phase_id, hierarchyPhase.id),
-        with: {
-          bracket: true,
-          lobbyPlayers: true,
-        },
-      });
-
       const playerBucket = new Map<string, string>();
-      for (const g of hierarchyGames) {
-        const bucket = g.bracket?.name || "other";
-        for (const lp of g.lobbyPlayers) {
-          if (!lp.player_id) continue;
-          if (!playerBucket.has(lp.player_id)) {
+
+      const phasesForBucketFallback = [...startedPhases]
+        .sort((a, b) => b.order_index - a.order_index)
+        .map((p) => p.id);
+
+      for (const phaseIdForBucket of phasesForBucketFallback) {
+        const phaseGames = await db.query.game.findMany({
+          where: eq(game.phase_id, phaseIdForBucket),
+          with: {
+            bracket: true,
+            lobbyPlayers: true,
+            results: true,
+          },
+        });
+
+        for (const g of phaseGames) {
+          const bucket = g.bracket?.name || "other";
+
+          for (const lp of g.lobbyPlayers) {
+            if (!lp.player_id || playerBucket.has(lp.player_id)) {
+              continue;
+            }
+
             playerBucket.set(lp.player_id, bucket);
+          }
+
+          for (const resultEntry of g.results) {
+            if (!resultEntry.player_id || playerBucket.has(resultEntry.player_id)) {
+              continue;
+            }
+
+            playerBucket.set(resultEntry.player_id, bucket);
           }
         }
       }
@@ -538,6 +567,11 @@ export async function getTournamentGlobalResults(
       });
     }
 
+    globalLeaderboard = globalLeaderboard.map((entry) => ({
+      ...entry,
+      is_forfeited: forfeitedPlayerIds.has(entry.player_id),
+    }));
+
     const bracketNameToId = new Map(
       bracketFilterPhase.brackets.map((b) => [b.name, b.id]),
     );
@@ -557,10 +591,15 @@ export async function getTournamentGlobalResults(
       const bracketLeaderboard = applyTieAwareRanks(
         await getLeaderboard(bracketFilterPhase.id, bracketId),
       );
-      leaderboardsByFilter[bracketName] =
+      const bracketWithFinalists =
         bracketFilterPhase.order_index === 5
           ? markFinalistsByThreshold(bracketLeaderboard, bracketName)
           : bracketLeaderboard;
+
+      leaderboardsByFilter[bracketName] = bracketWithFinalists.map((entry) => ({
+        ...entry,
+        is_forfeited: forfeitedPlayerIds.has(entry.player_id),
+      }));
     }
 
     const availableFilters = ["global", ...orderedBracketNames];

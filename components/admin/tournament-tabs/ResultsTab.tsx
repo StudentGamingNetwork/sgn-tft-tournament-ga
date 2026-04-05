@@ -279,6 +279,11 @@ export function ResultsTab({ tournamentId }: ResultsTabProps) {
                                                     <td className="py-2 pr-3">
                                                         <div className="flex items-center gap-2">
                                                             <span>{entry.player_name || "-"}</span>
+                                                            {entry.is_forfeited && (
+                                                                <Chip size="sm" color="danger" variant="flat">
+                                                                    Forfait
+                                                                </Chip>
+                                                            )}
                                                             {entry.is_finalist && (
                                                                 <Chip size="sm" color="warning" variant="flat">
                                                                     Finaliste
