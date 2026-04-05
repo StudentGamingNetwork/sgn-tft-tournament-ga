@@ -9,6 +9,7 @@ import type { GameWithResults } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
 import {
     forfeitPlayerAction,
+    repechagePlayerAction,
     deleteGameAction,
     resetGameSeedingAction,
     renameLobbyAction,
@@ -97,6 +98,51 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         const result = await forfeitPlayerAction(tournamentId, playerId);
         if (!result.success) {
             throw new Error(result.error || "Erreur lors du forfait joueur");
+        }
+
+        if (onResultsSubmitted) {
+            onResultsSubmitted();
+        }
+    };
+
+    const handleRepechagePlayer = async (
+        gameData: GameWithResults,
+        playerId: string,
+        playerName: string,
+    ) => {
+        const activePlayersCount = gameData.results.filter(
+            (result) => result.result_status === "normal",
+        ).length;
+        const maxPlacement = Math.min(8, activePlayersCount + 1);
+
+        const placementInput = window.prompt(
+            `Placement pour repêcher ${playerName} (1-${maxPlacement})`,
+            String(maxPlacement),
+        );
+
+        if (placementInput === null) {
+            return;
+        }
+
+        const placement = Number.parseInt(placementInput, 10);
+        if (!Number.isInteger(placement) || placement < 1 || placement > maxPlacement) {
+            throw new Error(`Placement invalide. Valeur attendue: 1-${maxPlacement}`);
+        }
+
+        const accepted = window.confirm(
+            `Confirmer le repêchage de ${playerName} ?\n\n` +
+            "Le joueur passe en resultat normal sur cette game,\n" +
+            "son forfait global est retire,\n" +
+            "et les games futures non terminees du bracket seront regenerees.",
+        );
+
+        if (!accepted) {
+            return;
+        }
+
+        const result = await repechagePlayerAction(gameData.game_id, playerId, placement);
+        if (!result.success) {
+            throw new Error(result.error || "Erreur lors du repechage joueur");
         }
 
         if (onResultsSubmitted) {
@@ -594,6 +640,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                     <TableColumn>PLACEMENT</TableColumn>
                                     <TableColumn>PSEUDO TR</TableColumn>
                                     <TableColumn>POINTS</TableColumn>
+                                    <TableColumn>ACTION</TableColumn>
                                 </TableHeader>
                                 <TableBody>
                                     {game.results.map((result) => (
@@ -640,6 +687,34 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                                 >
                                                     {result.points} pts
                                                 </span>
+                                            </TableCell>
+                                            <TableCell>
+                                                {result.result_status === "forfeit" ? (
+                                                    <Button
+                                                        size="sm"
+                                                        color="warning"
+                                                        variant="flat"
+                                                        onPress={async () => {
+                                                            try {
+                                                                await handleRepechagePlayer(
+                                                                    game,
+                                                                    result.player_id,
+                                                                    result.player_name || "-",
+                                                                );
+                                                            } catch (error) {
+                                                                alert(
+                                                                    error instanceof Error
+                                                                        ? error.message
+                                                                        : "Erreur lors du repechage",
+                                                                );
+                                                            }
+                                                        }}
+                                                    >
+                                                        Repecher
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-default-400">-</span>
+                                                )}
                                             </TableCell>
                                         </TableRow>
                                     ))}

@@ -36,6 +36,7 @@ import {
   PHASE4_MASTER_FROM_P3_MASTER,
   PHASE4_AMATEUR_FROM_P3_MASTER,
   PHASE4_AMATEUR_FROM_P3_AMATEUR,
+  PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
 } from "@/lib/services/phase-constants";
 
 function shouldUseMasterSnakeSeeding(
@@ -576,6 +577,11 @@ async function getInitialGameOneSeeding(
           PHASE4_MASTER_FROM_P3_MASTER + PHASE4_AMATEUR_FROM_P3_MASTER,
         ),
         ...amateurLeaderboard.slice(0, PHASE4_AMATEUR_FROM_P3_AMATEUR),
+        ...amateurLeaderboard.slice(
+          PHASE4_AMATEUR_FROM_P3_AMATEUR,
+          PHASE4_AMATEUR_FROM_P3_AMATEUR +
+            PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
+        ),
       ].filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
 
       return {
@@ -1169,6 +1175,134 @@ export async function forfeitPlayerFromTournament(
       }
     }
   }
+}
+
+/**
+ * Repêche un joueur forfait sur une game donnée, lève son forfait global
+ * et reconstruit les games futures du meme bracket/phase.
+ */
+export async function repechagePlayerFromGame(
+  gameId: string,
+  playerId: string,
+  placement: number,
+) {
+  if (!Number.isInteger(placement) || placement < 1 || placement > 8) {
+    throw new Error("Le placement doit etre un entier entre 1 et 8");
+  }
+
+  const targetGame = await db.query.game.findFirst({
+    where: eq(game.id, gameId),
+    columns: {
+      id: true,
+      phase_id: true,
+      bracket_id: true,
+      game_number: true,
+    },
+  });
+
+  if (!targetGame || !targetGame.phase_id || !targetGame.bracket_id) {
+    throw new Error("Game introuvable");
+  }
+
+  const phaseInfo = await db.query.phase.findFirst({
+    where: eq(phase.id, targetGame.phase_id),
+    columns: {
+      tournament_id: true,
+    },
+  });
+
+  if (!phaseInfo?.tournament_id) {
+    throw new Error("Phase introuvable");
+  }
+
+  const gameResults = await db.query.results.findMany({
+    where: eq(results.game_id, gameId),
+    columns: {
+      player_id: true,
+      placement: true,
+      result_status: true,
+    },
+  });
+
+  const playerResult = gameResults.find((result) => result.player_id === playerId);
+
+  if (!playerResult) {
+    throw new Error("Joueur introuvable dans les resultats de la game");
+  }
+
+  if (playerResult.result_status !== "forfeit") {
+    throw new Error("Seul un joueur marque forfait peut etre repeche");
+  }
+
+  const currentNormalResults = gameResults.filter(
+    (result) => result.result_status === "normal",
+  );
+  const maxPlacement = Math.min(8, currentNormalResults.length + 1);
+
+  if (placement > maxPlacement) {
+    throw new Error(
+      `Le placement doit etre compris entre 1 et ${maxPlacement} pour cette game`,
+    );
+  }
+
+  const placementAlreadyUsed = currentNormalResults.some(
+    (result) => result.placement === placement,
+  );
+
+  if (placementAlreadyUsed) {
+    throw new Error("Ce placement est deja attribue a un autre joueur actif");
+  }
+
+  const tournamentId = phaseInfo.tournament_id;
+  const phaseId = targetGame.phase_id;
+  const bracketId = targetGame.bracket_id;
+  const gameNumber = targetGame.game_number;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(results)
+      .set({
+        placement,
+        points: calculatePoints(placement),
+        result_status: "normal",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(results.game_id, gameId), eq(results.player_id, playerId)),
+      );
+
+    await tx
+      .update(tournamentRegistration)
+      .set({
+        forfeited_at: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(tournamentRegistration.tournament_id, tournamentId),
+          eq(tournamentRegistration.player_id, playerId),
+        ),
+      );
+
+    const pendingGames = await tx.query.game.findMany({
+      where: and(
+        eq(game.phase_id, phaseId),
+        eq(game.bracket_id, bracketId),
+        gt(game.game_number, gameNumber),
+        sql`${game.status} != 'completed'`,
+      ),
+      columns: {
+        id: true,
+      },
+    });
+
+    const pendingGameIds = pendingGames.map((g) => g.id);
+    if (pendingGameIds.length > 0) {
+      await tx.delete(game).where(inArray(game.id, pendingGameIds));
+    }
+  });
+
+  await checkAndCreateNextGame(phaseId, gameNumber);
 }
 
 /**

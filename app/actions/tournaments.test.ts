@@ -63,7 +63,11 @@ vi.mock("@/lib/services/tournament-service", () => ({
 
 vi.mock("@/lib/services/game-service", () => ({
   submitGameResults: vi.fn(),
+  forfeitPlayerFromTournament: vi.fn(),
+  repechagePlayerFromGame: vi.fn(),
+  resetGameSeeding: vi.fn(),
   renameGameLobby: vi.fn(),
+  deleteGame: vi.fn(),
 }));
 
 vi.mock("@/lib/services/player-service", () => ({
@@ -85,7 +89,9 @@ const { db } = await import("@/lib/db");
 const { createStandardTournament } = await import(
   "@/lib/services/tournament-service"
 );
-const { submitGameResults } = await import("@/lib/services/game-service");
+const { submitGameResults, repechagePlayerFromGame } = await import(
+  "@/lib/services/game-service"
+);
 const { getPlayerByRiotId } = await import("@/lib/services/player-service");
 const { triggerTournamentRankSync, getRankSyncState } = await import(
   "@/lib/services/rank-sync-service"
@@ -101,6 +107,7 @@ const {
 const mockGetSession = vi.mocked(auth.api.getSession);
 const mockCreateStandardTournament = vi.mocked(createStandardTournament);
 const mockSubmitGameResults = vi.mocked(submitGameResults);
+const mockRepechagePlayerFromGame = vi.mocked(repechagePlayerFromGame);
 const mockGetPlayerByRiotId = vi.mocked(getPlayerByRiotId);
 const mockTriggerTournamentRankSync = vi.mocked(triggerTournamentRankSync);
 const mockGetRankSyncState = vi.mocked(getRankSyncState);
@@ -397,6 +404,33 @@ describe("tournaments actions", () => {
 
       expect(result.success).toBe(false);
       expect(mockSubmitGameResults).not.toHaveBeenCalled();
+    });
+
+    it("refuse repechagePlayerAction sans session", async () => {
+      mockGetSession.mockResolvedValue(null as any);
+
+      const result = await tournamentsActions.repechagePlayerAction(
+        "g-1",
+        "p-1",
+        4,
+      );
+
+      expect(result.success).toBe(false);
+      expect(mockRepechagePlayerFromGame).not.toHaveBeenCalled();
+    });
+
+    it("execute repechagePlayerAction avec session", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      vi.mocked(db.query.game.findFirst).mockResolvedValue(undefined as any);
+
+      const result = await tournamentsActions.repechagePlayerAction(
+        "g-1",
+        "p-1",
+        3,
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockRepechagePlayerFromGame).toHaveBeenCalledWith("g-1", "p-1", 3);
     });
 
     it("refuse updateRegistrationStatus sans session", async () => {

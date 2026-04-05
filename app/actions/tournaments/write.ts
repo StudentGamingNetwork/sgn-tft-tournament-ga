@@ -37,6 +37,7 @@ import {
 import {
   submitGameResults,
   forfeitPlayerFromTournament,
+  repechagePlayerFromGame,
   resetGameSeeding,
   renameGameLobby,
   deleteGame,
@@ -1410,6 +1411,41 @@ export async function forfeitPlayerAction(
         error instanceof Error
           ? error.message
           : "Erreur lors du forfait du joueur",
+    };
+  }
+}
+
+/**
+ * Repêcher un joueur forfait sur une game (correction admin),
+ * avec levee du forfait global pour permettre la reprise du tournoi.
+ */
+export async function repechagePlayerAction(
+  gameId: string,
+  playerId: string,
+  placement: number,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+
+    await repechagePlayerFromGame(gameId, playerId, placement);
+
+    const gameData = await db.query.game.findFirst({
+      where: eq(game.id, gameId),
+    });
+
+    if (gameData?.phase_id) {
+      await syncTournamentStatusFromPhaseId(gameData.phase_id);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error repechage player:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors du repechage du joueur",
     };
   }
 }

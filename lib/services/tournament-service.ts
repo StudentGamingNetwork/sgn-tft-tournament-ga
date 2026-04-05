@@ -10,7 +10,7 @@
  *   - Amateur: 20 joueurs (Bottom 20 P2)
  * - Phase 4 : 40 joueurs (2 brackets)
  *   - Master: 16 joueurs (Top 16 P3 Master)
- *   - Amateur: 24 joueurs (RESET points) (Bottom 16 P3 Master + Top 8 P3 Amateur)
+ *   - Amateur: 24 joueurs (RESET points) (Bottom 14 P3 Master + Top 8 P3 Amateur + 2 wildcards P3 Amateur)
  * - Phase 5 : 24 joueurs (3 brackets)
  *   - Challenger: 8 joueurs (Top 8 P4 Master)
  *   - Master: 8 joueurs (Bottom 8 P4 Master)
@@ -35,6 +35,7 @@ import {
   PHASE3_MASTER_FROM_P2,
   PHASE4_MASTER_FROM_P3_MASTER,
   PHASE4_AMATEUR_FROM_P3_AMATEUR,
+  PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
   PHASE4_AMATEUR_FROM_P3_MASTER,
 } from "./phase-constants";
 
@@ -180,7 +181,7 @@ async function assertPhaseCanBeStarted(
  * - Phase 1: 52 joueurs, 1 bracket (common)
  * - Phase 2: 36 joueurs (après élimination des top 16 de P1), 1 bracket (common)
  * - Phase 3: master 32 (top 16 P1 + top 16 P2), amateur 20 (bottom 20 P2) - RESET points
- * - Phase 4: master 16 (top 16 P3 master), amateur 24 (bottom 16 P3 master + top 8 P3 amateur) - Amateur RESET
+ * - Phase 4: master 16 (top 16 P3 master), amateur 24 (bottom 14 P3 master + top 8 P3 amateur + 2 wildcards P3 amateur) - Amateur RESET
  * - Phase 5: 24 joueurs, 3 brackets (challenger 8, master 8, amateur 8)
  */
 export async function createStandardTournament(name: string, year: string) {
@@ -597,7 +598,7 @@ export async function startPhase3FromPhase1And2(
  * PHASE 3 → PHASE 4
  * Phase 4 a 2 brackets :
  * - Master: Top 16 de P3 Master = 16 joueurs
- * - Amateur: Top 8 P3 Amateur + Bottom 16 P3 Master = 24 joueurs (RESET points)
+ * - Amateur: Top 8 P3 Amateur + 2 wildcards (rangs 9-10 P3 Amateur) + Bottom 14 P3 Master = 24 joueurs (RESET points)
  */
 export async function startPhase4FromPhase3(
   phase3Id: string,
@@ -628,7 +629,8 @@ export async function startPhase4FromPhase3(
     .slice(0, PHASE4_MASTER_FROM_P3_MASTER)
     .map((p) => p.player_id);
 
-  // Phase 4 Amateur: bottom 16 P3 Master, then top 8 P3 Amateur (preserve order)
+  // Phase 4 Amateur: bottom block P3 Master, then top 8 P3 Amateur,
+  // then 2 wildcards (rangs 9-10 de P3 Amateur).
   const relegatedMaster = masterLeaderboard.slice(
     PHASE4_MASTER_FROM_P3_MASTER,
     PHASE4_MASTER_FROM_P3_MASTER + PHASE4_AMATEUR_FROM_P3_MASTER,
@@ -637,7 +639,15 @@ export async function startPhase4FromPhase3(
     0,
     PHASE4_AMATEUR_FROM_P3_AMATEUR,
   );
-  const phase4AmateurOrderedLeaderboard = [...relegatedMaster, ...topAmateur];
+  const amateurWildcards = amateurLeaderboard.slice(
+    PHASE4_AMATEUR_FROM_P3_AMATEUR,
+    PHASE4_AMATEUR_FROM_P3_AMATEUR + PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
+  );
+  const phase4AmateurOrderedLeaderboard = [
+    ...relegatedMaster,
+    ...topAmateur,
+    ...amateurWildcards,
+  ];
 
   // Obtenir les brackets de Phase 4
   const phase4Brackets = await db.query.bracket.findMany({
@@ -701,7 +711,7 @@ export async function startPhase4FromPhase3(
       bracket: phase4Amateur,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
-      source: `Bottom ${PHASE4_AMATEUR_FROM_P3_MASTER} P3 Master + Top ${PHASE4_AMATEUR_FROM_P3_AMATEUR} P3 Amateur (RESET)`,
+      source: `Bottom ${PHASE4_AMATEUR_FROM_P3_MASTER} P3 Master + Top ${PHASE4_AMATEUR_FROM_P3_AMATEUR} P3 Amateur + ${PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR} wildcards P3 Amateur (RESET)`,
     },
   };
 }

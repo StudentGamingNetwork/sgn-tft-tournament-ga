@@ -48,6 +48,7 @@ const {
   hasResults,
   checkAndCreateNextGame,
   forfeitPlayerFromTournament,
+  repechagePlayerFromGame,
 } = await import("./game-service");
 
 describe("gameService", () => {
@@ -691,6 +692,76 @@ describe("gameService", () => {
       await expect(
         submitGameResults(validGameId, invalidResults),
       ).rejects.toThrow("Players not assigned to this game");
+    });
+
+    describe("repechagePlayerFromGame", () => {
+      beforeEach(() => {
+        (db.query.game.findFirst as any).mockResolvedValue({
+          id: "game-id",
+          phase_id: "phase-id",
+          bracket_id: "bracket-id",
+          game_number: 1,
+          status: "completed",
+        });
+
+        (db.query.phase.findFirst as any).mockResolvedValue({
+          id: "phase-id",
+          tournament_id: "tournament-id",
+          total_games: 1,
+          order_index: 1,
+        });
+
+        (db.query.results.findMany as any).mockResolvedValue([
+          { player_id: "p1", placement: 1, result_status: "normal" },
+          { player_id: "p2", placement: 2, result_status: "normal" },
+          { player_id: "p3", placement: 0, result_status: "forfeit" },
+        ]);
+
+        (db.transaction as any).mockImplementation(async (callback: any) => {
+          const txUpdateWhere = vi.fn().mockResolvedValue(undefined);
+          const txDeleteWhere = vi.fn().mockResolvedValue(undefined);
+          const tx = {
+            query: {
+              game: {
+                findMany: vi.fn().mockResolvedValue([{ id: "pending-game-2" }]),
+              },
+            },
+            update: vi.fn().mockReturnValue({
+              set: vi.fn().mockReturnValue({
+                where: txUpdateWhere,
+              }),
+            }),
+            delete: vi.fn().mockReturnValue({
+              where: txDeleteWhere,
+            }),
+          };
+          return callback(tx);
+        });
+      });
+
+      it("repêche un joueur forfait et met à jour les données tournoi", async () => {
+        await repechagePlayerFromGame("game-id", "p3", 3);
+
+        expect(db.transaction).toHaveBeenCalled();
+      });
+
+      it("rejette un placement deja utilise", async () => {
+        await expect(
+          repechagePlayerFromGame("game-id", "p3", 2),
+        ).rejects.toThrow("deja attribue");
+      });
+
+      it("rejette si le joueur n'est pas forfait", async () => {
+        (db.query.results.findMany as any).mockResolvedValue([
+          { player_id: "p1", placement: 1, result_status: "normal" },
+          { player_id: "p2", placement: 2, result_status: "normal" },
+          { player_id: "p3", placement: 3, result_status: "normal" },
+        ]);
+
+        await expect(
+          repechagePlayerFromGame("game-id", "p3", 3),
+        ).rejects.toThrow("marque forfait");
+      });
     });
   });
 
