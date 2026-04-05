@@ -350,7 +350,6 @@ export function PublicResultsView() {
                     <TableHeader>
                       <TableColumn>RANG</TableColumn>
                       <TableColumn>PSEUDO TR</TableColumn>
-                      <TableColumn>PTS</TableColumn>
                     </TableHeader>
                     <TableBody>
                       {top24ByBracket[bucket].map((entry) => (
@@ -359,11 +358,6 @@ export function PublicResultsView() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <span>{entry.player_name || "-"}</span>
-                              {entry.is_finalist ? (
-                                <Chip size="sm" color="warning" variant="flat">
-                                  Finaliste
-                                </Chip>
-                              ) : null}
                               {entry.used_phase34_tie_break ? (
                                 <Chip size="sm" color="secondary" variant="flat">
                                   TB P3+P4
@@ -371,7 +365,6 @@ export function PublicResultsView() {
                               ) : null}
                             </div>
                           </TableCell>
-                          <TableCell>{entry.total_points}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
