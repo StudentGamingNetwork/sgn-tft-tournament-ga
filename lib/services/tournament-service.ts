@@ -434,9 +434,66 @@ export async function startPhase3FromPhase1And2(
     expectedPreviousPhaseId: phase2Id,
   });
 
+  const phase3Data = await db.query.phase.findFirst({
+    where: eq(phase.id, phase3Id),
+    columns: {
+      tournament_id: true,
+    },
+  });
+
+  let effectivePhase1Id = phase1Id;
+  let effectivePhase2Id = phase2Id;
+
+  if (phase3Data?.tournament_id) {
+    const tournamentPhases = await db.query.phase.findMany({
+      where: eq(phase.tournament_id, phase3Data.tournament_id),
+      with: {
+        brackets: {
+          with: {
+            games: {
+              with: {
+                results: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: (phase, { asc }) => [asc(phase.order_index)],
+    });
+
+    const phase1Candidates = tournamentPhases.filter(
+      (p) => p.order_index === 1,
+    );
+    const phase2Candidates = tournamentPhases.filter(
+      (p) => p.order_index === 2,
+    );
+
+    const pickCanonical = (
+      candidates: Array<(typeof tournamentPhases)[number]>,
+      fallbackId: string,
+    ) => {
+      const withFallback = candidates.find((p) => p.id === fallbackId);
+      const completed = candidates.find(
+        (p) => getPhaseProgressStatus(p) === "completed",
+      );
+      return completed ?? withFallback ?? candidates[0] ?? null;
+    };
+
+    const canonicalPhase1 = pickCanonical(phase1Candidates, phase1Id);
+    const canonicalPhase2 = pickCanonical(phase2Candidates, phase2Id);
+
+    if (canonicalPhase1?.id) {
+      effectivePhase1Id = canonicalPhase1.id;
+    }
+
+    if (canonicalPhase2?.id) {
+      effectivePhase2Id = canonicalPhase2.id;
+    }
+  }
+
   // Get classements
-  const phase1Leaderboard = await getLeaderboard(phase1Id);
-  const phase2RawLeaderboard = await getLeaderboard(phase2Id);
+  const phase1Leaderboard = await getLeaderboard(effectivePhase1Id);
+  const phase2RawLeaderboard = await getLeaderboard(effectivePhase2Id);
 
   // Use cumulative P1+P2 ordering for Phase 2 qualifiers to keep the same
   // ranking logic used in Phase 2 progression/reseeding and avoid seed drift.
@@ -444,8 +501,8 @@ export async function startPhase3FromPhase1And2(
     phase2RawLeaderboard.map((entry) => entry.player_id),
   );
   const cumulativePhase1And2 = await getCumulativeLeaderboard([
-    phase1Id,
-    phase2Id,
+    effectivePhase1Id,
+    effectivePhase2Id,
   ]);
   const phase2Leaderboard = cumulativePhase1And2.filter((entry) =>
     phase2PlayerIds.has(entry.player_id),
@@ -454,7 +511,7 @@ export async function startPhase3FromPhase1And2(
   // Phase 2 identity seeds are stored on game 1 assignments and define
   // which players belong to the P2 pool (17..51) for Phase 3 split.
   const phase2GameOneRows = await db.query.game.findMany({
-    where: and(eq(game.phase_id, phase2Id), eq(game.game_number, 1)),
+    where: and(eq(game.phase_id, effectivePhase2Id), eq(game.game_number, 1)),
     with: {
       lobbyPlayers: true,
     },
