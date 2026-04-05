@@ -87,9 +87,7 @@ export default defineConfig([globalIgnores([
     files: ["**/*.ts", "**/*.tsx"],
 
     rules: {
-        "indent": ["warn", 4, {
-            SwitchCase: 1,
-        }],
+        "indent": "off",
         "no-console": "warn",
         "react/prop-types": "off",
         "react/jsx-uses-react": "off",
