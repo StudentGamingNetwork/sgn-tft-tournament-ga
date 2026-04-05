@@ -19,7 +19,7 @@
 
 import { db } from "@/lib/db";
 import { tournament, phase, bracket, game, lobbyPlayer } from "@/models/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import type { BracketType } from "@/types/tournament";
 import {
   seedAndCreateFirstGame,
@@ -534,16 +534,24 @@ export async function startPhase3FromPhase1And2(
     true, // Use snake seeding for Master bracket
   );
 
-  for (const created of masterGames as Array<{
-    game: { id: string };
-    assignment?: { players?: Array<{ player_id: string; seed: number }> };
-  }>) {
-    for (const assignedPlayer of created.assignment?.players ?? []) {
-      const preservedSeed = phase3MasterSeedByPlayer.get(
-        assignedPlayer.player_id,
-      );
+  const masterGameIds = masterGames.map((created) => created.game.id);
+  if (masterGameIds.length > 0) {
+    const createdAssignments = await db.query.lobbyPlayer.findMany({
+      where: inArray(lobbyPlayer.game_id, masterGameIds),
+      columns: {
+        game_id: true,
+        player_id: true,
+        seed: true,
+      },
+    });
 
-      if (!preservedSeed || preservedSeed === assignedPlayer.seed) {
+    for (const assignment of createdAssignments) {
+      if (!assignment.game_id || !assignment.player_id) {
+        continue;
+      }
+
+      const preservedSeed = phase3MasterSeedByPlayer.get(assignment.player_id);
+      if (!preservedSeed || preservedSeed === assignment.seed) {
         continue;
       }
 
@@ -552,8 +560,8 @@ export async function startPhase3FromPhase1And2(
         .set({ seed: preservedSeed })
         .where(
           and(
-            eq(lobbyPlayer.game_id, created.game.id),
-            eq(lobbyPlayer.player_id, assignedPlayer.player_id),
+            eq(lobbyPlayer.game_id, assignment.game_id),
+            eq(lobbyPlayer.player_id, assignment.player_id),
           ),
         );
     }

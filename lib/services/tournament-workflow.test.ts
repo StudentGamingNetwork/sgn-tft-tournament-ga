@@ -200,6 +200,13 @@ describe("Tournament Workflow", () => {
           ],
         },
       ]);
+      mockDb.db.query.lobbyPlayer.findMany = vi.fn().mockResolvedValue(
+        Array.from({ length: 32 }, (_, i) => ({
+          game_id: "game-1",
+          player_id: i < 16 ? `p1-${i + 1}` : `p2-${i - 15}`,
+          seed: i + 1,
+        })),
+      );
 
       const { seedPlayersBasedOnLeaderboard, assignPlayersToLobbies } =
         await import("./seeding-service");
