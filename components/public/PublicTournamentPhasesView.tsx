@@ -611,7 +611,7 @@ export function PublicTournamentPhasesView() {
                                   <TableBody>
                                     {game.assignedPlayers.map((player) => (
                                       <TableRow key={player.player_id}>
-                                        <TableCell>#{player.seed}</TableCell>
+                                        <TableCell>#{player.display_seed ?? player.seed}</TableCell>
                                         <TableCell>{player.player_name || "-"}</TableCell>
                                       </TableRow>
                                     ))}

@@ -619,7 +619,7 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                     {game.assignedPlayers.map((player) => (
                                         <TableRow key={player.player_id}>
                                             <TableCell>
-                                                <span className="text-default-400">Seed #{player.seed}</span>
+                                                <span className="text-default-400">Seed #{player.display_seed ?? player.seed}</span>
                                             </TableCell>
                                             <TableCell className="font-medium">
                                                 <div className="flex items-center gap-2">

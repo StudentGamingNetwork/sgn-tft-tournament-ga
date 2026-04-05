@@ -388,7 +388,7 @@ export function PublicResultsView() {
                     <TableBody>
                       {game.assignedPlayers.map((assigned) => (
                         <TableRow key={assigned.player_id}>
-                          <TableCell>#{assigned.seed}</TableCell>
+                          <TableCell>#{assigned.display_seed ?? assigned.seed}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <span>{assigned.player_name || "-"}</span>

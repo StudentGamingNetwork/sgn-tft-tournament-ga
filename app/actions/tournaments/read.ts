@@ -788,6 +788,7 @@ export interface LobbyPlayerInfo {
   player_name: string;
   riot_id: string;
   seed: number;
+  display_seed: number;
   is_finalist?: boolean;
 }
 
@@ -1101,6 +1102,13 @@ export async function getPhaseDetails(
       }
     }
 
+    const globalRankByPlayerId = new Map<string, number>(
+      participants.map((participant) => [
+        participant.player_id,
+        participant.current_rank,
+      ]),
+    );
+
     const games: GameWithResults[] = gamesData.map((g) => ({
       game_id: g.id,
       lobby_name: g.lobby_name,
@@ -1135,14 +1143,27 @@ export async function getPhaseDetails(
         }),
       assignedPlayers: (g.lobbyPlayers || [])
         .filter((lp: any) => lp.player && lp.player_id)
-        .map((lp: any) => ({
-          player_id: lp.player_id as string,
+        .map((lp: any) => {
+          const playerId = lp.player_id as string;
+          const technicalSeed = lp.seed;
+
+          return {
+            player_id: playerId,
           player_name: lp.player.name,
           riot_id: lp.player.riot_id,
-          seed: lp.seed,
-          is_finalist: finalistByPlayerId.get(lp.player_id as string) ?? false,
-        }))
-        .sort((a: any, b: any) => a.seed - b.seed),
+          seed: technicalSeed,
+          // Display seed follows global phase ranking across all phases.
+          display_seed: globalRankByPlayerId.get(playerId) ?? technicalSeed,
+          is_finalist: finalistByPlayerId.get(playerId) ?? false,
+          };
+        })
+        .sort((a: any, b: any) => {
+          if (a.display_seed !== b.display_seed) {
+            return a.display_seed - b.display_seed;
+          }
+
+          return a.seed - b.seed;
+        }),
     }));
 
     const totalGamesCreated = gamesData.length;

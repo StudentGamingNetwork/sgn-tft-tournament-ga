@@ -95,7 +95,7 @@ export function ReassignPlayersModal({
                   <strong>Lobby source:</strong> {sourceGame.lobby_name}
                 </p>
                 <p>
-                  <strong>Seed:</strong> #{sourcePlayer.seed}
+                  <strong>Seed:</strong> #{sourcePlayer.display_seed ?? sourcePlayer.seed}
                 </p>
               </div>
 
@@ -130,7 +130,7 @@ export function ReassignPlayersModal({
                     <option value="">Selectionner un joueur</option>
                     {targetPlayers.map((player) => (
                       <option key={player.player_id} value={player.player_id}>
-                        {player.player_name || "-"} (Seed #{player.seed})
+                        {player.player_name || "-"} (Seed #{player.display_seed ?? player.seed})
                       </option>
                     ))}
                   </select>
