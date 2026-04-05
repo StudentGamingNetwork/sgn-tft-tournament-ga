@@ -924,6 +924,33 @@ export async function getPhaseDetails(
 
     const participantsMap = new Map<string, PhasePlayerStats>();
 
+    const allLobbyPlayers = gamesData.flatMap((g) => g.lobbyPlayers || []);
+    const uniquePlayers = new Map<string, any>();
+
+    for (const lp of allLobbyPlayers) {
+      if (lp.player && lp.player_id && !uniquePlayers.has(lp.player_id)) {
+        uniquePlayers.set(lp.player_id, lp.player);
+      }
+    }
+
+    const game1SeedByPlayerId = new Map<string, number>();
+    for (const g of gamesData) {
+      if (g.game_number !== 1) {
+        continue;
+      }
+
+      for (const lp of g.lobbyPlayers || []) {
+        if (!lp.player_id || !lp.seed) {
+          continue;
+        }
+
+        const existingSeed = game1SeedByPlayerId.get(lp.player_id);
+        if (existingSeed === undefined || lp.seed < existingSeed) {
+          game1SeedByPlayerId.set(lp.player_id, lp.seed);
+        }
+      }
+    }
+
     if (leaderboard.length > 0) {
       for (const [index, entry] of leaderboard.entries()) {
         const stats =
@@ -960,58 +987,46 @@ export async function getPhaseDetails(
           top4_or_better_count: top4OrBetterCount,
         });
       }
-    } else {
-      const allLobbyPlayers = gamesData.flatMap((g) => g.lobbyPlayers || []);
-      const uniquePlayers = new Map<string, any>();
-
-      for (const lp of allLobbyPlayers) {
-        if (lp.player && lp.player_id && !uniquePlayers.has(lp.player_id)) {
-          uniquePlayers.set(lp.player_id, lp.player);
-        }
-      }
-
-      const playersWithSeeds = Array.from(uniquePlayers.entries()).map(
-        ([playerId, player]) => {
-          const game1Player = gamesData
-            .filter((g) => g.game_number === 1)
-            .flatMap((g) => g.lobbyPlayers || [])
-            .find((lp) => lp.player_id === playerId);
-
-          return {
-            player_id: playerId,
-            player_name: player.name,
-            riot_id: player.riot_id,
-            team_name: player.team?.name,
-            seed: game1Player?.seed || 999,
-          };
-        },
-      );
-
-      playersWithSeeds.sort((a, b) => a.seed - b.seed);
-
-      playersWithSeeds.forEach((p, index) => {
-        participantsMap.set(p.player_id, {
-          player_id: p.player_id,
-          player_name: p.player_name,
-          riot_id: p.riot_id,
-          team_name: p.team_name,
-          current_rank: index + 1,
-          total_points: 0,
-          total_games: 0,
-          avg_placement: 0,
-          top1_count: 0,
-          top2_count: 0,
-          top3_count: 0,
-          top4_count: 0,
-          top5_count: 0,
-          top6_count: 0,
-          top7_count: 0,
-          top8_count: 0,
-          placements: [],
-          top4_or_better_count: 0,
-        });
-      });
     }
+
+    const playersWithoutStats = Array.from(uniquePlayers.entries())
+      .filter(([playerId]) => !participantsMap.has(playerId))
+      .map(([playerId, player]) => ({
+        player_id: playerId,
+        player_name: player.name,
+        riot_id: player.riot_id,
+        team_name: player.team?.name,
+        seed: game1SeedByPlayerId.get(playerId) ?? 999,
+      }))
+      .sort((a, b) => a.seed - b.seed);
+
+    const nextRankStart =
+      participantsMap.size === 0
+        ? 1
+        : Math.max(...Array.from(participantsMap.values()).map((p) => p.current_rank)) + 1;
+
+    playersWithoutStats.forEach((p, index) => {
+      participantsMap.set(p.player_id, {
+        player_id: p.player_id,
+        player_name: p.player_name,
+        riot_id: p.riot_id,
+        team_name: p.team_name,
+        current_rank: nextRankStart + index,
+        total_points: 0,
+        total_games: 0,
+        avg_placement: 0,
+        top1_count: 0,
+        top2_count: 0,
+        top3_count: 0,
+        top4_count: 0,
+        top5_count: 0,
+        top6_count: 0,
+        top7_count: 0,
+        top8_count: 0,
+        placements: [],
+        top4_or_better_count: 0,
+      });
+    });
 
     const participants = Array.from(participantsMap.values());
 
