@@ -1230,29 +1230,6 @@ export async function checkAndCreateNextGame(
       continue;
     }
 
-    // Phase 3 Amateur special flow:
-    // - Game 2 is auto-created after Game 1
-    // - Games 3-4 are auto-created with only top 8 after Game 2 is fully completed
-    if (
-      phaseData.order_index === 3 &&
-      bracketName === "amateur" &&
-      currentGameNumber === 2
-    ) {
-      const result = await createPhase3AmateurTop8Games(phaseId, bracketId);
-      if (result.created && result.gamesCreated) {
-        totalGamesCreated += result.gamesCreated;
-      }
-      continue;
-    }
-
-    if (
-      phaseData.order_index === 3 &&
-      bracketName === "amateur" &&
-      currentGameNumber >= 3
-    ) {
-      continue;
-    }
-
     const result = await createNextGameWithReseed(
       phaseId,
       bracketId,
@@ -1323,7 +1300,7 @@ async function createPhase4MasterTop16Games(
     };
   });
 
-  const seedingMatrix = generateSnakeDraftMatrix(16, 1);
+  const seedingMatrix = generateSnakeSeedMatrix(16, 1);
   const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
 
   let gamesCreated = 0;
@@ -1345,70 +1322,6 @@ async function createPhase4MasterTop16Games(
       await db.insert(lobbyPlayer).values(lobbyPlayerAssignments);
       gamesCreated++;
     }
-  }
-
-  return { created: gamesCreated > 0, gamesCreated };
-}
-
-async function createPhase3AmateurTop8Games(
-  phaseId: string,
-  bracketId: string,
-): Promise<{ created: boolean; gamesCreated?: number }> {
-  const existingGames3 = await db.query.game.findMany({
-    where: and(
-      eq(game.phase_id, phaseId),
-      eq(game.bracket_id, bracketId),
-      eq(game.game_number, 3),
-    ),
-  });
-
-  if (existingGames3.length > 0) {
-    return { created: false, gamesCreated: 0 };
-  }
-
-  const leaderboard = await getLeaderboard(phaseId, bracketId);
-  const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phaseId);
-  const top8 = leaderboard
-    .filter((entry) => !forfeitedPlayerIds.has(entry.player_id))
-    .slice(0, 8);
-
-  if (top8.length < 8) {
-    throw new Error(
-      `Phase 3 amateur requires 8 players for games 3-4, found ${top8.length}`,
-    );
-  }
-
-  const playerIds = top8.map((entry) => entry.player_id);
-  const playersData = await db.query.player.findMany({
-    where: inArray(player.id, playerIds),
-  });
-  const playersMap = new Map(playersData.map((p) => [p.id, p]));
-
-  const seededPlayers: SeededPlayer[] = top8.map((entry, index) => {
-    const playerData = playersMap.get(entry.player_id);
-    if (!playerData) {
-      throw new Error(`Player ${entry.player_id} not found`);
-    }
-
-    return {
-      player_id: entry.player_id,
-      name: entry.player_name,
-      riot_id: entry.riot_id,
-      tier: playerData.tier!,
-      division: playerData.division as any,
-      league_points: playerData.league_points!,
-      seed: index + 1,
-    };
-  });
-
-  let gamesCreated = 0;
-  for (const gameNumber of [3, 4]) {
-    gamesCreated += await createGamesFromSeededPlayers({
-      phaseId,
-      bracketId,
-      gameNumber,
-      seededPlayers,
-    });
   }
 
   return { created: gamesCreated > 0, gamesCreated };

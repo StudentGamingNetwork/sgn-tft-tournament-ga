@@ -846,4 +846,236 @@ describe("gameService", () => {
       expect(db.insert).not.toHaveBeenCalledWith(gameTable);
     });
   });
+
+  describe("checkAndCreateNextGame - phase reseeding regressions", () => {
+    it("garde 2 lobbies en phase 3 amateur a partir de la game 3", async () => {
+      const phaseId = "phase-3";
+      const bracketId = "bracket-amateur";
+
+      (db.query.phase.findFirst as any).mockReset();
+      (db.query.game.findMany as any).mockReset();
+      (db.query.player.findMany as any).mockReset();
+      (db.query.tournamentRegistration.findMany as any)
+        .mockReset()
+        .mockResolvedValue([]);
+      vi.mocked(getLeaderboard as any).mockReset();
+      (db.insert as any).mockReset();
+
+      const currentGames = [
+        {
+          id: "g2-a",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "amateur" },
+          results: [{ player_id: "p1", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
+        {
+          id: "g2-b",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "amateur" },
+          results: [{ player_id: "p9", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
+      ];
+
+      const leaderboard = Array.from({ length: 16 }, (_, index) => ({
+        player_id: `p${index + 1}`,
+        player_name: `Player ${index + 1}`,
+        riot_id: `p${index + 1}#1`,
+        rank: index + 1,
+        total_points: 100 - index,
+      }));
+
+      const playersData = Array.from({ length: 16 }, (_, index) => ({
+        id: `p${index + 1}`,
+        name: `Player ${index + 1}`,
+        riot_id: `p${index + 1}#1`,
+        tier: "GOLD",
+        division: "I",
+        league_points: 50,
+      }));
+
+      (db.query.phase.findFirst as any).mockResolvedValue({
+        id: phaseId,
+        total_games: 4,
+        order_index: 3,
+        tournament_id: "tournament-1",
+      });
+
+      (db.query.game.findMany as any)
+        .mockResolvedValueOnce(currentGames)
+        .mockResolvedValueOnce([]);
+
+      vi.mocked(getLeaderboard as any).mockResolvedValue(leaderboard);
+      (db.query.player.findMany as any).mockResolvedValue(playersData);
+
+      let createdGameCounter = 0;
+      const lobbyInsertPayloads: any[] = [];
+
+      (db.insert as any).mockImplementation((table: any) => {
+        if (table === gameTable) {
+          return {
+            values: vi.fn().mockImplementation((values: any) => ({
+              returning: vi.fn().mockResolvedValue([
+                {
+                  id: `new-game-${++createdGameCounter}`,
+                  ...values,
+                  status: "upcoming",
+                },
+              ]),
+            })),
+          };
+        }
+
+        return {
+          values: vi.fn().mockImplementation(async (values: any) => {
+            lobbyInsertPayloads.push(values);
+            return [];
+          }),
+        };
+      });
+
+      const result = await checkAndCreateNextGame(phaseId, 2);
+
+      expect(result.created).toBe(true);
+      expect(result.gamesCreated).toBe(2);
+
+      const gameInsertCalls = (db.insert as any).mock.calls.filter(
+        ([table]: any[]) => table === gameTable,
+      );
+      expect(gameInsertCalls).toHaveLength(2);
+      expect(lobbyInsertPayloads).toHaveLength(2);
+      expect(lobbyInsertPayloads.map((payload) => payload.length)).toEqual([8, 8]);
+    });
+
+    it("conserve le snake seeding en phase 4 master pour les games 3-4", async () => {
+      const phaseId = "phase-4";
+      const bracketId = "bracket-master";
+
+      (db.query.phase.findFirst as any).mockReset();
+      (db.query.game.findMany as any).mockReset();
+      (db.query.player.findMany as any).mockReset();
+      (db.query.tournamentRegistration.findMany as any)
+        .mockReset()
+        .mockResolvedValue([]);
+      vi.mocked(getLeaderboard as any).mockReset();
+      (db.insert as any).mockReset();
+
+      const currentGames = [
+        {
+          id: "g2-a",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "master" },
+          results: [{ player_id: "p1", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
+        {
+          id: "g2-b",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "master" },
+          results: [{ player_id: "p2", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
+      ];
+
+      const leaderboard = Array.from({ length: 16 }, (_, index) => ({
+        player_id: `p${index + 1}`,
+        player_name: `Player ${index + 1}`,
+        riot_id: `p${index + 1}#1`,
+        rank: index + 1,
+        total_points: 100 - index,
+      }));
+
+      const playersData = Array.from({ length: 16 }, (_, index) => ({
+        id: `p${index + 1}`,
+        name: `Player ${index + 1}`,
+        riot_id: `p${index + 1}#1`,
+        tier: "GOLD",
+        division: "I",
+        league_points: 50,
+      }));
+
+      (db.query.phase.findFirst as any).mockResolvedValue({
+        id: phaseId,
+        total_games: 4,
+        order_index: 4,
+        tournament_id: "tournament-1",
+      });
+
+      (db.query.game.findMany as any)
+        .mockResolvedValueOnce(currentGames)
+        .mockResolvedValueOnce([]);
+
+      vi.mocked(getLeaderboard as any).mockResolvedValue(leaderboard);
+      (db.query.player.findMany as any).mockResolvedValue(playersData);
+
+      let createdGameCounter = 0;
+      const createdGamesById = new Map<
+        string,
+        { game_number: number; lobby_name: string }
+      >();
+      const lobbyInsertPayloads: any[] = [];
+
+      (db.insert as any).mockImplementation((table: any) => {
+        if (table === gameTable) {
+          return {
+            values: vi.fn().mockImplementation((values: any) => ({
+              returning: vi.fn().mockImplementation(async () => {
+                const created = {
+                  id: `new-game-${++createdGameCounter}`,
+                  ...values,
+                  status: "upcoming",
+                };
+
+                createdGamesById.set(created.id, {
+                  game_number: created.game_number,
+                  lobby_name: created.lobby_name,
+                });
+
+                return [created];
+              }),
+            })),
+          };
+        }
+
+        return {
+          values: vi.fn().mockImplementation(async (values: any) => {
+            lobbyInsertPayloads.push(values);
+            return [];
+          }),
+        };
+      });
+
+      const result = await checkAndCreateNextGame(phaseId, 2);
+
+      expect(result.created).toBe(true);
+      expect(result.gamesCreated).toBe(4);
+
+      const game3LobbyAPlayers = lobbyInsertPayloads
+        .filter((payload) => {
+          const gameInfo = createdGamesById.get(payload[0]?.game_id);
+          return gameInfo?.game_number === 3 && gameInfo.lobby_name === "Lobby A";
+        })
+        .flatMap((payload) => payload.map((entry: any) => entry.player_id));
+
+      expect(game3LobbyAPlayers).toEqual([
+        "p1",
+        "p4",
+        "p5",
+        "p8",
+        "p9",
+        "p12",
+        "p13",
+        "p16",
+      ]);
+    });
+  });
 });
