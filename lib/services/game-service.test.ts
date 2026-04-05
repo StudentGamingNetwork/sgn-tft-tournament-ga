@@ -990,6 +990,159 @@ describe("gameService", () => {
       ]);
     });
 
+    it("utilise le snake seeding en phase 3 master a partir de la game 3", async () => {
+      const phaseId = "phase-3";
+      const bracketId = "bracket-master";
+
+      (db.query.phase.findFirst as any).mockReset();
+      (db.query.game.findMany as any).mockReset();
+      (db.query.player.findMany as any).mockReset();
+      (db.query.tournamentRegistration.findMany as any)
+        .mockReset()
+        .mockResolvedValue([]);
+      vi.mocked(getLeaderboard as any).mockReset();
+      (db.insert as any).mockReset();
+
+      const currentGames = [
+        {
+          id: "g2-a",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "master" },
+          results: [{ player_id: "p1", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
+        {
+          id: "g2-b",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "master" },
+          results: [{ player_id: "p2", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
+        {
+          id: "g2-c",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "master" },
+          results: [{ player_id: "p3", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
+        {
+          id: "g2-d",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "master" },
+          results: [{ player_id: "p4", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
+      ];
+
+      const leaderboard = Array.from({ length: 32 }, (_, index) => ({
+        player_id: `p${index + 1}`,
+        player_name: `Player ${index + 1}`,
+        riot_id: `p${index + 1}#1`,
+        rank: index + 1,
+        total_points: 200 - index,
+      }));
+
+      const playersData = Array.from({ length: 32 }, (_, index) => ({
+        id: `p${index + 1}`,
+        name: `Player ${index + 1}`,
+        riot_id: `p${index + 1}#1`,
+        tier: "GOLD",
+        division: "I",
+        league_points: 50,
+      }));
+
+      const gameOneLobbies = Array.from({ length: 4 }, (_, lobbyIndex) => ({
+        id: `g1-${lobbyIndex + 1}`,
+        lobbyPlayers: Array.from({ length: 8 }, (_, slot) => ({
+          player_id: `p${lobbyIndex * 8 + slot + 1}`,
+          seed: lobbyIndex * 8 + slot + 1,
+        })),
+      }));
+
+      (db.query.phase.findFirst as any).mockResolvedValue({
+        id: phaseId,
+        total_games: 4,
+        order_index: 3,
+        tournament_id: "tournament-1",
+      });
+
+      (db.query.game.findMany as any)
+        .mockResolvedValueOnce(currentGames)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(gameOneLobbies);
+
+      vi.mocked(getLeaderboard as any).mockResolvedValue(leaderboard);
+      (db.query.player.findMany as any).mockResolvedValue(playersData);
+
+      let createdGameCounter = 0;
+      const createdGamesById = new Map<
+        string,
+        { game_number: number; lobby_name: string }
+      >();
+      const lobbyInsertPayloads: any[] = [];
+
+      (db.insert as any).mockImplementation((table: any) => {
+        if (table === gameTable) {
+          return {
+            values: vi.fn().mockImplementation((values: any) => ({
+              returning: vi.fn().mockImplementation(async () => {
+                const created = {
+                  id: `new-game-${++createdGameCounter}`,
+                  ...values,
+                  status: "upcoming",
+                };
+
+                createdGamesById.set(created.id, {
+                  game_number: created.game_number,
+                  lobby_name: created.lobby_name,
+                });
+
+                return [created];
+              }),
+            })),
+          };
+        }
+
+        return {
+          values: vi.fn().mockImplementation(async (values: any) => {
+            lobbyInsertPayloads.push(values);
+            return [];
+          }),
+        };
+      });
+
+      const result = await checkAndCreateNextGame(phaseId, 2);
+
+      expect(result.created).toBe(true);
+      expect(result.gamesCreated).toBe(4);
+
+      const game3LobbyAPlayers = lobbyInsertPayloads
+        .filter((payload) => {
+          const gameInfo = createdGamesById.get(payload[0]?.game_id);
+          return gameInfo?.game_number === 3 && gameInfo.lobby_name === "Lobby A";
+        })
+        .flatMap((payload) => payload.map((entry: any) => entry.player_id));
+
+      expect(game3LobbyAPlayers).toEqual([
+        "p1",
+        "p8",
+        "p9",
+        "p16",
+        "p17",
+        "p24",
+        "p25",
+        "p32",
+      ]);
+    });
+
     it("conserve le snake seeding en phase 4 master pour les games 3-4", async () => {
       const phaseId = "phase-4";
       const bracketId = "bracket-master";

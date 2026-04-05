@@ -1553,11 +1553,15 @@ async function createNextGameWithReseed(
     },
   );
 
+  const useSnakeSeeding =
+    bracketName === "master" && (phaseOrderIndex === 3 || phaseOrderIndex === 4);
+
   const gamesCreated = await createGamesFromSeededPlayers({
     phaseId,
     bracketId,
     gameNumber: nextGameNumber,
     seededPlayers,
+    useSnakeSeeding,
   });
 
   return { created: gamesCreated > 0, gamesCreated };
