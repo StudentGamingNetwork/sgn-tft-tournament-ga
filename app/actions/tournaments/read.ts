@@ -454,6 +454,23 @@ export async function getTournamentGlobalResults(
         hierarchyPhaseLeaderboard.map((entry) => [entry.player_id, entry.rank]),
       );
 
+      // Keep a deterministic fallback rank for players missing in the current
+      // hierarchy phase (e.g. forfeited and removed from pending lobbies).
+      const latestKnownRankByPlayerId = new Map<string, number>();
+      const startedPhasesDesc = [...startedPhases].sort(
+        (a, b) => b.order_index - a.order_index,
+      );
+
+      for (const startedPhase of startedPhasesDesc) {
+        const phaseLeaderboard = await getLeaderboard(startedPhase.id);
+
+        for (const entry of phaseLeaderboard) {
+          if (!latestKnownRankByPlayerId.has(entry.player_id)) {
+            latestKnownRankByPlayerId.set(entry.player_id, entry.rank);
+          }
+        }
+      }
+
       const playerBucket = new Map<string, string>();
 
       const phasesForBucketFallback = [...startedPhases]
@@ -516,9 +533,13 @@ export async function getTournamentGlobalResults(
         const hierarchyRankB = hierarchyRankByPlayerId.get(b.player_id);
 
         const rankA =
-          hierarchyRankA ?? (a.rank > 0 ? a.rank : Number.MAX_SAFE_INTEGER);
+          hierarchyRankA ??
+          latestKnownRankByPlayerId.get(a.player_id) ??
+          (a.rank > 0 ? a.rank : Number.MAX_SAFE_INTEGER);
         const rankB =
-          hierarchyRankB ?? (b.rank > 0 ? b.rank : Number.MAX_SAFE_INTEGER);
+          hierarchyRankB ??
+          latestKnownRankByPlayerId.get(b.player_id) ??
+          (b.rank > 0 ? b.rank : Number.MAX_SAFE_INTEGER);
 
         if (rankA !== rankB) {
           return rankA - rankB;
