@@ -561,9 +561,10 @@ async function getInitialGameOneSeeding(
     );
 
     if (currentBracket.name === "master") {
-      const ordered = masterLeaderboard
-        .slice(0, PHASE4_MASTER_FROM_P3_MASTER)
-        .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
+      const availableMaster = masterLeaderboard.filter(
+        (entry) => !forfeitedPlayerIds.has(entry.player_id),
+      );
+      const ordered = availableMaster.slice(0, PHASE4_MASTER_FROM_P3_MASTER);
       return {
         seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, true),
         useSnakeSeeding: true,
@@ -571,18 +572,40 @@ async function getInitialGameOneSeeding(
     }
 
     if (currentBracket.name === "amateur") {
+      const availableMaster = masterLeaderboard.filter(
+        (entry) => !forfeitedPlayerIds.has(entry.player_id),
+      );
+      const availableAmateur = amateurLeaderboard.filter(
+        (entry) => !forfeitedPlayerIds.has(entry.player_id),
+      );
+
+      const topMaster = availableMaster.slice(0, PHASE4_MASTER_FROM_P3_MASTER);
+      const topAmateur = availableAmateur.slice(0, PHASE4_AMATEUR_FROM_P3_AMATEUR);
+      const amateurWildcards = availableAmateur.slice(
+        PHASE4_AMATEUR_FROM_P3_AMATEUR,
+        PHASE4_AMATEUR_FROM_P3_AMATEUR +
+          PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
+      );
+
+      const phase4AmateurTarget =
+        PHASE4_AMATEUR_FROM_P3_MASTER +
+        PHASE4_AMATEUR_FROM_P3_AMATEUR +
+        PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR;
+      const remainingAmateurSlots = Math.max(
+        phase4AmateurTarget - topAmateur.length - amateurWildcards.length,
+        0,
+      );
+
+      const relegatedMaster = availableMaster.slice(
+        topMaster.length,
+        topMaster.length + remainingAmateurSlots,
+      );
+
       const ordered = [
-        ...masterLeaderboard.slice(
-          PHASE4_MASTER_FROM_P3_MASTER,
-          PHASE4_MASTER_FROM_P3_MASTER + PHASE4_AMATEUR_FROM_P3_MASTER,
-        ),
-        ...amateurLeaderboard.slice(0, PHASE4_AMATEUR_FROM_P3_AMATEUR),
-        ...amateurLeaderboard.slice(
-          PHASE4_AMATEUR_FROM_P3_AMATEUR,
-          PHASE4_AMATEUR_FROM_P3_AMATEUR +
-            PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
-        ),
-      ].filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
+        ...relegatedMaster,
+        ...topAmateur,
+        ...amateurWildcards,
+      ];
 
       return {
         seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),

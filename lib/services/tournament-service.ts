@@ -623,26 +623,47 @@ export async function startPhase4FromPhase3(
   // Classements de Phase 3
   const masterLeaderboard = await getLeaderboard(phase3Id, phase3Master.id);
   const amateurLeaderboard = await getLeaderboard(phase3Id, phase3Amateur.id);
+  const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phase4Id);
 
-  // Phase 4 Master: top block from P3 Master
-  const phase4MasterPlayerIds = masterLeaderboard
-    .slice(0, PHASE4_MASTER_FROM_P3_MASTER)
-    .map((p) => p.player_id);
-
-  // Phase 4 Amateur: bottom block P3 Master, then top 8 P3 Amateur,
-  // then 2 wildcards (rangs 9-10 de P3 Amateur).
-  const relegatedMaster = masterLeaderboard.slice(
-    PHASE4_MASTER_FROM_P3_MASTER,
-    PHASE4_MASTER_FROM_P3_MASTER + PHASE4_AMATEUR_FROM_P3_MASTER,
+  const availableMaster = masterLeaderboard.filter(
+    (entry) => !forfeitedPlayerIds.has(entry.player_id),
   );
-  const topAmateur = amateurLeaderboard.slice(
+  const availableAmateur = amateurLeaderboard.filter(
+    (entry) => !forfeitedPlayerIds.has(entry.player_id),
+  );
+
+  // Phase 4 Master: top block from P3 Master (hors forfaits)
+  const topMasterLeaderboard = availableMaster.slice(
+    0,
+    PHASE4_MASTER_FROM_P3_MASTER,
+  );
+
+  // Phase 4 Amateur: top 8 P3 Amateur + 2 wildcards (rangs 9-10),
+  // complete ensuite avec les relegues Master pour atteindre 24 joueurs.
+  const topAmateur = availableAmateur.slice(
     0,
     PHASE4_AMATEUR_FROM_P3_AMATEUR,
   );
-  const amateurWildcards = amateurLeaderboard.slice(
+  const amateurWildcards = availableAmateur.slice(
     PHASE4_AMATEUR_FROM_P3_AMATEUR,
     PHASE4_AMATEUR_FROM_P3_AMATEUR + PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR,
   );
+
+  const phase4AmateurTarget =
+    PHASE4_AMATEUR_FROM_P3_MASTER +
+    PHASE4_AMATEUR_FROM_P3_AMATEUR +
+    PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR;
+
+  const remainingAmateurSlots = Math.max(
+    phase4AmateurTarget - topAmateur.length - amateurWildcards.length,
+    0,
+  );
+
+  const relegatedMaster = availableMaster.slice(
+    topMasterLeaderboard.length,
+    topMasterLeaderboard.length + remainingAmateurSlots,
+  );
+
   const phase4AmateurOrderedLeaderboard = [
     ...relegatedMaster,
     ...topAmateur,
@@ -665,10 +686,6 @@ export async function startPhase4FromPhase3(
   // PAS DE RESET : on utilise le classement de Phase 3 Master pour le seeding des lobbies
   // Game 2 sera créée automatiquement quand toutes les lobbies de la game 1 seront terminées.
   // Games 3-4 seront créées plus tard avec seulement le top 16 via continuePhase4MasterBracket().
-  const topMasterLeaderboard = masterLeaderboard.slice(
-    0,
-    PHASE4_MASTER_FROM_P3_MASTER,
-  );
   const masterSeededPlayers =
     await seedPlayersBasedOnLeaderboard(topMasterLeaderboard);
 
@@ -711,7 +728,7 @@ export async function startPhase4FromPhase3(
       bracket: phase4Amateur,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
-      source: `Bottom ${PHASE4_AMATEUR_FROM_P3_MASTER} P3 Master + Top ${PHASE4_AMATEUR_FROM_P3_AMATEUR} P3 Amateur + ${PHASE4_AMATEUR_WILDCARD_FROM_P3_AMATEUR} wildcards P3 Amateur (RESET)`,
+      source: `Bottom ${relegatedMaster.length} P3 Master + Top ${topAmateur.length} P3 Amateur + ${amateurWildcards.length} wildcards P3 Amateur (RESET)`,
     },
   };
 }
