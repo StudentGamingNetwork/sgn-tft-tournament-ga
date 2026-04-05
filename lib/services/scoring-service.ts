@@ -46,11 +46,13 @@ async function buildLeaderboardFromGameData(
   games: Array<{ id: string; game_number: number }>,
   allResults: Array<
     (typeof results.$inferSelect) & {
-      player: {
-        name: string;
-        riot_id: string;
-        team: { name: string | null } | null;
-      };
+      player:
+        | {
+            name: string;
+            riot_id: string;
+            team: { name: string | null } | null;
+          }
+        | null;
     }
   >,
 ): Promise<LeaderboardEntry[]> {
