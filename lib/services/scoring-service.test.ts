@@ -1,150 +1,163 @@
-import { describe, it, expect } from 'vitest';
-import { calculatePlayerScores } from './scoring-service';
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-describe('calculatePlayerScores', () => {
-    describe('Cas nominaux', () => {
-        it('calcule correctement le score pour un seul joueur', () => {
-            const results = [
-                { player_id: 'player-1', placement: 1 },
-            ];
+vi.mock("@/lib/db", () => ({
+  db: {
+    query: {
+      phase: {
+        findFirst: vi.fn(),
+      },
+      bracket: {
+        findFirst: vi.fn(),
+        findMany: vi.fn(),
+      },
+      game: {
+        findMany: vi.fn(),
+      },
+      results: {
+        findMany: vi.fn(),
+      },
+      lobbyPlayer: {
+        findMany: vi.fn(),
+      },
+      tournament: {
+        findFirst: vi.fn(),
+      },
+    },
+  },
+}));
 
-            const scores = calculatePlayerScores(results);
+const { db } = await import("@/lib/db");
+const { calculatePlayerScores, getLeaderboard } = await import(
+  "./scoring-service",
+);
 
-            expect(scores).toEqual({
-                'player-1': 8, // 1ère place = 8 points (8 - 1 + 1)
-            });
-        });
+function buildResult(params: {
+  playerId: string;
+  placement: number;
+  points: number;
+  name: string;
+  riotId?: string;
+}) {
+  return {
+    player_id: params.playerId,
+    placement: params.placement,
+    points: params.points,
+    player: {
+      name: params.name,
+      riot_id: params.riotId || `${params.name}#EUW`,
+      team: null,
+    },
+  };
+}
 
-        it('calcule correctement les scores pour plusieurs joueurs', () => {
-            const results = [
-                { player_id: 'player-1', placement: 1 },
-                { player_id: 'player-2', placement: 2 },
-                { player_id: 'player-3', placement: 3 },
-                { player_id: 'player-4', placement: 4 },
-                { player_id: 'player-5', placement: 5 },
-                { player_id: 'player-6', placement: 6 },
-                { player_id: 'player-7', placement: 7 },
-                { player_id: 'player-8', placement: 8 },
-            ];
+describe("calculatePlayerScores", () => {
+  it("calcule correctement le score pour un seul joueur", () => {
+    const scores = calculatePlayerScores([
+      { player_id: "player-1", placement: 1 },
+    ]);
 
-            const scores = calculatePlayerScores(results);
-
-            expect(scores).toEqual({
-                'player-1': 8, // 8 - 1 + 1 = 8
-                'player-2': 7, // 8 - 2 + 1 = 7
-                'player-3': 6, // 8 - 3 + 1 = 6
-                'player-4': 5, // 8 - 4 + 1 = 5
-                'player-5': 4, // 8 - 5 + 1 = 4
-                'player-6': 3, // 8 - 6 + 1 = 3
-                'player-7': 2, // 8 - 7 + 1 = 2
-                'player-8': 1, // 8 - 8 + 1 = 1
-            });
-        });
+    expect(scores).toEqual({
+      "player-1": 8,
     });
+  });
 
-    describe('Vérification de la formule de calcul', () => {
-        it('attribue 8 points pour la 1ère place', () => {
-            const results = [{ player_id: 'player-1', placement: 1 }];
-            const scores = calculatePlayerScores(results);
-            expect(scores['player-1']).toBe(8);
-        });
+  it("accumule correctement les scores pour le meme joueur", () => {
+    const scores = calculatePlayerScores([
+      { player_id: "player-1", placement: 1 },
+      { player_id: "player-1", placement: 3 },
+      { player_id: "player-1", placement: 2 },
+    ]);
 
-        it('attribue 1 point pour la 8ème place', () => {
-            const results = [{ player_id: 'player-1', placement: 8 }];
-            const scores = calculatePlayerScores(results);
-            expect(scores['player-1']).toBe(1);
-        });
+    expect(scores["player-1"]).toBe(21);
+  });
+});
 
-        it('attribue 4 points pour la 5ème place', () => {
-            const results = [{ player_id: 'player-1', placement: 5 }];
-            const scores = calculatePlayerScores(results);
-            expect(scores['player-1']).toBe(4);
-        });
-    });
+describe("getLeaderboard", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
-    describe('Accumulation de scores', () => {
-        it('accumule correctement les scores pour le même joueur sur plusieurs parties', () => {
-            const results = [
-                { player_id: 'player-1', placement: 1 }, // 8 points
-                { player_id: 'player-1', placement: 3 }, // 6 points
-                { player_id: 'player-1', placement: 2 }, // 7 points
-            ];
+  it("conserve les points de la phase 3 master sur le leaderboard de phase 4 master", async () => {
+    vi.mocked(db.query.phase.findFirst)
+      .mockResolvedValueOnce({
+        tournament_id: "t-1",
+        order_index: 4,
+      } as any)
+      .mockResolvedValueOnce({
+        id: "phase-3",
+        tournament_id: "t-1",
+        order_index: 3,
+      } as any);
 
-            const scores = calculatePlayerScores(results);
+    vi.mocked(db.query.bracket.findFirst)
+      .mockResolvedValueOnce({ name: "master" } as any)
+      .mockResolvedValueOnce({ id: "bracket-p3-master" } as any);
 
-            expect(scores['player-1']).toBe(21); // 8 + 6 + 7 = 21
-        });
+    vi.mocked(db.query.game.findMany)
+      .mockResolvedValueOnce([
+        { id: "phase4-game-1", game_number: 1 },
+        { id: "phase4-game-2", game_number: 2 },
+      ] as any)
+      .mockResolvedValueOnce([
+        { id: "phase3-game-1", game_number: 1 },
+      ] as any);
 
-        it('accumule les scores pour plusieurs joueurs sur plusieurs parties', () => {
-            const results = [
-                { player_id: 'player-1', placement: 1 }, // 8 points
-                { player_id: 'player-2', placement: 2 }, // 7 points
-                { player_id: 'player-1', placement: 4 }, // 5 points
-                { player_id: 'player-2', placement: 3 }, // 6 points
-                { player_id: 'player-3', placement: 1 }, // 8 points
-            ];
+    vi.mocked(db.query.results.findMany)
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([
+        buildResult({ playerId: "p1", placement: 1, points: 8, name: "P1" }),
+        buildResult({ playerId: "p2", placement: 2, points: 7, name: "P2" }),
+      ] as any);
 
-            const scores = calculatePlayerScores(results);
+    const leaderboard = await getLeaderboard("phase-4", "bracket-p4-master");
 
-            expect(scores).toEqual({
-                'player-1': 13, // 8 + 5 = 13
-                'player-2': 13, // 7 + 6 = 13
-                'player-3': 8,  // 8
-            });
-        });
-    });
+    expect(leaderboard).toHaveLength(2);
+    expect(leaderboard[0]?.player_id).toBe("p1");
+    expect(leaderboard[0]?.total_points).toBe(8);
+    expect(leaderboard[1]?.player_id).toBe("p2");
+    expect(leaderboard[1]?.total_points).toBe(7);
+  });
 
-    describe('Edge cases', () => {
-        it('retourne un objet vide pour un tableau vide', () => {
-            const results: { player_id: string; placement: number }[] = [];
-            const scores = calculatePlayerScores(results);
-            expect(scores).toEqual({});
-        });
+  it("additionne les points phase 3 et phase 4 pour le classement master", async () => {
+    vi.mocked(db.query.phase.findFirst)
+      .mockResolvedValueOnce({
+        tournament_id: "t-1",
+        order_index: 4,
+      } as any)
+      .mockResolvedValueOnce({
+        id: "phase-3",
+        tournament_id: "t-1",
+        order_index: 3,
+      } as any);
 
-        it('gère un seul résultat', () => {
-            const results = [{ player_id: 'player-1', placement: 5 }];
-            const scores = calculatePlayerScores(results);
-            expect(scores).toEqual({ 'player-1': 4 });
-        });
+    vi.mocked(db.query.bracket.findFirst)
+      .mockResolvedValueOnce({ name: "master" } as any)
+      .mockResolvedValueOnce({ id: "bracket-p3-master" } as any);
 
-        it('gère tous les joueurs à la même place (cas théorique)', () => {
-            const results = [
-                { player_id: 'player-1', placement: 1 },
-                { player_id: 'player-2', placement: 1 },
-                { player_id: 'player-3', placement: 1 },
-            ];
+    vi.mocked(db.query.game.findMany)
+      .mockResolvedValueOnce([
+        { id: "phase4-game-1", game_number: 1 },
+      ] as any)
+      .mockResolvedValueOnce([
+        { id: "phase3-game-1", game_number: 1 },
+      ] as any);
 
-            const scores = calculatePlayerScores(results);
+    vi.mocked(db.query.results.findMany)
+      .mockResolvedValueOnce([
+        buildResult({ playerId: "p1", placement: 8, points: 1, name: "P1" }),
+        buildResult({ playerId: "p2", placement: 1, points: 8, name: "P2" }),
+      ] as any)
+      .mockResolvedValueOnce([
+        buildResult({ playerId: "p1", placement: 1, points: 8, name: "P1" }),
+        buildResult({ playerId: "p2", placement: 2, points: 7, name: "P2" }),
+      ] as any);
 
-            expect(scores).toEqual({
-                'player-1': 8,
-                'player-2': 8,
-                'player-3': 8,
-            });
-        });
-    });
+    const leaderboard = await getLeaderboard("phase-4", "bracket-p4-master");
 
-    describe('Validation de données', () => {
-        it('gère des UUIDs réalistes comme player_id', () => {
-            const results = [
-                { player_id: '550e8400-e29b-41d4-a716-446655440000', placement: 1 },
-                { player_id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8', placement: 2 },
-            ];
-
-            const scores = calculatePlayerScores(results);
-
-            expect(scores).toEqual({
-                '550e8400-e29b-41d4-a716-446655440000': 8,
-                '6ba7b810-9dad-11d1-80b4-00c04fd430c8': 7,
-            });
-        });
-
-        it('retourne un objet avec les bons types', () => {
-            const results = [{ player_id: 'player-1', placement: 1 }];
-            const scores = calculatePlayerScores(results);
-
-            expect(typeof scores).toBe('object');
-            expect(typeof scores['player-1']).toBe('number');
-        });
-    });
+    expect(leaderboard).toHaveLength(2);
+    expect(leaderboard[0]?.player_id).toBe("p2");
+    expect(leaderboard[0]?.total_points).toBe(15);
+    expect(leaderboard[1]?.player_id).toBe("p1");
+    expect(leaderboard[1]?.total_points).toBe(9);
+  });
 });

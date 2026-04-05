@@ -10,7 +10,7 @@
  *   - Amateur: 20 joueurs (Bottom 20 P2)
  * - Phase 4 : 40 joueurs (2 brackets)
  *   - Master: 16 joueurs (Top 16 P3 Master)
- *   - Amateur: 24 joueurs (RESET points) (Bottom 14 P3 Master + Top 8 P3 Amateur + 2 wildcards P3 Amateur)
+ *   - Amateur: 24 joueurs (RESET points) (Bottom 16 P3 Master + Top 8 P3 Amateur)
  * - Phase 5 : 24 joueurs (3 brackets)
  *   - Challenger: 8 joueurs (Top 8 P4 Master)
  *   - Master: 8 joueurs (Bottom 8 P4 Master)
@@ -180,7 +180,7 @@ async function assertPhaseCanBeStarted(
  * - Phase 1: 52 joueurs, 1 bracket (common)
  * - Phase 2: 36 joueurs (après élimination des top 16 de P1), 1 bracket (common)
  * - Phase 3: master 32 (top 16 P1 + top 16 P2), amateur 20 (bottom 20 P2) - RESET points
- * - Phase 4: master 16 (top 16 P3 master), amateur 24 (bottom 14 P3 master + top 8 P3 amateur + 2 wildcards P3 amateur) - Amateur RESET
+ * - Phase 4: master 16 (top 16 P3 master), amateur 24 (bottom 16 P3 master + top 8 P3 amateur) - Amateur RESET
  * - Phase 5: 24 joueurs, 3 brackets (challenger 8, master 8, amateur 8)
  */
 export async function createStandardTournament(name: string, year: string) {
@@ -597,7 +597,7 @@ export async function startPhase3FromPhase1And2(
  * PHASE 3 → PHASE 4
  * Phase 4 a 2 brackets :
  * - Master: Top 16 de P3 Master = 16 joueurs
- * - Amateur: Top 8 P3 Amateur + 2 wildcards (rangs 9-10 P3 Amateur) + Bottom 14 P3 Master = 24 joueurs (RESET points)
+ * - Amateur: Top 8 P3 Amateur + Bottom 16 P3 Master = 24 joueurs (RESET points)
  */
 export async function startPhase4FromPhase3(
   phase3Id: string,
