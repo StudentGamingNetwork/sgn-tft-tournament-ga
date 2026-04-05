@@ -211,14 +211,14 @@ describe("Tournament Workflow", () => {
             player_id: `p1-${i + 1}`,
             seed: i + 1,
           })),
-          ...Array.from({ length: 15 }, (_, i) => ({
+          ...Array.from({ length: 16 }, (_, i) => ({
             player_id: `p2-${i + 1}`,
             seed: i + 17,
           })),
         ] as any)
         .mockResolvedValueOnce(
           Array.from({ length: 20 }, (_, i) => ({
-            player_id: `p2-${i + 16}`,
+            player_id: `p2-${i + 17}`,
             seed: i + 1,
           })) as any,
         );
@@ -232,11 +232,11 @@ describe("Tournament Workflow", () => {
         "phase-3",
       );
 
-      expect(result.masterBracket.players).toHaveLength(31);
+      expect(result.masterBracket.players).toHaveLength(32);
       expect(result.amateurBracket.players).toHaveLength(20);
       expect(
         vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[0]?.[0],
-      ).toHaveLength(31);
+      ).toHaveLength(32);
       expect(
         vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[1]?.[0],
       ).toHaveLength(20);
@@ -248,9 +248,9 @@ describe("Tournament Workflow", () => {
       expect(phase3MasterInput[0]?.player_id).toBe("p1-1");
       expect(phase3MasterInput[15]?.player_id).toBe("p1-16");
       expect(phase3MasterInput[16]?.player_id).toBe("p2-1");
-      expect(phase3MasterInput[30]?.player_id).toBe("p2-15");
-      expect(phase3AmateurInput[0]?.player_id).toBe("p2-16");
-      expect(phase3AmateurInput[19]?.player_id).toBe("p2-35");
+      expect(phase3MasterInput[31]?.player_id).toBe("p2-16");
+      expect(phase3AmateurInput[0]?.player_id).toBe("p2-17");
+      expect(phase3AmateurInput[19]?.player_id).toBe("p2-36");
       const preservedSeedPlayer = result.masterBracket.players.find(
         (player) => player.player_id === "p2-13",
       );

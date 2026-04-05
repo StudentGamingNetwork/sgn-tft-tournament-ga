@@ -33,9 +33,7 @@ import { syncTournamentStatusByPhaseId } from "./tournament-status-service";
 const PHASE2_QUALIFIERS_FROM_P1 = 36;
 const PHASE2_ELIMINATED_FROM_P1 = 16;
 const PHASE3_MASTER_FROM_P1 = 16;
-const PHASE3_P2_POOL_START_RANK = 17;
-const PHASE3_P2_POOL_END_RANK = 51;
-const PHASE3_AMATEUR_FROM_P2_POOL = 20;
+const PHASE3_MASTER_FROM_P2 = 16;
 const PHASE4_MASTER_FROM_P3_MASTER = 16;
 const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;
 const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
@@ -508,61 +506,24 @@ export async function startPhase3FromPhase1And2(
     phase2PlayerIds.has(entry.player_id),
   );
 
-  // Phase 2 identity seeds are stored on game 1 assignments and define
-  // which players belong to the P2 pool (17..51) for Phase 3 split.
-  const phase2GameOneRows = await db.query.game.findMany({
-    where: and(eq(game.phase_id, effectivePhase2Id), eq(game.game_number, 1)),
-    with: {
-      lobbyPlayers: true,
-    },
-  });
-
-  const phase2SeedByPlayerId = new Map<string, number>();
-  for (const gameRow of phase2GameOneRows) {
-    for (const assignment of gameRow.lobbyPlayers ?? []) {
-      if (!assignment.player_id || !assignment.seed) {
-        continue;
-      }
-
-      const existing = phase2SeedByPlayerId.get(assignment.player_id);
-      if (existing === undefined || assignment.seed < existing) {
-        phase2SeedByPlayerId.set(assignment.player_id, assignment.seed);
-      }
-    }
-  }
-
-  // Phase 3 pool from P2: ranks 17..51 only
-  const phase3PoolFromP2 = phase2Leaderboard.filter((entry) => {
-    const identitySeed = phase2SeedByPlayerId.get(entry.player_id);
-    if (identitySeed === undefined) {
-      return false;
-    }
-
-    return (
-      identitySeed >= PHASE3_P2_POOL_START_RANK &&
-      identitySeed <= PHASE3_P2_POOL_END_RANK
-    );
-  });
-
-  const phase2MasterCount = Math.max(
-    phase3PoolFromP2.length - PHASE3_AMATEUR_FROM_P2_POOL,
-    0,
-  );
-
-  // Master bracket: top 16 P1, then top block from P2 pool
+  // Master bracket: top 16 P1, then top 16 P2
   const phase1MasterQualifiers = phase1Leaderboard.slice(
     0,
     PHASE3_MASTER_FROM_P1,
   );
-  const phase2MasterQualifiers = phase3PoolFromP2.slice(0, phase2MasterCount);
+  const phase2MasterQualifiers = phase2Leaderboard.slice(
+    0,
+    PHASE3_MASTER_FROM_P2,
+  );
   const phase3MasterOrderedLeaderboard = [
     ...phase1MasterQualifiers,
     ...phase2MasterQualifiers,
   ];
 
-  // Amateur bracket: bottom 20 from P2 pool, preserving order
-  const phase3AmateurOrderedLeaderboard =
-    phase3PoolFromP2.slice(phase2MasterCount);
+  // Amateur bracket: remainder of Phase 2 leaderboard, preserving order
+  const phase3AmateurOrderedLeaderboard = phase2Leaderboard.slice(
+    PHASE3_MASTER_FROM_P2,
+  );
 
   // Obtenir les brackets de Phase 3
   const brackets = await db.query.bracket.findMany({
@@ -614,15 +575,15 @@ export async function startPhase3FromPhase1And2(
       bracket: masterBracket,
       players: masterSeededPlayers,
       games: masterGames.map((g) => g.game),
-      source: `Top ${PHASE3_MASTER_FROM_P1} P1 + Top ${phase2MasterCount} du pool P2 (${PHASE3_P2_POOL_START_RANK}-${PHASE3_P2_POOL_END_RANK})`,
+      source: `Top ${PHASE3_MASTER_FROM_P1} P1 + Top ${PHASE3_MASTER_FROM_P2} P2`,
     },
     amateurBracket: {
       bracket: amateurBracket,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
       source:
-        PHASE3_AMATEUR_FROM_P2_POOL > 0
-          ? `Bottom ${PHASE3_AMATEUR_FROM_P2_POOL} du pool P2 (${PHASE3_P2_POOL_START_RANK}-${PHASE3_P2_POOL_END_RANK})`
+        phase3AmateurOrderedLeaderboard.length > 0
+          ? `Reste de P2 apres Top ${PHASE3_MASTER_FROM_P2}`
           : "Aucun joueur amateur pour ce palier",
     },
   };

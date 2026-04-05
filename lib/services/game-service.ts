@@ -32,9 +32,7 @@ import {
 } from "@/lib/services/finals-rules";
 
 const PHASE3_MASTER_FROM_P1 = 16;
-const PHASE3_P2_POOL_START_RANK = 17;
-const PHASE3_P2_POOL_END_RANK = 51;
-const PHASE3_AMATEUR_FROM_P2_POOL = 20;
+const PHASE3_MASTER_FROM_P2 = 16;
 const PHASE4_MASTER_FROM_P3_MASTER = 16;
 const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
 const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;
@@ -452,50 +450,12 @@ async function getInitialGameOneSeeding(
       phase2PlayerIds.has(entry.player_id),
     );
 
-    const phase2GameOneRows = await db.query.game.findMany({
-      where: and(eq(game.phase_id, phase2.id), eq(game.game_number, 1)),
-      with: {
-        lobbyPlayers: true,
-      },
-    });
-
-    const phase2SeedByPlayerId = new Map<string, number>();
-    for (const gameRow of phase2GameOneRows) {
-      for (const assignment of gameRow.lobbyPlayers ?? []) {
-        if (!assignment.player_id || !assignment.seed) {
-          continue;
-        }
-
-        const existing = phase2SeedByPlayerId.get(assignment.player_id);
-        if (existing === undefined || assignment.seed < existing) {
-          phase2SeedByPlayerId.set(assignment.player_id, assignment.seed);
-        }
-      }
-    }
-
-    const phase3PoolFromP2 = phase2Leaderboard.filter((entry) => {
-      const identitySeed = phase2SeedByPlayerId.get(entry.player_id);
-      if (identitySeed === undefined) {
-        return false;
-      }
-
-      return (
-        identitySeed >= PHASE3_P2_POOL_START_RANK &&
-        identitySeed <= PHASE3_P2_POOL_END_RANK
-      );
-    });
-
-    const phase2MasterCount = Math.max(
-      phase3PoolFromP2.length - PHASE3_AMATEUR_FROM_P2_POOL,
-      0,
-    );
-
     if (currentBracket.name === "master") {
       const phase1MasterQualifiers = phase1Leaderboard
         .slice(0, PHASE3_MASTER_FROM_P1)
         .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
-      const phase2MasterQualifiers = phase3PoolFromP2
-        .slice(0, phase2MasterCount)
+      const phase2MasterQualifiers = phase2Leaderboard
+        .slice(0, PHASE3_MASTER_FROM_P2)
         .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
       const ordered = [...phase1MasterQualifiers, ...phase2MasterQualifiers];
 
@@ -506,8 +466,8 @@ async function getInitialGameOneSeeding(
     }
 
     if (currentBracket.name === "amateur") {
-      const ordered = phase3PoolFromP2
-        .slice(phase2MasterCount)
+      const ordered = phase2Leaderboard
+        .slice(PHASE3_MASTER_FROM_P2)
         .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
 
       return {
