@@ -848,7 +848,7 @@ describe("gameService", () => {
   });
 
   describe("checkAndCreateNextGame - phase reseeding regressions", () => {
-    it("garde 2 lobbies en phase 3 amateur a partir de la game 3", async () => {
+    it("garde 3 lobbies en phase 3 amateur a partir de la game 3", async () => {
       const phaseId = "phase-3";
       const bracketId = "bracket-amateur";
 
@@ -880,6 +880,15 @@ describe("gameService", () => {
           results: [{ player_id: "p9", placement: 1, points: 8 }],
           lobbyPlayers: [],
         },
+        {
+          id: "g2-c",
+          phase_id: phaseId,
+          bracket_id: bracketId,
+          game_number: 2,
+          bracket: { name: "amateur" },
+          results: [{ player_id: "p15", placement: 1, points: 8 }],
+          lobbyPlayers: [],
+        },
       ];
 
       const leaderboard = Array.from({ length: 16 }, (_, index) => ({
@@ -890,7 +899,7 @@ describe("gameService", () => {
         total_points: 100 - index,
       }));
 
-      const playersData = Array.from({ length: 16 }, (_, index) => ({
+      const playersData = Array.from({ length: 20 }, (_, index) => ({
         id: `p${index + 1}`,
         name: `Player ${index + 1}`,
         riot_id: `p${index + 1}#1`,
@@ -898,6 +907,30 @@ describe("gameService", () => {
         division: "I",
         league_points: 50,
       }));
+
+      const gameOneLobbies = [
+        {
+          id: "g1-a",
+          lobbyPlayers: Array.from({ length: 7 }, (_, index) => ({
+            player_id: `p${index + 1}`,
+            seed: index + 1,
+          })),
+        },
+        {
+          id: "g1-b",
+          lobbyPlayers: Array.from({ length: 7 }, (_, index) => ({
+            player_id: `p${index + 8}`,
+            seed: index + 8,
+          })),
+        },
+        {
+          id: "g1-c",
+          lobbyPlayers: Array.from({ length: 6 }, (_, index) => ({
+            player_id: `p${index + 15}`,
+            seed: index + 15,
+          })),
+        },
+      ];
 
       (db.query.phase.findFirst as any).mockResolvedValue({
         id: phaseId,
@@ -908,7 +941,8 @@ describe("gameService", () => {
 
       (db.query.game.findMany as any)
         .mockResolvedValueOnce(currentGames)
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce(gameOneLobbies);
 
       vi.mocked(getLeaderboard as any).mockResolvedValue(leaderboard);
       (db.query.player.findMany as any).mockResolvedValue(playersData);
@@ -942,14 +976,18 @@ describe("gameService", () => {
       const result = await checkAndCreateNextGame(phaseId, 2);
 
       expect(result.created).toBe(true);
-      expect(result.gamesCreated).toBe(2);
+      expect(result.gamesCreated).toBe(3);
 
       const gameInsertCalls = (db.insert as any).mock.calls.filter(
         ([table]: any[]) => table === gameTable,
       );
-      expect(gameInsertCalls).toHaveLength(2);
-      expect(lobbyInsertPayloads).toHaveLength(2);
-      expect(lobbyInsertPayloads.map((payload) => payload.length)).toEqual([8, 8]);
+      expect(gameInsertCalls).toHaveLength(3);
+      expect(lobbyInsertPayloads).toHaveLength(3);
+      expect(lobbyInsertPayloads.map((payload) => payload.length)).toEqual([
+        7,
+        7,
+        6,
+      ]);
     });
 
     it("conserve le snake seeding en phase 4 master pour les games 3-4", async () => {

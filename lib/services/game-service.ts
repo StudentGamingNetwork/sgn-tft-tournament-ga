@@ -329,6 +329,7 @@ async function createGamesFromSeededPlayers(params: {
   const seedingMatrix = useSnakeSeeding
     ? generateSnakeSeedMatrix(seededPlayers.length, startSeed)
     : generateSnakeDraftMatrix(seededPlayers.length, startSeed);
+
   const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
 
   let gamesCreated = 0;
@@ -355,6 +356,49 @@ async function createGamesFromSeededPlayers(params: {
   }
 
   return gamesCreated;
+}
+
+async function getBracketGameOnePlayerPool(
+  phaseId: string,
+  bracketId: string,
+): Promise<Array<{ playerId: string; seed: number }>> {
+  const gameOneLobbiesRaw = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, phaseId),
+      eq(game.bracket_id, bracketId),
+      eq(game.game_number, 1),
+    ),
+    with: {
+      lobbyPlayers: {
+        columns: {
+          player_id: true,
+          seed: true,
+        },
+      },
+    },
+  });
+  const gameOneLobbies = Array.isArray(gameOneLobbiesRaw)
+    ? gameOneLobbiesRaw
+    : [];
+
+  const bestSeedByPlayer = new Map<string, number>();
+
+  for (const lobby of gameOneLobbies) {
+    for (const assignment of lobby.lobbyPlayers ?? []) {
+      if (!assignment.player_id) {
+        continue;
+      }
+
+      const currentSeed = bestSeedByPlayer.get(assignment.player_id);
+      if (currentSeed === undefined || assignment.seed < currentSeed) {
+        bestSeedByPlayer.set(assignment.player_id, assignment.seed);
+      }
+    }
+  }
+
+  return Array.from(bestSeedByPlayer.entries())
+    .map(([playerId, seed]) => ({ playerId, seed }))
+    .sort((a, b) => a.seed - b.seed);
 }
 
 async function buildSeededPlayersFromLeaderboard(
@@ -1453,16 +1497,36 @@ async function createNextGameWithReseed(
     }
   }
   const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phaseId);
-  const filteredLeaderboard = leaderboard.filter(
-    (entry) => !forfeitedPlayerIds.has(entry.player_id),
+  const gameOnePool = await getBracketGameOnePlayerPool(phaseId, bracketId);
+  const activeGameOnePool = gameOnePool.filter(
+    (entry) => !forfeitedPlayerIds.has(entry.playerId),
   );
 
-  if (filteredLeaderboard.length === 0) {
-    throw new Error(`No leaderboard data found for bracket ${bracketId}`);
+  const orderedLeaderboard = leaderboard.filter(
+    (entry) =>
+      !forfeitedPlayerIds.has(entry.player_id) &&
+      (activeGameOnePool.length === 0 ||
+        activeGameOnePool.some((p) => p.playerId === entry.player_id)),
+  );
+
+  const leaderboardPlayerIds = new Set(
+    orderedLeaderboard.map((entry) => entry.player_id),
+  );
+  const missingPlayerIdsFromPool = activeGameOnePool
+    .map((entry) => entry.playerId)
+    .filter((playerId) => !leaderboardPlayerIds.has(playerId));
+
+  const orderedPlayerIds = [
+    ...orderedLeaderboard.map((entry) => entry.player_id),
+    ...missingPlayerIdsFromPool,
+  ];
+
+  if (orderedPlayerIds.length === 0) {
+    throw new Error(`No eligible players found for bracket ${bracketId}`);
   }
 
   // 2. Get all players with their rank data to create SeededPlayer objects
-  const playerIds = filteredLeaderboard.map((entry) => entry.player_id);
+  const playerIds = orderedPlayerIds;
   const playersData = await db.query.player.findMany({
     where: inArray(player.id, playerIds),
   });
@@ -1470,17 +1534,17 @@ async function createNextGameWithReseed(
   const playersMap = new Map(playersData.map((p) => [p.id, p]));
 
   // 3. Transform leaderboard to SeededPlayer[] with contiguous seeds (1..N)
-  const seededPlayers: SeededPlayer[] = filteredLeaderboard.map(
-    (entry, index) => {
-      const playerData = playersMap.get(entry.player_id);
+  const seededPlayers: SeededPlayer[] = orderedPlayerIds.map(
+    (playerId, index) => {
+      const playerData = playersMap.get(playerId);
       if (!playerData) {
-        throw new Error(`Player ${entry.player_id} not found`);
+        throw new Error(`Player ${playerId} not found`);
       }
 
       return {
-        player_id: entry.player_id,
-        name: entry.player_name,
-        riot_id: entry.riot_id,
+        player_id: playerId,
+        name: playerData.name,
+        riot_id: playerData.riot_id,
         tier: playerData.tier!,
         division: playerData.division as any,
         league_points: playerData.league_points!,
