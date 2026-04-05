@@ -7,8 +7,9 @@ import {
   phase,
   game,
   bracket,
+  player,
 } from "@/models/schema";
-import { eq, desc, sql, count } from "drizzle-orm";
+import { eq, desc, sql, count, inArray } from "drizzle-orm";
 import type {
   Tournament,
   PlayerWithRegistration,
@@ -930,6 +931,48 @@ export async function getPhaseDetails(
     for (const lp of allLobbyPlayers) {
       if (lp.player && lp.player_id && !uniquePlayers.has(lp.player_id)) {
         uniquePlayers.set(lp.player_id, lp.player);
+      }
+    }
+
+    // Phase 3 global ranking should always include the full qualified pool,
+    // even if some players have no current lobby assignment/results.
+    if (phaseData.order_index === 3) {
+      const [phase1, phase2] = await Promise.all([
+        db.query.phase.findFirst({
+          where: sql`${phase.tournament_id} = ${phaseData.tournament.id} AND ${phase.order_index} = 1`,
+        }),
+        db.query.phase.findFirst({
+          where: sql`${phase.tournament_id} = ${phaseData.tournament.id} AND ${phase.order_index} = 2`,
+        }),
+      ]);
+
+      if (phase1 && phase2) {
+        const [phase1Leaderboard, phase2Leaderboard] = await Promise.all([
+          getLeaderboard(phase1.id),
+          getLeaderboard(phase2.id),
+        ]);
+
+        const expectedPhase3PlayerIds = new Set<string>([
+          ...phase1Leaderboard.slice(0, 16).map((entry) => entry.player_id),
+          ...phase2Leaderboard.map((entry) => entry.player_id),
+        ]);
+
+        const missingExpectedIds = Array.from(expectedPhase3PlayerIds).filter(
+          (playerId) => !uniquePlayers.has(playerId),
+        );
+
+        if (missingExpectedIds.length > 0) {
+          const missingPlayers = await db.query.player.findMany({
+            where: inArray(player.id, missingExpectedIds),
+            with: {
+              team: true,
+            },
+          });
+
+          for (const missingPlayer of missingPlayers) {
+            uniquePlayers.set(missingPlayer.id, missingPlayer);
+          }
+        }
       }
     }
 
