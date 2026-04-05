@@ -29,14 +29,17 @@ import {
 } from "./seeding-service";
 import { getLeaderboard, getCumulativeLeaderboard } from "./scoring-service";
 import { syncTournamentStatusByPhaseId } from "./tournament-status-service";
+import { getForfeitedPlayerIdsForPhase } from "./game-service";
+import {
+  PHASE3_MASTER_FROM_P1,
+  PHASE3_MASTER_FROM_P2,
+  PHASE4_MASTER_FROM_P3_MASTER,
+  PHASE4_AMATEUR_FROM_P3_AMATEUR,
+  PHASE4_AMATEUR_FROM_P3_MASTER,
+} from "./phase-constants";
 
 const PHASE2_QUALIFIERS_FROM_P1 = 36;
 const PHASE2_ELIMINATED_FROM_P1 = 16;
-const PHASE3_MASTER_FROM_P1 = 16;
-const PHASE3_MASTER_FROM_P2 = 16;
-const PHASE4_MASTER_FROM_P3_MASTER = 16;
-const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;
-const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
 const PHASE5_CHALLENGER_FROM_P4_MASTER = 8;
 const PHASE5_MASTER_FROM_P4_MASTER = 8;
 const PHASE5_AMATEUR_FROM_P4_AMATEUR = 8;
@@ -505,16 +508,17 @@ export async function startPhase3FromPhase1And2(
   const phase2Leaderboard = cumulativePhase1And2.filter((entry) =>
     phase2PlayerIds.has(entry.player_id),
   );
+  const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phase3Id);
 
   // Master bracket: top 16 P1, then top 16 P2
   const phase1MasterQualifiers = phase1Leaderboard.slice(
     0,
     PHASE3_MASTER_FROM_P1,
-  );
+  ).filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
   const phase2MasterQualifiers = phase2Leaderboard.slice(
     0,
     PHASE3_MASTER_FROM_P2,
-  );
+  ).filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
   const phase3MasterOrderedLeaderboard = [
     ...phase1MasterQualifiers,
     ...phase2MasterQualifiers,
@@ -523,7 +527,7 @@ export async function startPhase3FromPhase1And2(
   // Amateur bracket: remainder of Phase 2 leaderboard, preserving order
   const phase3AmateurOrderedLeaderboard = phase2Leaderboard.slice(
     PHASE3_MASTER_FROM_P2,
-  );
+  ).filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
 
   // Obtenir les brackets de Phase 3
   const brackets = await db.query.bracket.findMany({

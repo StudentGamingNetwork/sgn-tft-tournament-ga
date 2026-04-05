@@ -19,6 +19,9 @@ vi.mock("@/lib/db", () => ({
         findFirst: vi.fn(),
         findMany: vi.fn(),
       },
+      tournamentRegistration: {
+        findMany: vi.fn(),
+      },
       bracket: {
         findMany: vi.fn(),
       },
@@ -331,6 +334,74 @@ describe("Tournament Workflow", () => {
       );
       expect(vi.mocked(assignPlayersToLobbies).mock.calls[0]?.[4]).toBe(true);
       expect(vi.mocked(assignPlayersToLobbies).mock.calls[1]?.[4]).toBe(false);
+    });
+
+    it("Phase 2 -> Phase 3: exclut les joueurs forfaits", async () => {
+      const { getLeaderboard } = await import("./scoring-service");
+      vi.mocked(getLeaderboard).mockImplementation(async (phaseId: string) => {
+        if (phaseId === "phase-1") return buildLeaderboard("p1", 80);
+        if (phaseId === "phase-2") return buildLeaderboard("p2", 48);
+        return [];
+      });
+
+      const { getCumulativeLeaderboard } = await import("./scoring-service");
+      vi.mocked(getCumulativeLeaderboard).mockResolvedValue([
+        ...buildLeaderboard("p1", 16),
+        ...Array.from({ length: 36 }, (_, i) => ({
+          ...buildLeaderboard("p2", 36)[i],
+          rank: i + 17,
+        })),
+      ] as any);
+
+      const mockDb = await import("@/lib/db");
+      mockDb.db.query.phase.findFirst = vi.fn().mockResolvedValue({
+        tournament_id: "t-1",
+      });
+      mockDb.db.query.phase.findMany = vi.fn().mockResolvedValue([]);
+      mockDb.db.query.tournamentRegistration.findMany = vi
+        .fn()
+        .mockResolvedValue([{ player_id: "p1-1" }]);
+      mockDb.db.query.bracket.findMany = vi.fn().mockResolvedValue([
+        { id: "bracket-master", phase_id: "phase-3", name: "master" },
+        { id: "bracket-amateur", phase_id: "phase-3", name: "amateur" },
+      ]);
+
+      const { seedPlayersBasedOnLeaderboard, assignPlayersToLobbies } =
+        await import("./seeding-service");
+      vi.mocked(seedPlayersBasedOnLeaderboard)
+        .mockResolvedValueOnce([
+          ...Array.from({ length: 15 }, (_, i) => ({
+            player_id: `p1-${i + 2}`,
+            seed: i + 1,
+          })),
+          ...Array.from({ length: 16 }, (_, i) => ({
+            player_id: `p2-${i + 1}`,
+            seed: i + 16,
+          })),
+        ] as any)
+        .mockResolvedValueOnce(
+          Array.from({ length: 20 }, (_, i) => ({
+            player_id: `p2-${i + 17}`,
+            seed: i + 1,
+          })) as any,
+        );
+      vi.mocked(assignPlayersToLobbies).mockResolvedValue([
+        { game: { id: "game-1" }, assignment: { players: [] } as any },
+      ]);
+
+      const result = await startPhase3FromPhase1And2(
+        "phase-1",
+        "phase-2",
+        "phase-3",
+      );
+
+      expect(result.masterBracket.players).toHaveLength(31);
+      expect(
+        vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[0]?.[0],
+      ).toHaveLength(31);
+      expect(
+        vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[0]?.[0],
+      ).not.toContainEqual(expect.objectContaining({ player_id: "p1-1" }));
     });
 
     it("Phase 4 -> Phase 5: creates 8/8/8 brackets", async () => {

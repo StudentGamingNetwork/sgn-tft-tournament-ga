@@ -1,0 +1,5 @@
+export const PHASE3_MASTER_FROM_P1 = 16;
+export const PHASE3_MASTER_FROM_P2 = 16;
+export const PHASE4_MASTER_FROM_P3_MASTER = 16;
+export const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
+export const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;

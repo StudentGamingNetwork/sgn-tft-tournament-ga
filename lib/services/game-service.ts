@@ -30,12 +30,13 @@ import {
   getFinalistThresholdByBracket,
   getFinalsMaxGamesByBracket,
 } from "@/lib/services/finals-rules";
-
-const PHASE3_MASTER_FROM_P1 = 16;
-const PHASE3_MASTER_FROM_P2 = 16;
-const PHASE4_MASTER_FROM_P3_MASTER = 16;
-const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
-const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;
+import {
+  PHASE3_MASTER_FROM_P1,
+  PHASE3_MASTER_FROM_P2,
+  PHASE4_MASTER_FROM_P3_MASTER,
+  PHASE4_AMATEUR_FROM_P3_MASTER,
+  PHASE4_AMATEUR_FROM_P3_AMATEUR,
+} from "@/lib/services/phase-constants";
 
 /**
  * Create a new game
@@ -790,7 +791,7 @@ export async function resetGameSeeding(gameId: string) {
   };
 }
 
-async function getForfeitedPlayerIdsForPhase(
+export async function getForfeitedPlayerIdsForPhase(
   phaseId: string,
 ): Promise<Set<string>> {
   const currentPhase = await db.query.phase.findFirst({
