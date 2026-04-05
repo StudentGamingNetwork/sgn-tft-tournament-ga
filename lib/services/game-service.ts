@@ -1108,10 +1108,22 @@ export async function getGamesByBracket(bracketId: string) {
  * Delete a game (cascades to lobby players and results)
  */
 export async function deleteGame(gameId: string) {
-  const [deleted] = await db
-    .delete(game)
-    .where(eq(game.id, gameId))
-    .returning();
+  const gameData = await db.query.game.findFirst({
+    where: eq(game.id, gameId),
+    with: {
+      results: true,
+    },
+  });
+
+  if (!gameData) {
+    return null;
+  }
+
+  if (gameData.results.length > 0) {
+    throw new Error("Impossible de supprimer une partie avec des resultats");
+  }
+
+  const [deleted] = await db.delete(game).where(eq(game.id, gameId)).returning();
 
   return deleted;
 }

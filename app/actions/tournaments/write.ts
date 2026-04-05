@@ -39,6 +39,7 @@ import {
   forfeitPlayerFromTournament,
   resetGameSeeding,
   renameGameLobby,
+  deleteGame,
 } from "@/lib/services/game-service";
 import {
   movePlayerBetweenLobbies,
@@ -1433,6 +1434,34 @@ export async function resetGameSeedingAction(
         error instanceof Error
           ? error.message
           : "Erreur lors du reset du seeding",
+    };
+  }
+}
+
+/**
+ * Supprimer une partie créée par erreur.
+ */
+export async function deleteGameAction(
+  gameId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+
+    const deletedGame = await deleteGame(gameId);
+
+    if (!deletedGame) {
+      return { success: false, error: "Partie introuvable" };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting game:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors de la suppression de la partie",
     };
   }
 }

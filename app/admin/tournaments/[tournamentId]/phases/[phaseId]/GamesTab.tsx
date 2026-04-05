@@ -9,6 +9,7 @@ import type { GameWithResults } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
 import {
     forfeitPlayerAction,
+    deleteGameAction,
     resetGameSeedingAction,
     renameLobbyAction,
     submitGameResultsAction,
@@ -128,6 +129,27 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         const result = await resetGameSeedingAction(game.game_id);
         if (!result.success) {
             throw new Error(result.error || "Erreur lors du reset du seeding");
+        }
+
+        if (onResultsSubmitted) {
+            onResultsSubmitted();
+        }
+    };
+
+    const handleDeleteGame = async (game: GameWithResults) => {
+        const accepted = window.confirm(
+            `Supprimer ${game.lobby_name} (partie #${game.game_number}) ?\n\n` +
+            "Cette action supprime uniquement une partie sans resultats.\n" +
+            "Utilise-la pour retirer une game creee par erreur avant de reseeder.",
+        );
+
+        if (!accepted) {
+            return;
+        }
+
+        const result = await deleteGameAction(game.game_id);
+        if (!result.success) {
+            throw new Error(result.error || "Erreur lors de la suppression de la partie");
         }
 
         if (onResultsSubmitted) {
@@ -532,21 +554,37 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                     {game.hasResults ? "Modifier résultats" : "Saisir résultats"}
                                 </Button>
                                 {!game.hasResults && (
-                                    <Button
-                                        color="secondary"
-                                        size="sm"
-                                        variant="flat"
-                                        startContent={<RotateCcw size={16} />}
-                                        onPress={async () => {
-                                            try {
-                                                await handleResetSeeding(game);
-                                            } catch (error) {
-                                                alert(error instanceof Error ? error.message : "Erreur lors du reset");
-                                            }
-                                        }}
-                                    >
-                                        Reset seeding
-                                    </Button>
+                                    <>
+                                        <Button
+                                            color="secondary"
+                                            size="sm"
+                                            variant="flat"
+                                            startContent={<RotateCcw size={16} />}
+                                            onPress={async () => {
+                                                try {
+                                                    await handleResetSeeding(game);
+                                                } catch (error) {
+                                                    alert(error instanceof Error ? error.message : "Erreur lors du reset");
+                                                }
+                                            }}
+                                        >
+                                            Reset seeding
+                                        </Button>
+                                        <Button
+                                            color="danger"
+                                            size="sm"
+                                            variant="flat"
+                                            onPress={async () => {
+                                                try {
+                                                    await handleDeleteGame(game);
+                                                } catch (error) {
+                                                    alert(error instanceof Error ? error.message : "Erreur lors de la suppression");
+                                                }
+                                            }}
+                                        >
+                                            Supprimer
+                                        </Button>
+                                    </>
                                 )}
                             </div>
                         </div>
