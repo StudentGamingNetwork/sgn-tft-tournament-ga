@@ -38,6 +38,16 @@ import {
   PHASE4_AMATEUR_FROM_P3_AMATEUR,
 } from "@/lib/services/phase-constants";
 
+function shouldUseMasterSnakeSeeding(
+  phaseOrderIndex?: number,
+  bracketName?: string,
+): boolean {
+  return (
+    bracketName === "master" &&
+    (phaseOrderIndex === 3 || phaseOrderIndex === 4)
+  );
+}
+
 /**
  * Create a new game
  */
@@ -815,6 +825,15 @@ export async function resetGameSeeding(gameId: string) {
     ...seededPlayersMissingFromLeaderboard,
   ];
 
+  const currentBracketName = isFirstGame
+    ? undefined
+    : previousGames[0]?.bracket?.name;
+
+  const useSnakeSeeding = shouldUseMasterSnakeSeeding(
+    currentPhase?.order_index,
+    currentBracketName,
+  );
+
   await db.delete(game).where(
     inArray(
       game.id,
@@ -827,6 +846,7 @@ export async function resetGameSeeding(gameId: string) {
     bracketId: targetGame.bracket_id,
     gameNumber: targetGame.game_number,
     seededPlayers,
+    useSnakeSeeding,
   });
 
   return {
@@ -895,6 +915,7 @@ export async function forfeitPlayerFromTournament(
       return [] as Array<{
         phaseId: string;
         bracketId: string;
+        bracketName?: string;
         pendingGameNumbers: number[];
         activePlayerIds: string[];
         fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
@@ -907,6 +928,11 @@ export async function forfeitPlayerFromTournament(
         sql`${game.status} != 'completed'`,
       ),
       with: {
+        bracket: {
+          columns: {
+            name: true,
+          },
+        },
         lobbyPlayers: true,
       },
     });
@@ -919,6 +945,7 @@ export async function forfeitPlayerFromTournament(
       return [] as Array<{
         phaseId: string;
         bracketId: string;
+        bracketName?: string;
         pendingGameNumbers: number[];
         activePlayerIds: string[];
         fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
@@ -930,6 +957,7 @@ export async function forfeitPlayerFromTournament(
       {
         phaseId: string;
         bracketId: string;
+        bracketName?: string;
         pendingGameNumbers: number[];
         activePlayerIds: string[];
         fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
@@ -946,6 +974,7 @@ export async function forfeitPlayerFromTournament(
         impactedGroups.set(key, {
           phaseId: g.phase_id,
           bracketId: g.bracket_id,
+          bracketName: g.bracket?.name,
           pendingGameNumbers: [],
           activePlayerIds: [],
           fallbackSeedOrder: [],
@@ -1009,6 +1038,7 @@ export async function forfeitPlayerFromTournament(
     return Array.from(impactedGroups.values()).map((g) => ({
       phaseId: g.phaseId,
       bracketId: g.bracketId,
+      bracketName: g.bracketName,
       pendingGameNumbers: g.pendingGameNumbers,
       activePlayerIds: g.activePlayerIds,
       fallbackSeedOrder: g.fallbackSeedOrder,
@@ -1099,7 +1129,21 @@ export async function forfeitPlayerFromTournament(
             };
           });
 
-    const seedingMatrix = generateSnakeDraftMatrix(seededPlayers.length, 1);
+    const groupPhase = await db.query.phase.findFirst({
+      where: eq(phase.id, group.phaseId),
+      columns: {
+        order_index: true,
+      },
+    });
+
+    const useSnakeSeeding = shouldUseMasterSnakeSeeding(
+      groupPhase?.order_index,
+      group.bracketName,
+    );
+
+    const seedingMatrix = useSnakeSeeding
+      ? generateSnakeSeedMatrix(seededPlayers.length, 1)
+      : generateSnakeDraftMatrix(seededPlayers.length, 1);
     const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
 
     for (const gameNumber of group.pendingGameNumbers) {
@@ -1553,8 +1597,10 @@ async function createNextGameWithReseed(
     },
   );
 
-  const useSnakeSeeding =
-    bracketName === "master" && (phaseOrderIndex === 3 || phaseOrderIndex === 4);
+  const useSnakeSeeding = shouldUseMasterSnakeSeeding(
+    phaseOrderIndex,
+    bracketName,
+  );
 
   const gamesCreated = await createGamesFromSeededPlayers({
     phaseId,
