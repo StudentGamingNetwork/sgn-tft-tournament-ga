@@ -102,6 +102,11 @@ describe("getLeaderboard", () => {
         { id: "phase3-game-1", game_number: 1 },
       ] as any);
 
+    vi.mocked(db.query.lobbyPlayer.findMany).mockResolvedValueOnce([
+      { player_id: "p1" },
+      { player_id: "p2" },
+    ] as any);
+
     vi.mocked(db.query.results.findMany)
       .mockResolvedValueOnce([] as any)
       .mockResolvedValueOnce([
@@ -142,6 +147,11 @@ describe("getLeaderboard", () => {
         { id: "phase3-game-1", game_number: 1 },
       ] as any);
 
+    vi.mocked(db.query.lobbyPlayer.findMany).mockResolvedValueOnce([
+      { player_id: "p1" },
+      { player_id: "p2" },
+    ] as any);
+
     vi.mocked(db.query.results.findMany)
       .mockResolvedValueOnce([
         buildResult({ playerId: "p1", placement: 8, points: 1, name: "P1" }),
@@ -159,5 +169,48 @@ describe("getLeaderboard", () => {
     expect(leaderboard[0]?.total_points).toBe(15);
     expect(leaderboard[1]?.player_id).toBe("p1");
     expect(leaderboard[1]?.total_points).toBe(9);
+  });
+
+  it("ignore les joueurs de phase 3 absents du master phase 4", async () => {
+    vi.mocked(db.query.phase.findFirst)
+      .mockResolvedValueOnce({
+        tournament_id: "t-1",
+        order_index: 4,
+      } as any)
+      .mockResolvedValueOnce({
+        id: "phase-3",
+        tournament_id: "t-1",
+        order_index: 3,
+      } as any);
+
+    vi.mocked(db.query.bracket.findFirst)
+      .mockResolvedValueOnce({ name: "master" } as any)
+      .mockResolvedValueOnce({ id: "bracket-p3-master" } as any);
+
+    vi.mocked(db.query.game.findMany)
+      .mockResolvedValueOnce([
+        { id: "phase4-game-1", game_number: 1 },
+      ] as any)
+      .mockResolvedValueOnce([
+        { id: "phase3-game-1", game_number: 1 },
+      ] as any);
+
+    vi.mocked(db.query.lobbyPlayer.findMany).mockResolvedValueOnce([
+      { player_id: "p1" },
+      { player_id: "p2" },
+    ] as any);
+
+    vi.mocked(db.query.results.findMany)
+      .mockResolvedValueOnce([] as any)
+      .mockResolvedValueOnce([
+        buildResult({ playerId: "p1", placement: 1, points: 8, name: "P1" }),
+        buildResult({ playerId: "p2", placement: 2, points: 7, name: "P2" }),
+        buildResult({ playerId: "p3", placement: 3, points: 6, name: "P3" }),
+      ] as any);
+
+    const leaderboard = await getLeaderboard("phase-4", "bracket-p4-master");
+
+    expect(leaderboard).toHaveLength(2);
+    expect(leaderboard.map((entry) => entry.player_id)).toEqual(["p1", "p2"]);
   });
 });

@@ -334,6 +334,24 @@ export async function getLeaderboard(
   });
 
   if (isPhase4Master && phaseInfo?.tournament_id) {
+    const phase4PlayerAssignments = games.length
+      ? await db.query.lobbyPlayer.findMany({
+          where: inArray(
+            lobbyPlayer.game_id,
+            games.map((g) => g.id),
+          ),
+          columns: {
+            player_id: true,
+          },
+        })
+      : [];
+
+    const phase4PlayerIds = new Set(
+      phase4PlayerAssignments
+        .map((assignment) => assignment.player_id)
+        .filter((playerId): playerId is string => Boolean(playerId)),
+    );
+
     const phase3 = await db.query.phase.findFirst({
       where: and(
         eq(phase.tournament_id, phaseInfo.tournament_id),
@@ -372,8 +390,16 @@ export async function getLeaderboard(
         },
       });
 
-      games = [...phase3Games, ...games];
-      allResults = [...phase3Results, ...allResults];
+      if (phase4PlayerIds.size > 0) {
+        const filteredPhase3Results = phase3Results.filter(
+          (result) =>
+            Boolean(result.player_id) &&
+            phase4PlayerIds.has(result.player_id as string),
+        );
+
+        games = [...phase3Games, ...games];
+        allResults = [...filteredPhase3Results, ...allResults];
+      }
     }
   }
 
