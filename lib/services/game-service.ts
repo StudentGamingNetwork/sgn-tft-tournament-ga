@@ -452,11 +452,38 @@ async function getInitialGameOneSeeding(
       phase2PlayerIds.has(entry.player_id),
     );
 
-    const phase3PoolFromP2 = phase2Leaderboard.filter(
-      (entry) =>
-        entry.rank >= PHASE3_P2_POOL_START_RANK &&
-        entry.rank <= PHASE3_P2_POOL_END_RANK,
-    );
+    const phase2GameOneRows = await db.query.game.findMany({
+      where: and(eq(game.phase_id, phase2.id), eq(game.game_number, 1)),
+      with: {
+        lobbyPlayers: true,
+      },
+    });
+
+    const phase2SeedByPlayerId = new Map<string, number>();
+    for (const gameRow of phase2GameOneRows) {
+      for (const assignment of gameRow.lobbyPlayers ?? []) {
+        if (!assignment.player_id || !assignment.seed) {
+          continue;
+        }
+
+        const existing = phase2SeedByPlayerId.get(assignment.player_id);
+        if (existing === undefined || assignment.seed < existing) {
+          phase2SeedByPlayerId.set(assignment.player_id, assignment.seed);
+        }
+      }
+    }
+
+    const phase3PoolFromP2 = phase2Leaderboard.filter((entry) => {
+      const identitySeed = phase2SeedByPlayerId.get(entry.player_id);
+      if (identitySeed === undefined) {
+        return false;
+      }
+
+      return (
+        identitySeed >= PHASE3_P2_POOL_START_RANK &&
+        identitySeed <= PHASE3_P2_POOL_END_RANK
+      );
+    });
 
     const phase2MasterCount = Math.max(
       phase3PoolFromP2.length - PHASE3_AMATEUR_FROM_P2_POOL,

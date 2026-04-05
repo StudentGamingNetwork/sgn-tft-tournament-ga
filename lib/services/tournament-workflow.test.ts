@@ -184,6 +184,17 @@ describe("Tournament Workflow", () => {
         { id: "bracket-master", phase_id: "phase-3", name: "master" },
         { id: "bracket-amateur", phase_id: "phase-3", name: "amateur" },
       ]);
+      mockDb.db.query.game.findMany = vi.fn().mockResolvedValue([
+        {
+          id: "phase2-game-1",
+          phase_id: "phase-2",
+          game_number: 1,
+          lobbyPlayers: Array.from({ length: 35 }, (_, i) => ({
+            player_id: `p2-${i + 1}`,
+            seed: i + 17,
+          })),
+        },
+      ] as any);
       mockDb.db.query.lobbyPlayer.findMany = vi.fn().mockResolvedValue(
         Array.from({ length: 32 }, (_, i) => ({
           game_id: "game-1",
