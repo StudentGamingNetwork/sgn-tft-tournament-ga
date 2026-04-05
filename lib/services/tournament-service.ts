@@ -481,10 +481,10 @@ export async function startPhase3FromPhase1And2(
     throw new Error('Phase 3 must have both "master" and "amateur" brackets');
   }
 
-  // Seed Master from ordered leaderboard, reseeded 1..N for snake distribution.
+  // Seed Master while preserving carried seeds (1..32 in this bracket split).
   const masterSeededPlayers = await seedPlayersBasedOnLeaderboard(
     phase3MasterOrderedLeaderboard,
-    false,
+    true,
   );
 
   const masterGames = await assignPlayersToLobbies(
@@ -495,12 +495,9 @@ export async function startPhase3FromPhase1And2(
     true, // Use snake seeding for Master bracket
   );
 
-  // Seed Amateur from ordered P2 finish positions, reseeded 1..N
+  // Seed Amateur from ordered P2 finish positions, preserving carried seeds (33+).
   const amateurSeededPlayers = phase3AmateurOrderedLeaderboard.length
-    ? await seedPlayersBasedOnLeaderboard(
-        phase3AmateurOrderedLeaderboard,
-        false,
-      )
+    ? await seedPlayersBasedOnLeaderboard(phase3AmateurOrderedLeaderboard, true)
     : [];
   const amateurGames = amateurSeededPlayers.length
     ? await assignPlayersToLobbies(

@@ -173,7 +173,10 @@ describe("Tournament Workflow", () => {
       const { getCumulativeLeaderboard } = await import("./scoring-service");
       vi.mocked(getCumulativeLeaderboard).mockResolvedValue([
         ...buildLeaderboard("p1", 16),
-        ...buildLeaderboard("p2", 36),
+        ...Array.from({ length: 36 }, (_, i) => ({
+          ...buildLeaderboard("p2", 36)[i],
+          rank: i + 17,
+        })),
       ] as any);
 
       const mockDb = await import("@/lib/db");
@@ -181,18 +184,31 @@ describe("Tournament Workflow", () => {
         { id: "bracket-master", phase_id: "phase-3", name: "master" },
         { id: "bracket-amateur", phase_id: "phase-3", name: "amateur" },
       ]);
+      mockDb.db.query.lobbyPlayer.findMany = vi.fn().mockResolvedValue(
+        Array.from({ length: 32 }, (_, i) => ({
+          game_id: "game-1",
+          player_id: i < 16 ? `p1-${i + 1}` : `p2-${i - 15}`,
+          seed: i + 1,
+        })),
+      );
 
       const { seedPlayersBasedOnLeaderboard, assignPlayersToLobbies } =
         await import("./seeding-service");
       vi.mocked(seedPlayersBasedOnLeaderboard)
-        .mockResolvedValueOnce(
-          Array.from({ length: 32 }, (_, i) => ({
-            player_id: `m-${i}`,
-          })) as any,
-        )
+        .mockResolvedValueOnce([
+          ...Array.from({ length: 16 }, (_, i) => ({
+            player_id: `p1-${i + 1}`,
+            seed: i + 1,
+          })),
+          ...Array.from({ length: 16 }, (_, i) => ({
+            player_id: `p2-${i + 1}`,
+            seed: i + 17,
+          })),
+        ] as any)
         .mockResolvedValueOnce(
           Array.from({ length: 20 }, (_, i) => ({
-            player_id: `a-${i}`,
+            player_id: `p2-${i + 17}`,
+            seed: i + 1,
           })) as any,
         );
       vi.mocked(assignPlayersToLobbies).mockResolvedValue([
@@ -224,11 +240,15 @@ describe("Tournament Workflow", () => {
       expect(phase3MasterInput[31]?.player_id).toBe("p2-16");
       expect(phase3AmateurInput[0]?.player_id).toBe("p2-17");
       expect(phase3AmateurInput[19]?.player_id).toBe("p2-36");
+      const preservedSeedPlayer = result.masterBracket.players.find(
+        (player) => player.player_id === "p2-13",
+      );
+      expect(preservedSeedPlayer?.seed).toBe(29);
       expect(vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[0]?.[1]).toBe(
-        false,
+        true,
       );
       expect(vi.mocked(seedPlayersBasedOnLeaderboard).mock.calls[1]?.[1]).toBe(
-        false,
+        true,
       );
       expect(vi.mocked(assignPlayersToLobbies).mock.calls[0]?.[4]).toBe(true);
       expect(vi.mocked(assignPlayersToLobbies).mock.calls[1]?.[4]).toBe(false);

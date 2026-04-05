@@ -130,10 +130,16 @@ export async function assignPlayersToLobbies(
   seededPlayers: SeededPlayer[],
   useSnakeSeeding: boolean = false,
 ): Promise<{ game: any; assignment: LobbyAssignment }[]> {
+  if (seededPlayers.length === 0) {
+    return [];
+  }
+
+  const startSeed = Math.min(...seededPlayers.map((p) => p.seed));
+
   // Generate seeding matrix based on mode
   const seedingMatrix = useSnakeSeeding
-    ? generateSnakeSeedMatrix(seededPlayers.length)
-    : generateSnakeDraftMatrix(seededPlayers.length);
+    ? generateSnakeSeedMatrix(seededPlayers.length, startSeed)
+    : generateSnakeDraftMatrix(seededPlayers.length, startSeed);
 
   // Apply seeding matrix
   const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);

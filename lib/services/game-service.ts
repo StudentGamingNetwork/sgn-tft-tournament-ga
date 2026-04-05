@@ -431,7 +431,7 @@ async function getInitialGameOneSeeding(
       const ordered = [...phase1MasterQualifiers, ...phase2MasterQualifiers];
 
       return {
-        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
+        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, true),
         useSnakeSeeding: true,
       };
     }
@@ -445,7 +445,7 @@ async function getInitialGameOneSeeding(
         .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
 
       return {
-        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
+        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, true),
         useSnakeSeeding: false,
       };
     }
