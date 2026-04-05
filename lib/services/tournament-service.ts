@@ -33,8 +33,9 @@ import { syncTournamentStatusByPhaseId } from "./tournament-status-service";
 const PHASE2_QUALIFIERS_FROM_P1 = 36;
 const PHASE2_ELIMINATED_FROM_P1 = 16;
 const PHASE3_MASTER_FROM_P1 = 16;
-const PHASE3_MASTER_FROM_P2 = 16;
-const PHASE3_AMATEUR_FROM_P2 = 20;
+const PHASE3_P2_POOL_START_RANK = 17;
+const PHASE3_P2_POOL_END_RANK = 51;
+const PHASE3_AMATEUR_FROM_P2_POOL = 20;
 const PHASE4_MASTER_FROM_P3_MASTER = 16;
 const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;
 const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
@@ -420,8 +421,9 @@ export async function startPhase2FromPhase1(
 /**
  * PHASE 2 → PHASE 3
  * Phase 3 a 2 brackets avec RESET des points :
- * - Master: Top 16 P1 + Top 16 P2 = 32 joueurs
- * - Amateur: bottom 20 de P2
+ * - Pool P2: rangs 17..51
+ * - Amateur: bottom 20 du pool P2
+ * - Master: Top 16 P1 + reste du pool P2
  */
 export async function startPhase3FromPhase1And2(
   phase1Id: string,
@@ -449,25 +451,32 @@ export async function startPhase3FromPhase1And2(
     phase2PlayerIds.has(entry.player_id),
   );
 
-  // Master bracket: top 16 P1, then top 16 P2, preserving this order
+  // Phase 3 pool from P2: ranks 17..51 only
+  const phase3PoolFromP2 = phase2Leaderboard.filter(
+    (entry) =>
+      entry.rank >= PHASE3_P2_POOL_START_RANK &&
+      entry.rank <= PHASE3_P2_POOL_END_RANK,
+  );
+
+  const phase2MasterCount = Math.max(
+    phase3PoolFromP2.length - PHASE3_AMATEUR_FROM_P2_POOL,
+    0,
+  );
+
+  // Master bracket: top 16 P1, then top block from P2 pool
   const phase1MasterQualifiers = phase1Leaderboard.slice(
     0,
     PHASE3_MASTER_FROM_P1,
   );
-  const phase2MasterQualifiers = phase2Leaderboard.slice(
-    0,
-    PHASE3_MASTER_FROM_P2,
-  );
+  const phase2MasterQualifiers = phase3PoolFromP2.slice(0, phase2MasterCount);
   const phase3MasterOrderedLeaderboard = [
     ...phase1MasterQualifiers,
     ...phase2MasterQualifiers,
   ];
 
-  // Amateur bracket: bottom block from P2, preserving finish order from P2
-  const phase3AmateurOrderedLeaderboard = phase2Leaderboard.slice(
-    PHASE3_MASTER_FROM_P2,
-    PHASE3_MASTER_FROM_P2 + PHASE3_AMATEUR_FROM_P2,
-  );
+  // Amateur bracket: bottom 20 from P2 pool, preserving order
+  const phase3AmateurOrderedLeaderboard =
+    phase3PoolFromP2.slice(phase2MasterCount);
 
   // Obtenir les brackets de Phase 3
   const brackets = await db.query.bracket.findMany({
@@ -481,10 +490,10 @@ export async function startPhase3FromPhase1And2(
     throw new Error('Phase 3 must have both "master" and "amateur" brackets');
   }
 
-  // Seed Master while preserving carried seeds (1..32 in this bracket split).
+  // Seed Master from ordered leaderboard, reseeded 1..N for snake distribution.
   const masterSeededPlayers = await seedPlayersBasedOnLeaderboard(
     phase3MasterOrderedLeaderboard,
-    true,
+    false,
   );
 
   const masterGames = await assignPlayersToLobbies(
@@ -495,9 +504,12 @@ export async function startPhase3FromPhase1And2(
     true, // Use snake seeding for Master bracket
   );
 
-  // Seed Amateur from ordered P2 finish positions, preserving carried seeds (33+).
+  // Seed Amateur from ordered P2 finish positions, reseeded 1..N.
   const amateurSeededPlayers = phase3AmateurOrderedLeaderboard.length
-    ? await seedPlayersBasedOnLeaderboard(phase3AmateurOrderedLeaderboard, true)
+    ? await seedPlayersBasedOnLeaderboard(
+        phase3AmateurOrderedLeaderboard,
+        false,
+      )
     : [];
   const amateurGames = amateurSeededPlayers.length
     ? await assignPlayersToLobbies(
@@ -516,15 +528,15 @@ export async function startPhase3FromPhase1And2(
       bracket: masterBracket,
       players: masterSeededPlayers,
       games: masterGames.map((g) => g.game),
-      source: `Top ${PHASE3_MASTER_FROM_P1} P1 + Top ${PHASE3_MASTER_FROM_P2} P2`,
+      source: `Top ${PHASE3_MASTER_FROM_P1} P1 + Top ${phase2MasterCount} du pool P2 (${PHASE3_P2_POOL_START_RANK}-${PHASE3_P2_POOL_END_RANK})`,
     },
     amateurBracket: {
       bracket: amateurBracket,
       players: amateurSeededPlayers,
       games: amateurGames.map((g) => g.game),
       source:
-        PHASE3_AMATEUR_FROM_P2 > 0
-          ? `Bottom ${PHASE3_AMATEUR_FROM_P2} P2`
+        PHASE3_AMATEUR_FROM_P2_POOL > 0
+          ? `Bottom ${PHASE3_AMATEUR_FROM_P2_POOL} du pool P2 (${PHASE3_P2_POOL_START_RANK}-${PHASE3_P2_POOL_END_RANK})`
           : "Aucun joueur amateur pour ce palier",
     },
   };

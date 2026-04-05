@@ -32,8 +32,9 @@ import {
 } from "@/lib/services/finals-rules";
 
 const PHASE3_MASTER_FROM_P1 = 16;
-const PHASE3_MASTER_FROM_P2 = 16;
-const PHASE3_AMATEUR_FROM_P2 = 20;
+const PHASE3_P2_POOL_START_RANK = 17;
+const PHASE3_P2_POOL_END_RANK = 51;
+const PHASE3_AMATEUR_FROM_P2_POOL = 20;
 const PHASE4_MASTER_FROM_P3_MASTER = 16;
 const PHASE4_AMATEUR_FROM_P3_MASTER = 16;
 const PHASE4_AMATEUR_FROM_P3_AMATEUR = 8;
@@ -73,6 +74,36 @@ export async function updateGameStatus(gameId: string, status: StatusType) {
     })
     .where(eq(game.id, gameId))
     .returning();
+
+  return updated;
+}
+
+/**
+ * Rename a lobby for a specific game
+ */
+export async function renameGameLobby(gameId: string, lobbyName: string) {
+  const trimmedName = lobbyName.trim();
+
+  if (trimmedName.length < 2) {
+    throw new Error("Le nom du lobby doit contenir au moins 2 caracteres");
+  }
+
+  if (trimmedName.length > 40) {
+    throw new Error("Le nom du lobby ne peut pas depasser 40 caracteres");
+  }
+
+  const [updated] = await db
+    .update(game)
+    .set({
+      lobby_name: trimmedName,
+      updatedAt: new Date(),
+    })
+    .where(eq(game.id, gameId))
+    .returning();
+
+  if (!updated) {
+    throw new Error("Lobby introuvable");
+  }
 
   return updated;
 }
@@ -421,31 +452,39 @@ async function getInitialGameOneSeeding(
       phase2PlayerIds.has(entry.player_id),
     );
 
+    const phase3PoolFromP2 = phase2Leaderboard.filter(
+      (entry) =>
+        entry.rank >= PHASE3_P2_POOL_START_RANK &&
+        entry.rank <= PHASE3_P2_POOL_END_RANK,
+    );
+
+    const phase2MasterCount = Math.max(
+      phase3PoolFromP2.length - PHASE3_AMATEUR_FROM_P2_POOL,
+      0,
+    );
+
     if (currentBracket.name === "master") {
       const phase1MasterQualifiers = phase1Leaderboard
         .slice(0, PHASE3_MASTER_FROM_P1)
         .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
-      const phase2MasterQualifiers = phase2Leaderboard
-        .slice(0, PHASE3_MASTER_FROM_P2)
+      const phase2MasterQualifiers = phase3PoolFromP2
+        .slice(0, phase2MasterCount)
         .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
       const ordered = [...phase1MasterQualifiers, ...phase2MasterQualifiers];
 
       return {
-        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, true),
+        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
         useSnakeSeeding: true,
       };
     }
 
     if (currentBracket.name === "amateur") {
-      const ordered = phase2Leaderboard
-        .slice(
-          PHASE3_MASTER_FROM_P2,
-          PHASE3_MASTER_FROM_P2 + PHASE3_AMATEUR_FROM_P2,
-        )
+      const ordered = phase3PoolFromP2
+        .slice(phase2MasterCount)
         .filter((entry) => !forfeitedPlayerIds.has(entry.player_id));
 
       return {
-        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, true),
+        seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
         useSnakeSeeding: false,
       };
     }

@@ -38,6 +38,7 @@ import {
   submitGameResults,
   forfeitPlayerFromTournament,
   resetGameSeeding,
+  renameGameLobby,
 } from "@/lib/services/game-service";
 import {
   movePlayerBetweenLobbies,
@@ -1432,6 +1433,31 @@ export async function resetGameSeedingAction(
         error instanceof Error
           ? error.message
           : "Erreur lors du reset du seeding",
+    };
+  }
+}
+
+/**
+ * Renommer un lobby.
+ */
+export async function renameLobbyAction(
+  gameId: string,
+  lobbyName: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+
+    await renameGameLobby(gameId, lobbyName);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error renaming lobby:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors du renommage du lobby",
     };
   }
 }

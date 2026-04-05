@@ -63,6 +63,7 @@ vi.mock("@/lib/services/tournament-service", () => ({
 
 vi.mock("@/lib/services/game-service", () => ({
   submitGameResults: vi.fn(),
+  renameGameLobby: vi.fn(),
 }));
 
 vi.mock("@/lib/services/player-service", () => ({

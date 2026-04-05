@@ -10,6 +10,7 @@ import type { GameResult } from "@/types/tournament";
 import {
     forfeitPlayerAction,
     resetGameSeedingAction,
+    renameLobbyAction,
     submitGameResultsAction,
     reassignPlayerBetweenLobbiesAction,
     swapPlayersBetweenLobbiesAction,
@@ -127,6 +128,23 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         const result = await resetGameSeedingAction(game.game_id);
         if (!result.success) {
             throw new Error(result.error || "Erreur lors du reset du seeding");
+        }
+
+        if (onResultsSubmitted) {
+            onResultsSubmitted();
+        }
+    };
+
+    const handleRenameLobby = async (game: GameWithResults) => {
+        const nextLobbyName = window.prompt("Nouveau nom du lobby", game.lobby_name);
+
+        if (nextLobbyName === null) {
+            return;
+        }
+
+        const result = await renameLobbyAction(game.game_id, nextLobbyName);
+        if (!result.success) {
+            throw new Error(result.error || "Erreur lors du renommage du lobby");
         }
 
         if (onResultsSubmitted) {
@@ -490,6 +508,21 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                 >
                                     {game.bracket_name.toUpperCase()}
                                 </Chip>
+                                <Button
+                                    color="secondary"
+                                    size="sm"
+                                    variant="flat"
+                                    startContent={<Edit size={16} />}
+                                    onPress={async () => {
+                                        try {
+                                            await handleRenameLobby(game);
+                                        } catch (error) {
+                                            alert(error instanceof Error ? error.message : "Erreur lors du renommage");
+                                        }
+                                    }}
+                                >
+                                    Renommer lobby
+                                </Button>
                                 <Button
                                     color={game.hasResults ? "warning" : "primary"}
                                     size="sm"

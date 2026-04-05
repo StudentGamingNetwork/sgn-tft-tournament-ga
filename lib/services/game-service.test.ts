@@ -43,6 +43,7 @@ const { getLeaderboard } = await import("@/lib/services/scoring-service");
 const {
   createGame,
   updateGameStatus,
+  renameGameLobby,
   submitGameResults,
   hasResults,
   checkAndCreateNextGame,
@@ -107,6 +108,31 @@ describe("gameService", () => {
       const result = await updateGameStatus("game-id", "completed");
 
       expect(result.status).toBe("completed");
+    });
+  });
+
+  describe("renameGameLobby", () => {
+    it("renomme un lobby", async () => {
+      const updatedGame = {
+        id: "game-id",
+        lobby_name: "Lobby Alpha",
+        updatedAt: new Date(),
+      };
+
+      const returningMock = vi.fn().mockResolvedValue([updatedGame]);
+      const whereMock = vi.fn().mockReturnValue({ returning: returningMock });
+      const setMock = vi.fn().mockReturnValue({ where: whereMock });
+      (db.update as any).mockReturnValue({ set: setMock });
+
+      const result = await renameGameLobby("game-id", "  Lobby Alpha  ");
+
+      expect(result.lobby_name).toBe("Lobby Alpha");
+    });
+
+    it("rejette un nom trop court", async () => {
+      await expect(renameGameLobby("game-id", "A")).rejects.toThrow(
+        "au moins 2 caracteres",
+      );
     });
   });
 

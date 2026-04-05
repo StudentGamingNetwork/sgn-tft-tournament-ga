@@ -134,15 +134,25 @@ export async function assignPlayersToLobbies(
     return [];
   }
 
-  const startSeed = Math.min(...seededPlayers.map((p) => p.seed));
+  // Normalize to contiguous virtual seeds for matrix generation so gaps
+  // in carried seeds (e.g., 33+) never create sparse lobbies.
+  const sortedBySeed = [...seededPlayers].sort((a, b) => a.seed - b.seed);
+  const normalizedSeededPlayers = sortedBySeed.map((player, index) => ({
+    ...player,
+    _originalSeed: player.seed,
+    seed: index + 1,
+  }));
 
   // Generate seeding matrix based on mode
   const seedingMatrix = useSnakeSeeding
-    ? generateSnakeSeedMatrix(seededPlayers.length, startSeed)
-    : generateSnakeDraftMatrix(seededPlayers.length, startSeed);
+    ? generateSnakeSeedMatrix(seededPlayers.length)
+    : generateSnakeDraftMatrix(seededPlayers.length);
 
   // Apply seeding matrix
-  const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
+  const assignments = applySeedingMatrix(
+    normalizedSeededPlayers,
+    seedingMatrix,
+  );
 
   const createdGames = [];
 
@@ -157,11 +167,19 @@ export async function assignPlayersToLobbies(
 
     // Assign players to this lobby
     const lobbyPlayerAssignments = assignment.players.map(
-      (player: SeededPlayer) => ({
+      (player: SeededPlayer & { _originalSeed?: number }) => ({
         game_id: newGame.id,
         player_id: player.player_id,
         // Keep the global seed (not 1-8 local lobby position) so reseeding across games works.
-        seed: player.seed,
+        seed: player._originalSeed ?? player.seed,
+      }),
+    );
+
+    // Expose real seeds in returned assignment for callers and tests.
+    assignment.players = assignment.players.map(
+      (player: SeededPlayer & { _originalSeed?: number }) => ({
+        ...player,
+        seed: player._originalSeed ?? player.seed,
       }),
     );
 
