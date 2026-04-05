@@ -170,7 +170,7 @@ async function buildLeaderboardFromGameData(
       player_id: item.stats.player_id,
       player_name: playerData.player.name,
       riot_id: playerData.player.riot_id,
-      team_name: playerData.player.team?.name,
+      team_name: playerData.player.team?.name ?? undefined,
       total_points: item.stats.total_points,
       games_played: item.stats.total_games,
       avg_placement: item.stats.avg_placement,
