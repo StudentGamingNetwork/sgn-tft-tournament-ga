@@ -273,6 +273,8 @@ export async function addTournamentPlayerToLobby(
     throw new Error("Impossible de retrouver le tournoi de la partie cible");
   }
 
+  const tournamentId = bracketData.phase.tournament_id;
+
   if (bracketData.phase.order_index !== 5) {
     throw new Error("L'ajout manuel est autorise uniquement en phase finale");
   }
@@ -347,10 +349,7 @@ export async function addTournamentPlayerToLobby(
       })
       .where(
         and(
-          eq(
-            tournamentRegistration.tournament_id,
-            bracketData.phase.tournament_id,
-          ),
+          eq(tournamentRegistration.tournament_id, tournamentId),
           eq(tournamentRegistration.player_id, playerId),
         ),
       );
