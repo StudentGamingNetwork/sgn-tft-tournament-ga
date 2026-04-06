@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import {
   game,
+  bracket,
   lobbyPlayer,
   tournamentRegistration,
   phase,
@@ -239,5 +240,111 @@ export async function swapPlayersBetweenLobbies(
         seed: targetLobbyPlayer.seed,
       },
     ]);
+  });
+}
+
+export async function addTournamentPlayerToLobby(
+  targetGameId: string,
+  playerId: string,
+): Promise<void> {
+  const targetGame = await getGameContext(targetGameId);
+
+  if (!targetGame.phase_id || !targetGame.bracket_id) {
+    throw new Error("Partie cible invalide");
+  }
+
+  if (targetGame.status === "completed" || targetGame.hasResults) {
+    throw new Error("Impossible d'ajouter un joueur sur une partie terminee");
+  }
+
+  const bracketData = await db.query.bracket.findFirst({
+    where: eq(bracket.id, targetGame.bracket_id),
+    with: {
+      phase: {
+        columns: {
+          order_index: true,
+          tournament_id: true,
+        },
+      },
+    },
+  });
+
+  if (!bracketData?.phase?.tournament_id) {
+    throw new Error("Impossible de retrouver le tournoi de la partie cible");
+  }
+
+  if (bracketData.phase.order_index !== 5) {
+    throw new Error("L'ajout manuel est autorise uniquement en phase finale");
+  }
+
+  const registration = await db.query.tournamentRegistration.findFirst({
+    where: and(
+      eq(tournamentRegistration.tournament_id, bracketData.phase.tournament_id),
+      eq(tournamentRegistration.player_id, playerId),
+    ),
+    columns: {
+      id: true,
+      status: true,
+      forfeited_at: true,
+    },
+  });
+
+  if (!registration || registration.status === "cancelled") {
+    throw new Error("Le joueur n'est pas inscrit a ce tournoi");
+  }
+
+  if (registration.forfeited_at) {
+    throw new Error("Impossible d'ajouter un joueur forfait");
+  }
+
+  const targetLobbyPlayers = await db.query.lobbyPlayer.findMany({
+    where: eq(lobbyPlayer.game_id, targetGameId),
+    columns: {
+      id: true,
+      seed: true,
+      player_id: true,
+    },
+  });
+
+  if (targetLobbyPlayers.some((lp) => lp.player_id === playerId)) {
+    throw new Error("Le joueur est deja assigne a cette partie");
+  }
+
+  if (targetLobbyPlayers.length >= 8) {
+    throw new Error("La partie cible est deja pleine (8 joueurs)");
+  }
+
+  const sameRoundGames = await db.query.game.findMany({
+    where: and(
+      eq(game.phase_id, targetGame.phase_id),
+      eq(game.bracket_id, targetGame.bracket_id),
+      eq(game.game_number, targetGame.game_number),
+    ),
+    with: {
+      lobbyPlayers: {
+        columns: {
+          player_id: true,
+        },
+      },
+    },
+  });
+
+  const alreadyAssignedInRound = sameRoundGames.some((g) =>
+    g.lobbyPlayers.some((lp) => lp.player_id === playerId),
+  );
+
+  if (alreadyAssignedInRound) {
+    throw new Error("Le joueur est deja assigne dans un lobby de cette manche");
+  }
+
+  const nextSeed =
+    targetLobbyPlayers.length === 0
+      ? 1
+      : Math.max(...targetLobbyPlayers.map((lp) => lp.seed)) + 1;
+
+  await db.insert(lobbyPlayer).values({
+    game_id: targetGameId,
+    player_id: playerId,
+    seed: nextSeed,
   });
 }

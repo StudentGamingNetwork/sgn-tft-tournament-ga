@@ -43,6 +43,7 @@ import {
   deleteGame,
 } from "@/lib/services/game-service";
 import {
+  addTournamentPlayerToLobby,
   movePlayerBetweenLobbies,
   swapPlayersBetweenLobbies,
 } from "@/lib/services/lobby-reassignment-service";
@@ -1549,6 +1550,31 @@ export async function reassignPlayerBetweenLobbiesAction(
         error instanceof Error
           ? error.message
           : "Erreur lors du deplacement du joueur",
+    };
+  }
+}
+
+/**
+ * Ajouter un joueur inscrit dans un lobby de finale.
+ */
+export async function addTournamentPlayerToLobbyAction(
+  targetGameId: string,
+  playerId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await requireAuthenticatedUser();
+
+    await addTournamentPlayerToLobby(targetGameId, playerId);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error adding tournament player to lobby:", error);
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "Erreur lors de l'ajout du joueur dans le lobby",
     };
   }
 }

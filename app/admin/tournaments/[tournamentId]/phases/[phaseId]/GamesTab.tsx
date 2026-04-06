@@ -8,7 +8,9 @@ import { Gamepad2, Target, Award, Edit, RotateCcw } from "lucide-react";
 import type { GameWithResults } from "@/app/actions/tournaments";
 import type { GameResult } from "@/types/tournament";
 import {
+    addTournamentPlayerToLobbyAction,
     forfeitPlayerAction,
+    getTournamentPlayers,
     repechagePlayerAction,
     deleteGameAction,
     resetGameSeedingAction,
@@ -19,13 +21,25 @@ import {
 } from "@/app/actions/tournaments";
 import { EnterResultsModal } from "./EnterResultsModal";
 import { ReassignPlayersModal } from "./ReassignPlayersModal";
+import { AddTournamentPlayerModal } from "./AddTournamentPlayerModal";
 import { getBracketChipColor } from "@/utils/bracket-colors";
 
 interface GamesTabProps {
     tournamentId: string;
+    phaseOrderIndex: number;
     games: GameWithResults[];
     onResultsSubmitted?: () => void;
 }
+
+type TournamentPlayerOption = {
+    id: string;
+    name: string;
+    riot_id: string;
+    registration: {
+        status: "registered" | "confirmed" | "cancelled";
+        forfeited_at?: Date | null;
+    };
+};
 
 const RESULTS_DRAFT_PREFIX = "tft-results-draft:";
 const RESULTS_DRAFT_DISABLE_AUTOOPEN_PREFIX = "tft-results-draft-disable-autoopen:";
@@ -47,7 +61,7 @@ function getBracketOrder(bracketName: string): number {
 }
 
 
-export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabProps) {
+export function GamesTab({ tournamentId, phaseOrderIndex, games, onResultsSubmitted }: GamesTabProps) {
     const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
     const [reassignMode, setReassignMode] = useState<"move" | "swap">("move");
     const [reassignSourceGame, setReassignSourceGame] = useState<GameWithResults | null>(null);
@@ -57,6 +71,12 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
     const [selectedBracket, setSelectedBracket] = useState<string>("all");
     const [selectedGameNumber, setSelectedGameNumber] = useState<number>(1);
     const [hasRestoredDraft, setHasRestoredDraft] = useState(false);
+    const [tournamentPlayers, setTournamentPlayers] = useState<TournamentPlayerOption[]>([]);
+    const [isLoadingTournamentPlayers, setIsLoadingTournamentPlayers] = useState(false);
+    const [isAddPlayerModalOpen, setIsAddPlayerModalOpen] = useState(false);
+    const [addPlayerTargetGame, setAddPlayerTargetGame] = useState<GameWithResults | null>(null);
+
+    const isFinalsPhase = phaseOrderIndex === 5;
 
     const setDraftAutoOpenDisabled = (gameId: string, disabled: boolean) => {
         if (typeof window === "undefined") {
@@ -175,6 +195,16 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         setReassignSourceGame(sourceGame);
         setReassignSourcePlayer(sourcePlayer);
         setIsReassignModalOpen(true);
+    };
+
+    const handleOpenAddPlayerModal = (targetGame: GameWithResults) => {
+        setAddPlayerTargetGame(targetGame);
+        setIsAddPlayerModalOpen(true);
+    };
+
+    const handleCloseAddPlayerModal = () => {
+        setIsAddPlayerModalOpen(false);
+        setAddPlayerTargetGame(null);
     };
 
     const handleResetSeeding = async (game: GameWithResults) => {
@@ -386,6 +416,30 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
         );
     }, [filteredGames, reassignSourceGame]);
 
+    const addPlayerCandidates = useMemo(() => {
+        if (!addPlayerTargetGame) {
+            return [] as TournamentPlayerOption[];
+        }
+
+        const assignedPlayerIdsForRound = new Set(
+            filteredGames
+                .flatMap((g) => g.assignedPlayers)
+                .map((player) => player.player_id),
+        );
+
+        return tournamentPlayers.filter((player) => {
+            if (player.registration.status === "cancelled") {
+                return false;
+            }
+
+            if (player.registration.forfeited_at) {
+                return false;
+            }
+
+            return !assignedPlayerIdsForRound.has(player.id);
+        });
+    }, [addPlayerTargetGame, filteredGames, tournamentPlayers]);
+
     const handleMovePlayer = async (targetGameId: string) => {
         if (!reassignSourceGame || !reassignSourcePlayer) {
             return;
@@ -426,6 +480,59 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
             onResultsSubmitted();
         }
     };
+
+    const handleAddPlayerToLobby = async (playerId: string) => {
+        if (!addPlayerTargetGame) {
+            return;
+        }
+
+        const result = await addTournamentPlayerToLobbyAction(
+            addPlayerTargetGame.game_id,
+            playerId,
+        );
+
+        if (!result.success) {
+            throw new Error(result.error || "Erreur lors de l'ajout du joueur");
+        }
+
+        if (onResultsSubmitted) {
+            onResultsSubmitted();
+        }
+    };
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadTournamentPlayers = async () => {
+            if (!isFinalsPhase) {
+                return;
+            }
+
+            setIsLoadingTournamentPlayers(true);
+            try {
+                const players = await getTournamentPlayers(tournamentId);
+                if (!isMounted) {
+                    return;
+                }
+                setTournamentPlayers(players as TournamentPlayerOption[]);
+            } catch {
+                if (!isMounted) {
+                    return;
+                }
+                setTournamentPlayers([]);
+            } finally {
+                if (isMounted) {
+                    setIsLoadingTournamentPlayers(false);
+                }
+            }
+        };
+
+        void loadTournamentPlayers();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isFinalsPhase, tournamentId]);
 
     // Calculer les stats pour chaque game number
     const gameStats = useMemo(() => {
@@ -768,6 +875,21 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex flex-wrap gap-2">
+                                                    {isFinalsPhase && (
+                                                        <Button
+                                                            size="sm"
+                                                            color="success"
+                                                            variant="flat"
+                                                            isDisabled={
+                                                                game.hasResults ||
+                                                                game.assignedPlayers.length >= 8 ||
+                                                                isLoadingTournamentPlayers
+                                                            }
+                                                            onPress={() => handleOpenAddPlayerModal(game)}
+                                                        >
+                                                            Ajouter joueur
+                                                        </Button>
+                                                    )}
                                                     <Button
                                                         size="sm"
                                                         color="primary"
@@ -863,6 +985,22 @@ export function GamesTab({ tournamentId, games, onResultsSubmitted }: GamesTabPr
                         await handleSwapPlayers(targetGameId, targetPlayerId);
                     } catch (error) {
                         alert(error instanceof Error ? error.message : "Erreur lors de l'echange");
+                        throw error;
+                    }
+                }}
+            />
+
+            <AddTournamentPlayerModal
+                isOpen={isAddPlayerModalOpen}
+                onClose={handleCloseAddPlayerModal}
+                targetGame={addPlayerTargetGame}
+                candidates={addPlayerCandidates}
+                onAddPlayer={async (playerId) => {
+                    try {
+                        await handleAddPlayerToLobby(playerId);
+                        handleCloseAddPlayerModal();
+                    } catch (error) {
+                        alert(error instanceof Error ? error.message : "Erreur lors de l'ajout");
                         throw error;
                     }
                 }}

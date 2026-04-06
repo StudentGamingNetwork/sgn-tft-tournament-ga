@@ -467,6 +467,7 @@ export default function PhaseManagePage({ params }: PhaseManagePageProps) {
                 {selectedTab === "games" && (
                     <GamesTab
                         tournamentId={tournamentId}
+                        phaseOrderIndex={phase.order_index}
                         games={games}
                         onResultsSubmitted={loadPhaseDetails}
                     />

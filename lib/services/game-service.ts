@@ -43,8 +43,7 @@ function shouldUseMasterSnakeSeeding(
   bracketName?: string,
 ): boolean {
   return (
-    bracketName === "master" &&
-    (phaseOrderIndex === 3 || phaseOrderIndex === 4)
+    bracketName === "master" && (phaseOrderIndex === 3 || phaseOrderIndex === 4)
   );
 }
 
@@ -593,16 +592,16 @@ async function getInitialGameOneSeeding(
       );
 
       const topMaster = availableMaster.slice(0, PHASE4_MASTER_FROM_P3_MASTER);
-      const topAmateur = availableAmateur.slice(0, PHASE4_AMATEUR_FROM_P3_AMATEUR);
+      const topAmateur = availableAmateur.slice(
+        0,
+        PHASE4_AMATEUR_FROM_P3_AMATEUR,
+      );
       const relegatedMaster = availableMaster.slice(
         topMaster.length,
         topMaster.length + PHASE4_AMATEUR_FROM_P3_MASTER,
       );
 
-      const ordered = [
-        ...relegatedMaster,
-        ...topAmateur,
-      ];
+      const ordered = [...relegatedMaster, ...topAmateur];
 
       return {
         seededPlayers: await buildSeededPlayersFromLeaderboard(ordered, false),
@@ -726,9 +725,12 @@ export async function resetGameSeeding(gameId: string) {
         }))
         .filter((assignment) => assignment.players.length > 0);
 
-      await db
-        .delete(game)
-        .where(inArray(game.id, pendingGames.map((g) => g.id)));
+      await db.delete(game).where(
+        inArray(
+          game.id,
+          pendingGames.map((g) => g.id),
+        ),
+      );
 
       let gamesCreated = 0;
       for (const assignment of pendingAssignments) {
@@ -1307,7 +1309,9 @@ export async function repechagePlayerFromGame(
     },
   });
 
-  const playerResult = gameResults.find((result) => result.player_id === playerId);
+  const playerResult = gameResults.find(
+    (result) => result.player_id === playerId,
+  );
 
   if (!playerResult) {
     throw new Error("Joueur introuvable dans les resultats de la game");
@@ -1350,9 +1354,7 @@ export async function repechagePlayerFromGame(
         result_status: "normal",
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(results.game_id, gameId), eq(results.player_id, playerId)),
-      );
+      .where(and(eq(results.game_id, gameId), eq(results.player_id, playerId)));
 
     await tx
       .update(tournamentRegistration)
@@ -1428,7 +1430,10 @@ export async function deleteGame(gameId: string) {
     throw new Error("Impossible de supprimer une partie avec des resultats");
   }
 
-  const [deleted] = await db.delete(game).where(eq(game.id, gameId)).returning();
+  const [deleted] = await db
+    .delete(game)
+    .where(eq(game.id, gameId))
+    .returning();
 
   return deleted;
 }
@@ -1759,9 +1764,39 @@ async function createNextGameWithReseed(
   }
   const forfeitedPlayerIds = await getForfeitedPlayerIdsForPhase(phaseId);
   const gameOnePool = await getBracketGameOnePlayerPool(phaseId, bracketId);
-  const activeGameOnePool = gameOnePool.filter(
-    (entry) => !forfeitedPlayerIds.has(entry.playerId),
-  );
+  const currentRoundPool = new Map<string, number>();
+  for (const currentGame of currentGames) {
+    for (const assignedPlayer of currentGame.lobbyPlayers ?? []) {
+      if (!assignedPlayer.player_id) {
+        continue;
+      }
+
+      const playerSeed =
+        typeof assignedPlayer.seed === "number"
+          ? assignedPlayer.seed
+          : Number.MAX_SAFE_INTEGER;
+      const existingSeed = currentRoundPool.get(assignedPlayer.player_id);
+      if (existingSeed === undefined || playerSeed < existingSeed) {
+        currentRoundPool.set(assignedPlayer.player_id, playerSeed);
+      }
+    }
+  }
+
+  const mergedPoolByPlayer = new Map<string, number>();
+  for (const entry of gameOnePool) {
+    mergedPoolByPlayer.set(entry.playerId, entry.seed);
+  }
+  for (const [playerId, seed] of currentRoundPool.entries()) {
+    const existingSeed = mergedPoolByPlayer.get(playerId);
+    if (existingSeed === undefined || seed < existingSeed) {
+      mergedPoolByPlayer.set(playerId, seed);
+    }
+  }
+
+  const activeGameOnePool = Array.from(mergedPoolByPlayer.entries())
+    .map(([playerId, seed]) => ({ playerId, seed }))
+    .filter((entry) => !forfeitedPlayerIds.has(entry.playerId))
+    .sort((a, b) => a.seed - b.seed);
 
   const orderedLeaderboard = leaderboard.filter(
     (entry) =>

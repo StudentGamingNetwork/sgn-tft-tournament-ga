@@ -83,6 +83,12 @@ vi.mock("@/lib/services/rank-sync-service", () => ({
   getRankSyncState: vi.fn(),
 }));
 
+vi.mock("@/lib/services/lobby-reassignment-service", () => ({
+  movePlayerBetweenLobbies: vi.fn(),
+  swapPlayersBetweenLobbies: vi.fn(),
+  addTournamentPlayerToLobby: vi.fn(),
+}));
+
 const tournamentsActions = await import("@/app/actions/tournaments");
 const { auth } = await import("@/lib/auth");
 const { db } = await import("@/lib/db");
@@ -95,6 +101,9 @@ const { submitGameResults, repechagePlayerFromGame } = await import(
 const { getPlayerByRiotId } = await import("@/lib/services/player-service");
 const { triggerTournamentRankSync, getRankSyncState } = await import(
   "@/lib/services/rank-sync-service"
+);
+const { addTournamentPlayerToLobby } = await import(
+  "@/lib/services/lobby-reassignment-service"
 );
 const {
   startPhase,
@@ -111,6 +120,7 @@ const mockRepechagePlayerFromGame = vi.mocked(repechagePlayerFromGame);
 const mockGetPlayerByRiotId = vi.mocked(getPlayerByRiotId);
 const mockTriggerTournamentRankSync = vi.mocked(triggerTournamentRankSync);
 const mockGetRankSyncState = vi.mocked(getRankSyncState);
+const mockAddTournamentPlayerToLobby = vi.mocked(addTournamentPlayerToLobby);
 const mockStartPhase = vi.mocked(startPhase);
 const mockStartPhase2FromPhase1 = vi.mocked(startPhase2FromPhase1);
 const mockStartPhase3FromPhase1And2 = vi.mocked(startPhase3FromPhase1And2);
@@ -1195,6 +1205,40 @@ describe("tournaments actions", () => {
         2,
         expect.objectContaining({ status: "completed" }),
       );
+    });
+  });
+  describe("addTournamentPlayerToLobbyAction", () => {
+    it("ajoute un joueur quand l'utilisateur est authentifie", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockAddTournamentPlayerToLobby.mockResolvedValue(undefined);
+
+      const result = await tournamentsActions.addTournamentPlayerToLobbyAction(
+        "game-1",
+        "player-1",
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(mockAddTournamentPlayerToLobby).toHaveBeenCalledWith(
+        "game-1",
+        "player-1",
+      );
+    });
+
+    it("retourne un message metier quand l'ajout echoue", async () => {
+      mockGetSession.mockResolvedValue({ user: { id: "admin-1" } } as any);
+      mockAddTournamentPlayerToLobby.mockRejectedValue(
+        new Error("La partie cible est deja pleine (8 joueurs)"),
+      );
+
+      const result = await tournamentsActions.addTournamentPlayerToLobbyAction(
+        "game-1",
+        "player-1",
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error: "La partie cible est deja pleine (8 joueurs)",
+      });
     });
   });
 });
