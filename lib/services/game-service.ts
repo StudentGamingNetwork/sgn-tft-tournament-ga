@@ -991,7 +991,15 @@ export async function forfeitPlayerFromTournament(
 
   const phaseIds = phaseRows.map((p) => p.id);
 
-  const impactedPendingGroups = await db.transaction(async (tx) => {
+  const impactedPendingGroups: Array<{
+    phaseId: string;
+    bracketId: string;
+    bracketName?: string;
+    pendingGameNumbers: number[];
+    activePlayerIds: string[];
+    fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
+    lobbyNamesByGameNumber: Map<number, string[]>;
+  }> = await db.transaction(async (tx) => {
     await tx
       .update(tournamentRegistration)
       .set({ forfeited_at: new Date(), updatedAt: new Date() })
