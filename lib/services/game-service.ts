@@ -1040,6 +1040,7 @@ export async function forfeitPlayerFromTournament(
         pendingGameNumbers: number[];
         activePlayerIds: string[];
         fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
+        lobbyNamesByGameNumber: Map<number, string[]>;
       }>;
     }
 
