@@ -702,6 +702,20 @@ export function GamesTab({ tournamentId, phaseOrderIndex, games, onResultsSubmit
                                 >
                                     {getBracketDisplayName(game.bracket_name)}
                                 </Chip>
+                                {isFinalsPhase && !game.hasResults && (
+                                    <Button
+                                        color="success"
+                                        size="sm"
+                                        variant="flat"
+                                        isDisabled={
+                                            game.assignedPlayers.length >= 8 ||
+                                            isLoadingTournamentPlayers
+                                        }
+                                        onPress={() => handleOpenAddPlayerModal(game)}
+                                    >
+                                        Ajouter joueur
+                                    </Button>
+                                )}
                                 <Button
                                     color="secondary"
                                     size="sm"
@@ -875,21 +889,6 @@ export function GamesTab({ tournamentId, phaseOrderIndex, games, onResultsSubmit
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex flex-wrap gap-2">
-                                                    {isFinalsPhase && (
-                                                        <Button
-                                                            size="sm"
-                                                            color="success"
-                                                            variant="flat"
-                                                            isDisabled={
-                                                                game.hasResults ||
-                                                                game.assignedPlayers.length >= 8 ||
-                                                                isLoadingTournamentPlayers
-                                                            }
-                                                            onPress={() => handleOpenAddPlayerModal(game)}
-                                                        >
-                                                            Ajouter joueur
-                                                        </Button>
-                                                    )}
                                                     <Button
                                                         size="sm"
                                                         color="primary"
