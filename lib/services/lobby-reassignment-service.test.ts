@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({
   db: {
     insert: vi.fn(),
+    update: vi.fn(),
     query: {
       game: {
         findFirst: vi.fn(),
@@ -33,8 +34,11 @@ const { addTournamentPlayerToLobby } = await import(
 );
 
 describe("lobby-reassignment-service addTournamentPlayerToLobby", () => {
+  let lastTransaction: any;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    lastTransaction = null;
 
     (db.query.game.findFirst as any).mockResolvedValue({
       id: "game-1",
@@ -75,20 +79,55 @@ describe("lobby-reassignment-service addTournamentPlayerToLobby", () => {
       },
     ]);
 
-    const valuesMock = vi.fn().mockResolvedValue(undefined);
-    (db.insert as any).mockReturnValue({ values: valuesMock });
+    const insertValuesMock = vi.fn().mockResolvedValue(undefined);
+    const updateWhereMock = vi.fn().mockResolvedValue(undefined);
+    const updateSetMock = vi.fn().mockReturnValue({ where: updateWhereMock });
+    (db.update as any).mockReturnValue({ set: updateSetMock });
+    (db.insert as any).mockReturnValue({ values: insertValuesMock });
+    (db.transaction as any).mockImplementation(async (callback: any) => {
+      const tx = {
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue(undefined),
+          }),
+        }),
+        insert: vi.fn().mockReturnValue({
+          values: vi.fn().mockResolvedValue(undefined),
+        }),
+      };
+
+      lastTransaction = tx;
+
+      return callback(tx);
+    });
   });
 
   it("ajoute un joueur inscrit en finale avec le prochain seed", async () => {
     await addTournamentPlayerToLobby("game-1", "player-new");
 
-    expect(db.insert).toHaveBeenCalledTimes(1);
-    const insertValues = (db.insert as any).mock.results[0].value.values;
-    expect(insertValues).toHaveBeenCalledWith({
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(lastTransaction.update).toHaveBeenCalledTimes(1);
+    expect(lastTransaction.insert).toHaveBeenCalledTimes(1);
+    expect(
+      lastTransaction.insert.mock.results[0].value.values,
+    ).toHaveBeenCalledWith({
       game_id: "game-1",
       player_id: "player-new",
       seed: 3,
     });
+  });
+
+  it("réactive un joueur forfait lors de l'ajout manuel", async () => {
+    (db.query.tournamentRegistration.findFirst as any).mockResolvedValue({
+      id: "reg-1",
+      status: "confirmed",
+      forfeited_at: new Date(),
+    });
+
+    await addTournamentPlayerToLobby("game-1", "player-new");
+
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(lastTransaction.update).toHaveBeenCalledTimes(1);
   });
 
   it("refuse un joueur deja present dans la meme manche", async () => {
@@ -109,6 +148,6 @@ describe("lobby-reassignment-service addTournamentPlayerToLobby", () => {
       "Le joueur est deja assigne dans un lobby de cette manche",
     );
 
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 });

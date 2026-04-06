@@ -432,10 +432,6 @@ export function GamesTab({ tournamentId, phaseOrderIndex, games, onResultsSubmit
                 return false;
             }
 
-            if (player.registration.forfeited_at) {
-                return false;
-            }
-
             return !assignedPlayerIdsForRound.has(player.id);
         });
     }, [addPlayerTargetGame, filteredGames, tournamentPlayers]);

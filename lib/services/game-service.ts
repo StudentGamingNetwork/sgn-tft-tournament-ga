@@ -1053,6 +1053,7 @@ export async function forfeitPlayerFromTournament(
         activePlayerIds: string[];
         fallbackSeedOrder: Array<{ player_id: string; seed: number }>;
         pendingGameIds: string[];
+        lobbyNamesByGameNumber: Map<number, string[]>;
       }
     >();
 
@@ -1070,6 +1071,7 @@ export async function forfeitPlayerFromTournament(
           activePlayerIds: [],
           fallbackSeedOrder: [],
           pendingGameIds: [],
+          lobbyNamesByGameNumber: new Map<number, string[]>(),
         });
       }
 
@@ -1085,6 +1087,17 @@ export async function forfeitPlayerFromTournament(
             g.status !== "completed",
         )
         .sort((a, b) => a.game_number - b.game_number);
+
+      group.lobbyNamesByGameNumber = new Map<number, string[]>();
+      for (const pendingGame of bracketPendingGames) {
+        const existingNames =
+          group.lobbyNamesByGameNumber.get(pendingGame.game_number) ?? [];
+        existingNames.push(pendingGame.lobby_name);
+        group.lobbyNamesByGameNumber.set(
+          pendingGame.game_number,
+          existingNames,
+        );
+      }
 
       const pendingNumbers = [
         ...new Set(bracketPendingGames.map((g) => g.game_number)),
@@ -1133,6 +1146,7 @@ export async function forfeitPlayerFromTournament(
       pendingGameNumbers: g.pendingGameNumbers,
       activePlayerIds: g.activePlayerIds,
       fallbackSeedOrder: g.fallbackSeedOrder,
+      lobbyNamesByGameNumber: g.lobbyNamesByGameNumber,
     }));
   });
 
@@ -1238,7 +1252,9 @@ export async function forfeitPlayerFromTournament(
     const assignments = applySeedingMatrix(seededPlayers, seedingMatrix);
 
     for (const gameNumber of group.pendingGameNumbers) {
-      for (const assignment of assignments) {
+      const lobbyNames = group.lobbyNamesByGameNumber.get(gameNumber) ?? [];
+
+      for (const [assignmentIndex, assignment] of assignments.entries()) {
         if (assignment.players.length === 0) {
           continue;
         }
@@ -1246,7 +1262,7 @@ export async function forfeitPlayerFromTournament(
         const newGame = await createGame({
           bracket_id: group.bracketId,
           phase_id: group.phaseId,
-          lobby_name: assignment.lobby_name,
+          lobby_name: lobbyNames[assignmentIndex] ?? assignment.lobby_name,
           game_number: gameNumber,
         });
 

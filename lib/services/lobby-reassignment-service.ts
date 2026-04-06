@@ -293,10 +293,6 @@ export async function addTournamentPlayerToLobby(
     throw new Error("Le joueur n'est pas inscrit a ce tournoi");
   }
 
-  if (registration.forfeited_at) {
-    throw new Error("Impossible d'ajouter un joueur forfait");
-  }
-
   const targetLobbyPlayers = await db.query.lobbyPlayer.findMany({
     where: eq(lobbyPlayer.game_id, targetGameId),
     columns: {
@@ -342,9 +338,27 @@ export async function addTournamentPlayerToLobby(
       ? 1
       : Math.max(...targetLobbyPlayers.map((lp) => lp.seed)) + 1;
 
-  await db.insert(lobbyPlayer).values({
-    game_id: targetGameId,
-    player_id: playerId,
-    seed: nextSeed,
+  await db.transaction(async (tx) => {
+    await tx
+      .update(tournamentRegistration)
+      .set({
+        forfeited_at: null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(
+            tournamentRegistration.tournament_id,
+            bracketData.phase.tournament_id,
+          ),
+          eq(tournamentRegistration.player_id, playerId),
+        ),
+      );
+
+    await tx.insert(lobbyPlayer).values({
+      game_id: targetGameId,
+      player_id: playerId,
+      seed: nextSeed,
+    });
   });
 }

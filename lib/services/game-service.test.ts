@@ -675,6 +675,120 @@ describe("gameService", () => {
 
         expect(insertValues).toHaveBeenCalled();
       });
+
+      it("preserve les noms de lobby quand une partie en cours est reconstruite", async () => {
+        (db.query.phase.findMany as any).mockResolvedValue([{ id: "phase-1" }]);
+
+        const pendingGames = [
+          {
+            id: "g2-a",
+            phase_id: "phase-1",
+            bracket_id: "bracket-1",
+            game_number: 2,
+            lobby_name: "Lobby Alpha",
+            status: "upcoming",
+            lobbyPlayers: [
+              { player_id: "p1" },
+              { player_id: "p2" },
+              { player_id: "p3" },
+              { player_id: "p4" },
+            ],
+          },
+          {
+            id: "g2-b",
+            phase_id: "phase-1",
+            bracket_id: "bracket-1",
+            game_number: 2,
+            lobby_name: "Lobby Bravo",
+            status: "upcoming",
+            lobbyPlayers: [
+              { player_id: "p5" },
+              { player_id: "p6" },
+              { player_id: "p7" },
+              { player_id: "p8" },
+            ],
+          },
+        ];
+
+        (db.transaction as any).mockImplementation(async (callback: any) => {
+          const tx = {
+            query: {
+              game: {
+                findMany: vi.fn().mockResolvedValue(pendingGames),
+              },
+            },
+            update: vi.fn().mockReturnValue({
+              set: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(undefined),
+              }),
+            }),
+            delete: vi.fn().mockReturnValue({
+              where: vi.fn().mockResolvedValue(undefined),
+            }),
+          };
+
+          return callback(tx);
+        });
+
+        vi.mocked(getLeaderboard as any).mockResolvedValue([
+          {
+            player_id: "p2",
+            player_name: "P2",
+            riot_id: "riot#2",
+            rank: 1,
+            total_points: 12,
+          },
+          {
+            player_id: "p3",
+            player_name: "P3",
+            riot_id: "riot#3",
+            rank: 2,
+            total_points: 10,
+          },
+          {
+            player_id: "p4",
+            player_name: "P4",
+            riot_id: "riot#4",
+            rank: 3,
+            total_points: 8,
+          },
+        ]);
+
+        (db.query.player.findMany as any).mockResolvedValue([
+          { id: "p2", tier: "GOLD", division: "I", league_points: 50 },
+          { id: "p3", tier: "GOLD", division: "II", league_points: 40 },
+          { id: "p4", tier: "SILVER", division: "I", league_points: 70 },
+        ]);
+
+        const valuesMock = vi.fn().mockImplementation((values: any) => ({
+          returning: vi.fn().mockResolvedValue([
+            {
+              id: `new-game-${valuesMock.mock.calls.length}`,
+              ...(Array.isArray(values) ? {} : values),
+              status: "upcoming",
+            },
+          ]),
+        }));
+
+        (db.insert as any).mockImplementation(() => ({
+          values: valuesMock,
+        }));
+
+        await forfeitPlayerFromTournament("tournament-1", "p1");
+
+        const createdLobbyNames = valuesMock.mock.calls
+          .map((call) => call[0])
+          .filter((value) => value && !Array.isArray(value))
+          .map((value) => value.lobby_name)
+          .filter(Boolean);
+
+        expect(createdLobbyNames.length).toBeGreaterThan(0);
+        expect(
+          createdLobbyNames.every((name) =>
+            ["Lobby Alpha", "Lobby Bravo"].includes(name),
+          ),
+        ).toBe(true);
+      });
     });
     it("rejette si player_ids non uniques", async () => {
       const duplicatePlayerResults = [...validResults];
